@@ -1,5 +1,6 @@
 {
   "_comment": "Copy to ~/.config/dial-radial/config.json. Every key is optional; anything omitted uses the default shown here. Appearance keys are watched and apply live; 'tools' and 'pen' are read once at daemon start.",
+  "_layout": "dial | deck | carousel | toast. dial is the circular instrument (see 'face' below for which one); deck and carousel are both horizontal card rows (deck: dense, original; carousel: fewer details, selected card simply larger); toast is a single pill plus a dot strip, the smallest footprint. All four are pickable live from the settings window's Appearance section.",
   "layout": "dial",
   "anchor": "bottom",
   "watchdogMs": 15000,
@@ -150,7 +151,7 @@
     }
   ],
   "plate": "disc",
-  "_plate": "none | disc | rect. Backing behind the dial. Default disc: measured over a terminal, 'none' left the hairlines and labels unreadable. 'rect' is the old rectangular plate with corner registration marks.",
+  "_plate": "none | disc | rect. Backing behind the dial. Default disc: measured over a terminal, 'none' left the hairlines and labels unreadable. 'rect' is the old rectangular plate with corner registration marks. gauge always defaults to 'none' (it draws its own dome band) regardless of this key's default for other faces.",
   "plateOpacity": 0.96,
   "_plateOpacity": "0..1 backing strength. The theme background can carry its own alpha, so this is applied explicitly.",
   "_anchor": "center | top | bottom | left | right | top-left | top-right | bottom-left | bottom-right. Honoured by both layouts.",
@@ -159,5 +160,5 @@
   "_size": "large | medium | small. Overall size of the dial menu: large is the original full size, medium is 0.75x, small is 0.55x. It shrinks toward the edge or corner 'anchor' pins it to. Also set from the settings window (SUPER+SHIFT+CTRL+D). Dial layout only.",
   "clicks": { "single": "tool", "double": "dictation", "triple": "enter" },
   "_clicks": "What single / double / triple click do. Options: tool (single only: the armed tool's own click), dictation, enter, escape, backspace, space, tab, mute, play_pause, next_track, prev_track, maximize, none. Read live -- no daemon restart. A double click waits 0.25 s for a possible third press unless triple is 'none'.",
-  "_face": "classic | capsule. classic is the original instrument in a rectangular window: horizontal labels, concentric rings, and a callout column beside the dial. capsule puts the tools on radial pills around a round backing. The backing follows the face unless you set 'plate' yourself."
+  "_face": "classic | capsule | pie | gauge. Only read when layout is 'dial'. classic is the original instrument in a rectangular window: horizontal labels, concentric rings, and a callout column beside the dial. capsule puts the tools on radial pills around a round backing. pie is full-bleed game-menu-style wedges, no rings or callout. gauge lays tools across a 180-degree speedometer-style dome with a needle. The backing follows the face unless you set 'plate' yourself."
 }

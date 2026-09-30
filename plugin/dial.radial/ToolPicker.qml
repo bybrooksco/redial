@@ -103,6 +103,35 @@ Item {
     configDoc = out
   }
 
+  // Appearance: one picker across all six overlay options, even though under
+  // the hood three are a "face" (still layout "dial") and three are their own
+  // top-level "layout" -- nobody picking a look needs to know that split.
+  // Writes both keys in one go so a "layout"-only option (carousel/toast)
+  // never leaves a stale "face" implying the wrong thing, and a "dial" option
+  // never leaves a stale "layout" from a previous carousel/toast choice.
+  readonly property var appearanceOptions: [
+    { key: "classic",  label: "Classic",       layout: "dial",     face: "classic" },
+    { key: "capsule",  label: "Capsule",       layout: "dial",     face: "capsule" },
+    { key: "pie",      label: "Pie Wheel",     layout: "dial",     face: "pie" },
+    { key: "gauge",    label: "Gauge",         layout: "dial",     face: "gauge" },
+    { key: "carousel", label: "Carousel",      layout: "carousel", face: "" },
+    { key: "toast",    label: "Minimal Toast", layout: "toast",    face: "" }
+  ]
+  readonly property string appearanceChoice: {
+    var l = (configDoc && configDoc.layout) ? String(configDoc.layout) : "dial"
+    var f = (configDoc && configDoc.face) ? String(configDoc.face) : "classic"
+    if (l !== "dial") return (l === "carousel" || l === "toast") ? l : "classic"
+    return (f === "pie" || f === "gauge" || f === "capsule") ? f : "classic"
+  }
+  function setAppearance(opt) {
+    var out = ({})
+    for (var k in configDoc) out[k] = configDoc[k]
+    out.layout = opt.layout
+    if (opt.face) out.face = opt.face
+    configFile.setText(JSON.stringify(out, null, 2))
+    configDoc = out
+  }
+
   // Click gestures. The action list comes from the daemon (clicks.json /
   // pen_clicks.json, written at every startup) so this window never hardcodes
   // it; the choice lives in config.json ("clicks" for the dial, "pen.tail_clicks"
@@ -586,6 +615,61 @@ Item {
             color: Util.alpha(root.cfg.lineColor, 0.45)
           }
         }
+        }
+
+        // Overall look. Flow, not Row: six chips don't fit one line at this
+        // card width, so they wrap to a second rather than overflow it.
+        Column {
+          width: parent.width
+          spacing: Style.space(6)
+
+          Text {
+            text: "Appearance"
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            color: Util.alpha(root.cfg.lineColor, 0.6)
+          }
+
+          Flow {
+            width: parent.width
+            spacing: Style.space(6)
+            Repeater {
+              model: root.appearanceOptions
+              delegate: Rectangle {
+                id: appearanceBtn
+                required property var modelData
+                readonly property bool active: root.appearanceChoice === modelData.key
+                width: label.implicitWidth + Style.space(20)
+                height: Style.space(28)
+                radius: Style.space(6)
+                color: active ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.08)
+                border.width: Math.max(1, Style.space(1.5))
+                border.color: active ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.25)
+
+                Text {
+                  id: label
+                  anchors.centerIn: parent
+                  text: appearanceBtn.modelData.label
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  color: appearanceBtn.active ? root.cfg.backgroundColor : root.cfg.lineColor
+                }
+
+                MouseArea {
+                  anchors.fill: parent
+                  onClicked: root.setAppearance(appearanceBtn.modelData)
+                }
+              }
+            }
+          }
+
+          Text {
+            text: "Applies immediately."
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            color: Util.alpha(root.cfg.lineColor, 0.45)
+          }
         }
 
         // What a single / double / triple click does. Each chip cycles through the

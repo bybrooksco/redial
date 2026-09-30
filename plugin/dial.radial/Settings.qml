@@ -31,8 +31,9 @@ Item {
 
   // ---------------------------------------------------------------- defaults
   readonly property var defaults: ({
+    "_layout": "dial | deck | carousel | toast - the overlay's overall shape. dial is the circular instrument (see face, below, for which one); deck and carousel are both horizontal card rows (deck: dense, original; carousel: fewer visual details, center-emphasis sizing); toast is a single small pill plus a dot strip, the smallest footprint of the four.",
     "layout": "dial",
-    "_face": "classic | capsule - which instrument face the dial layout draws",
+    "_face": "classic | capsule | pie | gauge - which instrument face the dial layout draws",
     "face": "classic",
     "anchor": "bottom",
     "_size": "large | medium | small - overall size of the on-screen dial menu; large is the original full size",
@@ -136,7 +137,7 @@ Item {
 
   readonly property string layout: {
     var v = String(get("layout"))
-    return (v === "deck" || v === "dial") ? v : "dial"
+    return (v === "deck" || v === "dial" || v === "carousel" || v === "toast") ? v : "dial"
   }
   readonly property string anchor: String(get("anchor"))
   // Overall scale of the dial overlay. "large" is the original full-size look and
@@ -149,16 +150,19 @@ Item {
   readonly property real plateOpacity: num("plateOpacity", 0.0, 1.0)
   readonly property string face: {
     var v = String(get("face"))
-    return (v === "classic" || v === "capsule") ? v : "classic"
+    return (v === "classic" || v === "capsule" || v === "pie" || v === "gauge") ? v : "classic"
   }
 
   // The backing follows the face unless the config names one explicitly: the
-  // classic instrument was drawn for its rectangular window, the capsule face
-  // for a disc. Setting "plate" always wins.
+  // classic instrument was drawn for its rectangular window, capsule and pie
+  // for a disc, gauge draws its own dome band so a disc/rect behind it would
+  // just show through the gap below the arc. Setting "plate" always wins.
   readonly property string plate: {
     var v = doc && doc.plate !== undefined ? String(doc.plate) : ""
     if (v === "none" || v === "disc" || v === "rect") return v
-    return face === "classic" ? "rect" : "disc"
+    if (face === "classic") return "rect"
+    if (face === "gauge") return "none"
+    return "disc"
   }
   readonly property int watchdogMs: num("watchdogMs", 2000, 120000)
 

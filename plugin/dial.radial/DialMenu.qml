@@ -398,6 +398,212 @@ Item {
       }
     }
 
+    // Carousel: a friendlier, lower-detail restyle of the same "row of cards"
+    // idea as deck above -- not routed through the face Loader below, same
+    // reasoning deck never was: it's not circular, so the dial face contract
+    // (angleOf, a square Canvas) would fight it rather than fit it. Sizing is
+    // binary (selected = large, everyone else = small) rather than a
+    // continuous falloff by distance from selection -- the sum of one large
+    // plus (n-1) small card widths is constant regardless of WHICH one is
+    // large, so the container's own width/height never has to be
+    // recomputed as the selection moves, only individual card sizes.
+    Rectangle {
+      id: carousel
+      visible: root.mode === "live" && root.layout === "carousel"
+      readonly property int cardSmall: Style.space(64)
+      readonly property int cardLarge: Style.space(104)
+      width: row.implicitWidth + Style.space(40)
+      height: row.implicitHeight + Style.space(40)
+      radius: Style.cornerRadius
+      color: cfg.backgroundColor
+      border.width: Math.max(1, Style.space(2))
+      border.color: Util.alpha(cfg.lineColor, 0.30)
+
+      readonly property bool free: root.freeX >= 0 && root.freeY >= 0
+      readonly property bool atTop: root.anchor.indexOf("top") === 0
+      readonly property bool atBottom: root.anchor.indexOf("bottom") === 0
+      readonly property bool atLeft: root.anchor.indexOf("left") === 0 || root.anchor.indexOf("-left") > 0
+      readonly property bool atRight: root.anchor.indexOf("right") === 0 || root.anchor.indexOf("-right") > 0
+
+      x: free ? Math.max(root.edgeMargin, Math.min(parent.width - width - root.edgeMargin, root.freeX - width / 2))
+              : (atLeft ? root.edgeMargin
+                        : (atRight ? parent.width - width - root.edgeMargin
+                                   : (parent.width - width) / 2))
+      y: free ? Math.max(root.edgeMargin, Math.min(parent.height - height - root.edgeMargin, root.freeY - height / 2))
+              : (atTop ? root.edgeMargin
+                       : (atBottom ? parent.height - height - root.edgeMargin
+                                   : (parent.height - height) / 2))
+
+      Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+      Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+      Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+      Behavior on height { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+
+      opacity: root.opened ? 1 : 0
+      scale: root.opened ? 1 : 0.96
+      Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+      Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+
+      Row {
+        id: row
+        anchors.centerIn: parent
+        spacing: Style.space(10)
+
+        Repeater {
+          model: root.tools
+          delegate: Rectangle {
+            id: card
+            required property int index
+            required property var modelData
+            readonly property bool active: index === root.index
+            readonly property real size: active ? carousel.cardLarge : carousel.cardSmall
+            width: size; height: size
+            radius: Style.space(16)
+            color: active ? cfg.accentColor : Util.alpha(cfg.lineColor, 0.08)
+            Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+            Behavior on height { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+            Behavior on color { ColorAnimation { duration: 150 } }
+
+            Column {
+              anchors.centerIn: parent
+              spacing: Style.space(4)
+              Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: card.modelData.icon || ""
+                font.family: Style.font.family
+                font.pixelSize: card.active ? Style.font.displayLarge : Style.font.title
+                color: card.active ? cfg.backgroundColor : Util.alpha(cfg.lineColor, 0.55)
+                Behavior on font.pixelSize { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+                Behavior on color { ColorAnimation { duration: 130 } }
+              }
+              Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: card.active
+                text: card.modelData.name || ""
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                color: cfg.backgroundColor
+                elide: Text.ElideRight
+                width: card.width - Style.space(12)
+                horizontalAlignment: Text.AlignHCenter
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Minimal Toast: the smallest-footprint option -- one pill naming the
+    // armed tool (icon, name, click hint) plus a dot-pagination strip, same
+    // idea as a phone onboarding screen's "3 of 6". No rings, no needle, no
+    // per-tool layout math -- the tradeoff called out when this was scoped
+    // is that it gives up the free "how far to the next tool" feedback every
+    // other layout/face shows just by being circular or ordered.
+    Item {
+      id: toast
+      visible: root.mode === "live" && root.layout === "toast"
+      readonly property var activeTool: root.tools.length > root.index ? root.tools[root.index] : null
+      width: Math.max(pill.width, dots.width)
+      height: pill.height + Style.space(14) + dots.height
+
+      readonly property bool free: root.freeX >= 0 && root.freeY >= 0
+      readonly property bool atTop: root.anchor.indexOf("top") === 0
+      readonly property bool atBottom: root.anchor.indexOf("bottom") === 0
+      readonly property bool atLeft: root.anchor.indexOf("left") === 0 || root.anchor.indexOf("-left") > 0
+      readonly property bool atRight: root.anchor.indexOf("right") === 0 || root.anchor.indexOf("-right") > 0
+
+      x: free ? Math.max(root.edgeMargin, Math.min(parent.width - width - root.edgeMargin, root.freeX - width / 2))
+              : (atLeft ? root.edgeMargin
+                        : (atRight ? parent.width - width - root.edgeMargin
+                                   : (parent.width - width) / 2))
+      y: free ? Math.max(root.edgeMargin, Math.min(parent.height - height - root.edgeMargin, root.freeY - height / 2))
+              : (atTop ? root.edgeMargin
+                       : (atBottom ? parent.height - height - root.edgeMargin
+                                   : (parent.height - height) / 2))
+
+      Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+      Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+      opacity: root.opened ? 1 : 0
+      scale: root.opened ? 1 : 0.96
+      Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+      Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+
+      Rectangle {
+        id: pill
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: pillRow.implicitWidth + Style.space(36)
+        height: Style.space(64)
+        radius: height / 2
+        color: cfg.backgroundColor
+        border.width: Math.max(1, Style.space(2))
+        border.color: Util.alpha(cfg.lineColor, 0.30)
+
+        Row {
+          id: pillRow
+          anchors.centerIn: parent
+          spacing: Style.space(12)
+
+          Rectangle {
+            width: Style.space(40); height: width
+            radius: width / 2
+            color: cfg.accentColor
+            anchors.verticalCenter: parent.verticalCenter
+            Text {
+              anchors.centerIn: parent
+              text: toast.activeTool ? (toast.activeTool.icon || "") : ""
+              font.family: Style.font.family
+              font.pixelSize: Style.font.title
+              color: cfg.backgroundColor
+            }
+          }
+          Column {
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(1)
+            Text {
+              text: toast.activeTool ? (toast.activeTool.name || "") : ""
+              font.family: Style.font.family
+              font.pixelSize: Style.font.body
+              font.bold: true
+              color: cfg.lineColor
+            }
+            Text {
+              visible: text !== ""
+              text: {
+                var h = toast.activeTool ? toast.activeTool.hint : ""
+                return (h && h !== "—") ? ("click: " + h) : ""
+              }
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              color: Util.alpha(cfg.lineColor, 0.55)
+            }
+          }
+        }
+      }
+
+      Row {
+        id: dots
+        anchors.top: pill.bottom
+        anchors.topMargin: Style.space(14)
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: Style.space(7)
+
+        Repeater {
+          model: root.tools
+          delegate: Rectangle {
+            required property int index
+            readonly property bool active: index === root.index
+            width: active ? Style.space(16) : Style.space(7)
+            height: Style.space(7)
+            radius: height / 2
+            color: active ? cfg.accentColor : Util.alpha(cfg.lineColor, 0.25)
+            Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+          }
+        }
+      }
+    }
+
     // ---------------------------------------------------------- instrument
     // Round by default. The face is square and the backing is either absent, a
     // disc, or the old rectangular plate - nothing about the layout assumes a
@@ -512,12 +718,20 @@ Item {
         width: plate.classic ? Style.space(880) : 0
         x: plate.classic ? Style.space(30) : 0
         anchors.verticalCenter: plate.classic ? parent.verticalCenter : undefined
+        // One contract, four faces now. Unknown/missing names fall back to
+        // Classic, same as before this map existed - a bad config value
+        // degrades to the safe default rather than an empty Loader.
+        readonly property var faceFiles: ({
+          "classic": "FaceClassic.qml",
+          "capsule": "FaceCapsule.qml",
+          "pie": "FacePie.qml",
+          "gauge": "FaceGauge.qml"
+        })
         // setSource rather than `source:`, because the faces declare cfg as a
         // required property and those must be supplied at construction - a
         // binding applied in onLoaded arrives one frame too late.
         function reload() {
-          setSource(cfg.face === "capsule" ? "FaceCapsule.qml" : "FaceClassic.qml",
-                    { "cfg": cfg })
+          setSource(faceFiles[cfg.face] || "FaceClassic.qml", { "cfg": cfg })
         }
         Component.onCompleted: reload()
         Connections {

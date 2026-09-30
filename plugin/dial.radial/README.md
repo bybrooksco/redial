@@ -3,17 +3,29 @@
 An on-screen tool menu for the Microsoft Surface Dial, as an Omarchy shell
 plugin. Driven over IPC and a socket by the `surface-dial-hypr` daemon.
 
-Two layouts, same data and same IPC:
+Four layouts, same data and same IPC — pick one from the settings window's
+**Appearance** section (applies immediately, no restart), or set `layout`
+(and `face`, for `dial`) by hand in `config.json`:
 
-- **`dial`** — a radial instrument face, in one of two styles chosen by `face`:
+- **`dial`** — a radial instrument face, in one of four styles chosen by `face`:
 
   - **`classic`** (default) — the original instrument in a rectangular window.
     Horizontal labels on the circumference, concentric rings, sector spokes, a
     graduated bar scale, and an elbowed leader out to a callout column beside
     the dial. That column is why this face is landscape.
   - **`capsule`** — tools as radial pills on a round backing (below).
+  - **`pie`** — full-bleed pie wedges, game-menu style (Overwatch/GTA-style
+    weapon wheel). No rings, no scale, no callout — the wedge you're pointing
+    at *is* the selection. Icon on every wedge; the hub carries the selected
+    tool's name, value and click hint, the only text on the face.
+  - **`gauge`** — tools laid across a 180° dome with a needle, like a car
+    speedometer. The middle ground between Classic's density and Pie/Carousel/
+    Toast's full minimalism: still reads as a precision instrument, without
+    the rings/hairlines/callout column.
 
-  The backing follows the face unless `plate` is set explicitly.
+  The backing follows the face unless `plate` is set explicitly (`classic` →
+  `rect`, `gauge` → `none` since it draws its own dome band, `capsule`/`pie`
+  → `disc`).
 
   Note on `capsule` at small tool counts: the pills are laid out radially, so
   with five tools they sit far apart on a large circumference. `capsuleSpan`
@@ -33,7 +45,20 @@ Two layouts, same data and same IPC:
   | fine dash scale | rotation, the honest 0.1° readout; the selected sector takes the accent |
   | value arc | the active tool's value — drawn **only** when the tool has one, so its presence is itself information |
   | slot ticks | one per tool, marking the angular divisions |
-- **`deck`** — a horizontal card rail along a screen edge.
+- **`deck`** — a horizontal card rail along a screen edge, every tool the
+  same size.
+- **`carousel`** — a friendlier restyle of the same row-of-cards idea:
+  fewer visual details, and the selected card is simply larger than every
+  other one (not a continuous size falloff by distance — that would make the
+  row's own width shift as the selection moves, which `carousel` avoids by
+  construction: one large plus *n*−1 small card widths sums to the same
+  total regardless of which tool is large).
+- **`toast`** — the smallest footprint: one pill naming the armed tool (icon,
+  name, click hint) plus a dot-pagination strip below it, the same idea as a
+  phone's "3 of 6" onboarding screens. No needle, no ring, no per-tool
+  layout math — the tradeoff is that it gives up the free "how far to the
+  next tool" feedback every other layout/face shows just by being circular
+  or ordered.
 
 ## Install
 
@@ -103,15 +128,25 @@ is the reachable one, and a centred overlay collides with the bar.
 
 ## Faces
 
-`FaceClassic.qml` and `FaceCapsule.qml` are peers behind a `Loader`, sharing one
-contract (`cfg`, `tools`, `index`, `position`, `live`) and everything outside the
-face: settings, socket, IPC, plate, anchor, daemon.
+`FaceClassic.qml`, `FaceCapsule.qml`, `FacePie.qml` and `FaceGauge.qml` are
+peers behind a `Loader` (`DialMenu.qml`'s `faceFiles` map), sharing one
+contract (`cfg`, `tools`, `index`, `position`, `live`) and everything outside
+the face: settings, socket, IPC, plate, anchor, daemon. `carousel` and
+`toast` are **not** faces — they're not circular, so the `dial` contract
+(`angleOf()`, a square Canvas) would fight them rather than fit them; they're
+two more top-level `layout` values instead, hardcoded directly in
+`DialMenu.qml` next to `deck`, which was never a face either.
 
-They are separate components rather than branches in one file because they
-differ in geometry, in what the interior rings mean, and in where the callout
-lives — gating that together would be a parallel implementation tangled into a
-single scope. Adding a third face means adding a file and a `face` value; if a
-third arrives, hoist the shared drawing helpers rather than copying them.
+Faces are separate components rather than branches in one file because they
+differ in geometry, in what the interior rings (if any) mean, and in where
+the callout lives — gating that together would be a parallel implementation
+tangled into a single scope. `FacePie.qml`/`FaceGauge.qml` reuse
+`FaceCapsule.qml`'s/`FaceClassic.qml`'s exact `angleOf()`/needle-
+interpolation math rather than re-deriving it — `FaceGauge.qml` is the one
+exception, since its 180°-dome topology genuinely isn't the same problem as
+a full circle. Adding a fifth face means adding a file, a `faceFiles` entry
+and a `face` value; if the shared drawing keeps growing, hoist the common
+helpers rather than copying them again.
 
 ## Tools
 
@@ -244,25 +279,6 @@ attached, since the watchers simply find no device. For a dial-only install:
 
     { "pen": { "enabled": false } }
 
-Both physical pen buttons are configurable the same way the dial's clicks
-are — an action chosen from a list, applied live (no restart), editable from
-the **Pen** section of the settings window (same window as Tools/Clicks
-above):
-
-    { "pen": {
-        "tail_clicks": { "single": "space", "double": "enter", "hold": "dictation" },
-        "barrel": { "enabled": true, "action": "right_click" }
-      } }
-
-The tail (top) button's firmware only ever reports single click, double
-click, or press-and-hold — there's no raw click counter, so there's no real
-triple-click to configure, just those three slots. Defaults shown above.
-The barrel (side) button is one slot plus an enable toggle, not split into
-click vs. hold. Action names come from `~/.config/dial-radial/pen_clicks.json`
-(written by the daemon at startup, same idea as `clicks.json`) — mostly the
-same generic actions as the dial's clicks, plus `menu` (tail) and
-`right_click`/`middle_click`/`left_click` (barrel).
-
 ## Environment overrides
 
     DIAL_DEVICE=/dev/input/event27    force a specific dial node
@@ -286,23 +302,14 @@ claims to be.
 Tool objects take `icon`, `name`, `hint` (the click action), and optionally
 `value` (0-100) and `valueText` for a live readout.
 
-A second IPC target opens the settings screen (Tools/Clicks/Pen above) on
-the **same shared window** as the dial overlay — one `PanelWindow` with a
-`mode` of `"live"` (the overlay above, rotation-driven, fully click-through)
-or `"settings"` (real mouse input, opened by this target):
+A second, independent IPC target is the tool picker settings screen (see
+Tools above) — separate from the dial overlay above since it opens/closes on
+its own, not from dial rotation:
 
     omarchy-shell dialtools toggle
     omarchy-shell dialtools open
     omarchy-shell dialtools close
     omarchy-shell dialtools state
-
-Turning the dial always brings the window to the Live tab, exactly as if
-these were still two separate windows; opening via `dialtools` (the bar
-widget, or `SUPER+SHIFT+CTRL+D`) brings it to Settings. From Settings, a
-small "Live ›" link peeks at the live tab without leaving the window — that
-direction only, since Live is fully click-through by design and nothing
-rendered there, tab included, can ever be clicked; the way back is the same
-hotkey/widget that opened Settings in the first place.
 
 ## Continuous rotation
 
