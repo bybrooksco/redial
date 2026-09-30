@@ -1,0 +1,163 @@
+{
+  "_comment": "Copy to ~/.config/dial-radial/config.json. Every key is optional; anything omitted uses the default shown here. Appearance keys are watched and apply live; 'tools' and 'pen' are read once at daemon start.",
+  "layout": "dial",
+  "anchor": "bottom",
+  "watchdogMs": 15000,
+  "colors": {
+    "_comment": "\"theme\" follows the Omarchy palette. Also accepts a role name (accent, foreground, background, urgent, muted) or a literal hex such as \"#78824b\".",
+    "accent": "theme",
+    "line": "theme",
+    "background": "theme"
+  },
+  "dial": {
+    "barCount": 180,
+    "majorEvery": 15,
+    "sectorFill": 0.86,
+    "barWidthMinor": 1,
+    "barWidthMajor": 2,
+    "barWidthActive": 2.5,
+    "needleWidth": 2,
+    "ringWidth": 1,
+    "constructionLines": false,
+    "crosshair": false,
+    "registrationMarks": true,
+    "labels": true,
+    "glyphs": true,
+    "callout": true,
+    "capsuleFillet": 1.0,
+    "_capsuleFillet": "0..1 corner fillet on the tool capsules, as a fraction of the largest radius the shape allows. 1 = stadium (a circle when the capsule is square), 0 = hard box, anything between = rounded rectangle. One continuous number, not a set of modes.",
+    "_guides": "constructionLines draws faint spokes between tool sectors; crosshair draws a small cross inside the hub. Both are off by default and both stay inside the face - nothing runs past the backing.",
+    "capsuleSpan": 0.14,
+    "_capsuleSpan": "0..1 capsule width as a fraction of the arc each tool owns (capsule face only). Higher closes the gaps between pills, but the capsule keeps a fixed radial length, so past ~0.35 it squares off and at capsuleFillet 1 becomes a circle."
+  },
+  "deck": {
+    "cardWidth": 150,
+    "cardHeight": 170,
+    "gap": 14
+  },
+  "pen": {
+    "_comment": "Surface Pen support shares this daemon. Harmless with no pen attached; set false for a dial-only install. tail_clicks and barrel apply live -- no daemon restart needed, unlike active_tools above.",
+    "enabled": true,
+    "tail_clicks": {
+      "_comment": "single | double | hold -- the tail button's firmware only reports these three events, so there's no real triple-click to configure. Action names come from pen_clicks.json (published by the daemon), same idea as the dial's 'clicks' above. Defaults shown.",
+      "single": "space",
+      "double": "enter",
+      "hold": "dictation"
+    },
+    "barrel": {
+      "_comment": "The stylus side button. 'action' names come from pen_clicks.json too (right_click/middle_click/left_click plus the shared generic actions). Defaults shown.",
+      "enabled": true,
+      "action": "right_click"
+    }
+  },
+  "_active_tools": "Picks and orders a subset of the built-in tool library by name -- the normal way to configure which tools you get, and what the ToolPicker UI (SUPER+SHIFT+CTRL+D) writes. Example: [\"Volume\", \"Scroll\", \"Windows\", \"Workspaces\", \"Word Nav\", \"Zoom\", \"Media\"]. The full built-in library, for reference: Volume, Windows, Workspaces, Scroll, Undo, Zoom, Media, Word Nav, Arrow Keys, Window Size, Brightness.",
+  "tools": [
+    {
+      "_comment": "The full override, for defining a custom tool the library can't express (or reordering/dropping tools by hand instead of via active_tools). Omitting 'tools' entirely uses active_tools if set, else the built-in set, which is what this list reproduces. detent = dial counts per step (3600 counts = one revolution). magnitude = let rotation speed scale the step size. 'tools' wins if both 'tools' and 'active_tools' are present.",
+      "name": "Volume",
+      "icon": "",
+      "detent": 60,
+      "magnitude": true,
+      "cw": {
+        "do": "volume",
+        "direction": "up"
+      },
+      "ccw": {
+        "do": "volume",
+        "direction": "down"
+      },
+      "click": {
+        "do": "exec",
+        "label": "mute",
+        "cmd": [
+          "wpctl",
+          "set-mute",
+          "@DEFAULT_AUDIO_SINK@",
+          "toggle"
+        ]
+      }
+    },
+    {
+      "name": "Windows",
+      "icon": "",
+      "detent": 150,
+      "cw": {
+        "do": "hypr",
+        "lua": "hl.dsp.window.cycle_next()"
+      },
+      "ccw": {
+        "do": "hypr",
+        "lua": "hl.dsp.window.cycle_next({ next = false })"
+      },
+      "click": {
+        "do": "hypr",
+        "label": "maximize",
+        "lua": "hl.dsp.window.fullscreen({ mode = \"maximized\" })"
+      }
+    },
+    {
+      "name": "Workspaces",
+      "icon": "",
+      "detent": 450,
+      "cw": {
+        "do": "hypr",
+        "lua": "hl.dsp.focus({ workspace = \"+1\" })"
+      },
+      "ccw": {
+        "do": "hypr",
+        "lua": "hl.dsp.focus({ workspace = \"-1\" })"
+      },
+      "click": {
+        "do": "hypr",
+        "label": "last workspace",
+        "lua": "hl.dsp.focus({ workspace = \"previous\" })"
+      }
+    },
+    {
+      "name": "Scroll",
+      "icon": "",
+      "detent": 60,
+      "magnitude": true,
+      "continuous": true,
+      "cw": {
+        "do": "wheel"
+      },
+      "ccw": {
+        "do": "wheel"
+      },
+      "click": null
+    },
+    {
+      "name": "Undo",
+      "icon": "",
+      "detent": 150,
+      "cw": {
+        "do": "key",
+        "keys": [
+          "ctrl",
+          "shift",
+          "z"
+        ]
+      },
+      "ccw": {
+        "do": "key",
+        "keys": [
+          "ctrl",
+          "z"
+        ]
+      },
+      "click": null
+    }
+  ],
+  "plate": "disc",
+  "_plate": "none | disc | rect. Backing behind the dial. Default disc: measured over a terminal, 'none' left the hairlines and labels unreadable. 'rect' is the old rectangular plate with corner registration marks.",
+  "plateOpacity": 0.96,
+  "_plateOpacity": "0..1 backing strength. The theme background can carry its own alpha, so this is applied explicitly.",
+  "_anchor": "center | top | bottom | left | right | top-left | top-right | bottom-left | bottom-right. Honoured by both layouts.",
+  "face": "classic",
+  "size": "large",
+  "_size": "large | medium | small. Overall size of the dial menu: large is the original full size, medium is 0.75x, small is 0.55x. It shrinks toward the edge or corner 'anchor' pins it to. Also set from the settings window (SUPER+SHIFT+CTRL+D). Dial layout only.",
+  "clicks": { "single": "tool", "double": "dictation", "triple": "enter" },
+  "_clicks": "What single / double / triple click do. Options: tool (single only: the armed tool's own click), dictation, enter, escape, backspace, space, tab, mute, play_pause, next_track, prev_track, maximize, none. Read live -- no daemon restart. A double click waits 0.25 s for a possible third press unless triple is 'none'.",
+  "_face": "classic | capsule. classic is the original instrument in a rectangular window: horizontal labels, concentric rings, and a callout column beside the dial. capsule puts the tools on radial pills around a round backing. The backing follows the face unless you set 'plate' yourself."
+}

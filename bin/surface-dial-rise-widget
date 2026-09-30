@@ -1,0 +1,298 @@
+#!/usr/bin/env python3
+"""surface-dial-rise-widget -- add the Surface Dial button to the Quickshell Rise bar.
+
+Rise is the custom bar at ~/.config/quickshell/bar (variants V1/V2; V2 is the live
+one). Its widgets are registered by group id, so adding one touches four places:
+  modules/DialWidget.qml   the widget (G19)             new file
+  Theme.qml                 modDial toggle + persistence (+45 in the state string)
+  BarSlot.qml               component, registry, default slots, and a cache migration
+  panels/ControlPanel.qml   the tile in the WIDGETS grid
+It is OFF until switched on there. Left-click opens the dial's tool settings (the
+same window as SUPER+SHIFT+CTRL+D); right-click restarts the dial daemon.
+
+  surface-dial-rise-widget --check      exit 0 if fully installed
+  surface-dial-rise-widget --install    idempotent; backs up, patches, restarts the bar,
+                                        and rolls back if the bar doesn't come back
+    --root DIR       Rise variant dir (default ~/.config/quickshell/bar/variants/V2)
+    --no-restart     patch files only (used for testing)
+
+Every edit is an exact-match replace that must hit exactly once; if the Rise files
+differ from the version this was written against, NOTHING is written.
+"""
+import argparse, datetime, os, re, shutil, subprocess, sys
+
+WIDGET_QML = r'''import QtQuick
+import Quickshell.Io
+
+// Surface Dial button (G19). Off by default; turn it on in the control panel's
+// WIDGETS grid. Left-click opens the dial's tool settings -- the same panel as
+// the SUPER+SHIFT+CTRL+D hotkey (`omarchy-shell dialtools toggle`, served by the
+// dial.radial plugin). Right-click restarts the dial daemon, which is what
+// applies a changed tool list.
+//
+// State comes from ~/.local/bin/surface-dial-bar (one line of JSON). It is
+// polled only while the widget is switched on, so it costs nothing when off.
+Item {
+    id: rootMod
+    required property var root
+    readonly property color contentColor: root.widgetContentColor("G19", root.widgetIconColor)
+
+    property bool paired: false
+    property bool connected: false
+    property bool daemonUp: false
+    property int battery: -1        // -1 = unknown
+    property var clicks: null       // {single, double, triple} labels, from the status script
+
+    readonly property string stateLine: !paired ? "not paired"
+        : !connected ? "not connected"
+        : !daemonUp ? "connected, dial daemon not running"
+        : "connected" + (battery >= 0 ? " · battery " + battery + "%" : "")
+    readonly property string clickLines: clicks
+        ? "\nDial single click: " + clicks.single + "\nDial double click: " + clicks.double
+          + "\nDial triple click: " + clicks.triple
+        : ""
+    readonly property string tooltipText: "Surface Dial · " + stateLine + clickLines
+        + "\nThis button: click = tool settings · right-click = restart dial daemon"
+
+    visible: implicitWidth > 0.5
+    implicitWidth: root.modDial ? row.implicitWidth + 18 : 0
+    implicitHeight: 28
+    opacity: root.modDial ? 1 : 0
+    Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+
+    function apply(raw) {
+        var lines = String(raw || "").trim().split("\n")
+        try {
+            var d = JSON.parse(lines[lines.length - 1])
+            paired = d.paired === true
+            connected = d.connected === true
+            daemonUp = d.daemon === true
+            battery = (typeof d.battery === "number") ? d.battery : -1
+            clicks = (d.clicks && typeof d.clicks === "object") ? d.clicks : null
+        } catch (e) {
+            // keep the last good state rather than flashing "not paired"
+        }
+    }
+
+    Row {
+        id: row
+        anchors.centerIn: parent
+        spacing: 4
+
+        UiText {
+            anchors.verticalCenter: parent.verticalCenter
+            width: 15
+            text: ""
+            color: rootMod.contentColor
+            // fully lit only when the dial is connected and its daemon is up
+            opacity: (rootMod.connected && rootMod.daemonUp) ? 1 : 0.45
+            font.family: root.mono
+            font.pixelSize: 14
+            horizontalAlignment: Text.AlignHCenter
+        }
+
+        UiText {
+            visible: !root.iconOnly("G19") && rootMod.connected && rootMod.battery >= 0
+            anchors.verticalCenter: parent.verticalCenter
+            text: String(Math.min(100, rootMod.battery)).padStart(2, "0") + "%"
+            color: rootMod.contentColor
+            font.family: root.mono
+            font.pixelSize: 11
+        }
+    }
+
+    Process {
+        id: statusProc
+        command: ["bash", "-c", "$HOME/.local/bin/surface-dial-bar"]
+        stdout: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: rootMod.apply(this.text)
+        }
+    }
+    Timer {
+        id: poll
+        interval: 10000
+        repeat: true
+        running: root.modDial
+        triggeredOnStart: true
+        onTriggered: if (!statusProc.running) statusProc.running = true
+    }
+
+    Process { id: settingsProc; command: ["bash", "-c", "omarchy-shell dialtools toggle"] }
+    Process { id: restartProc;  command: ["bash", "-c", "$HOME/.local/bin/surface-dial-bar restart"] }
+
+    TooltipMixin { id: tip; root: rootMod.root; owner: rootMod; text: rootMod.tooltipText }
+
+    MouseArea {
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onEntered: { if (!statusProc.running) statusProc.running = true; tip.show() }
+        onExited: tip.hide()
+        onClicked: (e) => {
+            tip.hide()
+            if (e.button === Qt.RightButton) { restartProc.running = false; restartProc.running = true; poll.restart() }
+            else                             { settingsProc.running = false; settingsProc.running = true }
+        }
+    }
+}
+'''
+
+COMP_STORAGE = ("    Component {\n        id: compStorage\n        StorageWidget {\n"
+                "            root: barSlot.root\n"
+                "            readonly property real barContentLeftInset: 9\n"
+                "            readonly property real barContentRightInset: 9\n"
+                "        }\n    }\n")
+COMP_DIAL = COMP_STORAGE.replace("compStorage", "compDial").replace("StorageWidget", "DialWidget")
+
+OLD_PERM = ("        // Only accept a complete permutation of G1..G18. Empty slots are legal,\n"
+            "        // but each registered widget must still occur exactly once.\n"
+            "        var all = l.concat(c, r), seen = {}\n"
+            "        for (var i = 0; i < all.length; i++) {\n"
+            "            var gid = all[i].gid\n"
+            "            if (gid === \"\") continue\n"
+            "            if (!registry[gid] || seen[gid]) return false\n"
+            "            seen[gid] = true\n"
+            "        }\n"
+            "        if (Object.keys(seen).length !== Object.keys(registry).length) return false\n")
+NEW_PERM = ("        // Only accept a complete permutation of the registered widgets. Empty\n"
+            "        // slots are legal, but each registered widget must still occur exactly once.\n"
+            "        var all = l.concat(c, r), seen = {}\n"
+            "        for (var i = 0; i < all.length; i++) {\n"
+            "            var gid = all[i].gid\n"
+            "            if (gid === \"\") continue\n"
+            "            if (!registry[gid] || seen[gid]) return false\n"
+            "            seen[gid] = true\n"
+            "        }\n"
+            "        // Widgets added after a layout was cached (G19, Surface Dial) are absent\n"
+            "        // from older caches. Rather than discard the whole saved arrangement, park\n"
+            "        // each one in the right region's last empty cell (else a new extra slot\n"
+            "        // there, else the left region's). Deterministic, so a given cache always\n"
+            "        // loads the same way until the next save writes the widget's real place.\n"
+            "        var lateGids = [\"G19\"]\n"
+            "        for (var li = 0; li < lateGids.length; li++) {\n"
+            "            var lg = lateGids[li]\n"
+            "            if (seen[lg] || !registry[lg]) continue\n"
+            "            var homes = [\n"
+            "                { cells: r, room: rightBaseSlotCount + rightExtraSlotLimit },\n"
+            "                { cells: l, room: leftBaseSlotCount + leftExtraSlotLimit }\n"
+            "            ]\n"
+            "            var parked = false\n"
+            "            for (var hi = 0; hi < homes.length && !parked; hi++) {\n"
+            "                var cells = homes[hi].cells\n"
+            "                for (var ci = cells.length - 1; ci >= 0; ci--) {\n"
+            "                    if (cells[ci].gid === \"\") { cells[ci].gid = lg; parked = true; break }\n"
+            "                }\n"
+            "                if (!parked && cells.length < homes[hi].room) {\n"
+            "                    cells.push({ gid: lg, extra: true }); parked = true\n"
+            "                }\n"
+            "            }\n"
+            "            if (!parked) return false\n"
+            "            seen[lg] = true\n"
+            "        }\n"
+            "        if (Object.keys(seen).length !== Object.keys(registry).length) return false\n")
+
+TILE = ('WidgetStateTile { gid: "G19"; width: root.evenW((wwCol.width - 4) / 2); label: "Surface Dial";  '
+        'shown: root.modDial;          supportsCompact: true; compact: root.iconOnly("G19"); '
+        'onVisibilityToggled: root.modDial = !root.modDial; onModeToggled: root.toggleIconOnly("G19") }')
+
+# (file, name, pattern, replacement, is_regex)
+EDITS = [
+ ("Theme.qml", "prop", "    property bool modStorage:    true\n",
+  "    property bool modStorage:    true\n"
+  "    property bool modDial:       false   // Surface Dial button (G19) -- off until switched on\n", False),
+ ("Theme.qml", "saveTrigger", "    onModStorageChanged:    if (_widgetsLoaded) saveWidgets()\n",
+  "    onModStorageChanged:    if (_widgetsLoaded) saveWidgets()\n"
+  "    onModDialChanged:       if (_widgetsLoaded) saveWidgets()\n", False),
+ ("Theme.qml", "save", r'^(\s*)\+ \(panelTooltipBorderEnabled \? "1" : "0"\)\s*// \+44 panel \+ tooltip outer border$',
+  r'\1+ (panelTooltipBorderEnabled ? "1" : "0") + " "     // +44 panel + tooltip outer border' "\n"
+  r'\1+ (modDial ? "1" : "0")                            // +45 Surface Dial button', True),
+ ("Theme.qml", "load", '                    if (parts.length > wsField + 44)\n'
+  '                        theme.panelTooltipBorderEnabled = parts[wsField + 44] !== "0"\n',
+  '                    if (parts.length > wsField + 44)\n'
+  '                        theme.panelTooltipBorderEnabled = parts[wsField + 44] !== "0"\n'
+  '                    if (parts.length > wsField + 45)\n'
+  '                        theme.modDial = parts[wsField + 45] === "1"\n', False),
+ ("Theme.qml", "gidRange", "return n >= 1 && n <= 18", "return n >= 1 && n <= 19", False),
+ ("BarSlot.qml", "component", COMP_STORAGE, COMP_STORAGE + COMP_DIAL, False),
+ ("BarSlot.qml", "registry", '"G16": compCpuTemperature, "G17": compGpu, "G18": compStorage\n',
+  '"G16": compCpuTemperature, "G17": compGpu, "G18": compStorage,\n        "G19": compDial\n', False),
+ ("BarSlot.qml", "migration", OLD_PERM, NEW_PERM, False),
+ ("BarSlot.qml", "resetOrder", '"G18","G17","G15","","",""]', '"G18","G17","G15","G19","",""]', False),
+ ("BarSlot.qml", "defaultModel", 'ListElement { gid: "G15"; extra: true }  ListElement { gid: ""; extra: true }',
+  'ListElement { gid: "G15"; extra: true }  ListElement { gid: "G19"; extra: true }', False),
+ ("panels/ControlPanel.qml", "tile", r'^(\s*)(WidgetStateTile \{ gid: "G18";.*)$',
+  r'\1\2' + "\n" + r'\1' + TILE.replace("\\", "\\\\"), True),
+]
+FILES = sorted({e[0] for e in EDITS})
+
+def read(p):
+    with open(p, encoding="utf-8") as f: return f.read()
+
+def installed(root):
+    try:
+        return (os.path.exists(os.path.join(root, "modules/DialWidget.qml"))
+                and "compDial" in read(os.path.join(root, "BarSlot.qml"))
+                and "modDial" in read(os.path.join(root, "Theme.qml"))
+                and 'gid: "G19"' in read(os.path.join(root, "panels/ControlPanel.qml")))
+    except OSError:
+        return False
+
+def compute(root):
+    """New contents for every file, or exit 2 (nothing written) if any anchor fails."""
+    out = {f: read(os.path.join(root, f)) for f in FILES}
+    for f, name, pat, repl, rx in EDITS:
+        s = out[f]
+        n = len(re.findall(pat, s, flags=re.M)) if rx else s.count(pat)
+        if n != 1:
+            sys.exit(f"surface-dial-rise-widget: '{name}' in {f} matched {n} times (need exactly 1) -- "
+                     "these Rise files differ from the version this was written against. Nothing was changed.")
+        out[f] = re.sub(pat, lambda m: m.expand(repl) if rx else repl, s, count=1, flags=re.M) if rx else s.replace(pat, repl, 1)
+    return out
+
+def barctl(*a):
+    exe = os.path.expanduser("~/.config/quickshell/bin/qs-barctl")
+    return subprocess.run([exe, *a], capture_output=True, text=True, timeout=120)
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--check", action="store_true"); ap.add_argument("--install", action="store_true")
+    ap.add_argument("--no-restart", action="store_true")
+    ap.add_argument("--root", default=os.path.expanduser("~/.config/quickshell/bar/variants/V2"))
+    a = ap.parse_args()
+    if a.check == a.install:
+        ap.error("give exactly one of --check / --install")
+    root = a.root
+    if not os.path.exists(os.path.join(root, "BarSlot.qml")):
+        print(f"no Rise bar at {root} -- nothing to do"); sys.exit(0 if a.install else 1)
+    if a.check:
+        sys.exit(0 if installed(root) else 1)
+    if installed(root):
+        print("already installed"); return
+    new = compute(root)                       # exits without writing if any anchor is off
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    bk = os.path.expanduser(f"~/.local/share/dial-kit-backups/{stamp}-rise-widget")
+    for f in FILES:
+        os.makedirs(os.path.dirname(os.path.join(bk, f)) or bk, exist_ok=True)
+        shutil.copy2(os.path.join(root, f), os.path.join(bk, f))
+    for f in FILES:
+        with open(os.path.join(root, f), "w", encoding="utf-8") as fh: fh.write(new[f])
+    with open(os.path.join(root, "modules/DialWidget.qml"), "w", encoding="utf-8") as fh: fh.write(WIDGET_QML)
+    print(f"patched {', '.join(FILES)} + modules/DialWidget.qml (backup: {bk})")
+    if a.no_restart:
+        return
+    running = barctl("status").stdout.strip()
+    if not running or running == "stopped":
+        print("Rise bar isn't running; the widget appears next time it starts"); return
+    barctl("stop-wait"); r = barctl("start-wait")
+    if r.returncode != 0:
+        print("bar failed to restart -- rolling back", file=sys.stderr)
+        for f in FILES: shutil.copy2(os.path.join(bk, f), os.path.join(root, f))
+        os.remove(os.path.join(root, "modules/DialWidget.qml"))
+        barctl("stop-wait"); barctl("start-wait")
+        sys.exit(3)
+    print("bar restarted. Turn it on: control panel -> WIDGETS -> Surface Dial")
+
+if __name__ == "__main__":
+    main()

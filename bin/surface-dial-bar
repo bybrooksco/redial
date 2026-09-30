@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# surface-dial-bar -- status + actions behind the Surface Dial button in the
+# Omarchy bar. The bar runs this as a `type: "command"` module (see the "Custom
+# user modules" section of the bar README), so there is no QML here: a plugin
+# `bar-widget` entry point on a local plugin was tried on 2026-09-16 and failed
+# to load, the command module is the documented route that doesn't depend on it.
+#
+#   surface-dial-bar            print one line of Waybar-style JSON for the bar
+#   surface-dial-bar restart    restart the dial daemon (applies active_tools)
+#
+# Installed into the bar by `surface-dial-setup --install-bar`.
+set -uo pipefail
+
+ICON=$''   # Font Awesome "dot-circle-o": reads as a dial/knob
+DAEMON="$HOME/.local/bin/surface-dial-hypr"
+LOG=/tmp/surface-dial-hypr.log
+# Anchored on ^python3 so this script, the bar's `bash -lc` wrapper and a
+# user's `pgrep -f` never match themselves.
+DAEMON_RE='^python3 .*surface-dial-hypr'
+
+case "${1:-status}" in
+restart)
+    pkill -f "$DAEMON_RE"
+    for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -f "$DAEMON_RE" >/dev/null || break; sleep 0.2; done
+    setsid nohup python3 "$DAEMON" >>"$LOG" 2>&1 </dev/null &
+    notify-send -a "Surface Dial" "Dial daemon restarted" "Tool changes are now applied."
+    exit 0
+    ;;
+status) ;;
+*)
+    echo "usage: ${0##*/} [status|restart]" >&2
+    exit 2
+    ;;
+esac
+
+mac=$(bluetoothctl devices 2>/dev/null | awk '/Surface Dial/ {print $2; exit}')
+connected=0 battery=""
+if [[ -n "$mac" ]]; then
+    info=$(bluetoothctl info "$mac" 2>/dev/null)
+    grep -q 'Connected: yes' <<<"$info" && connected=1
+    battery=$(sed -n 's/.*Battery Percentage: .*(\([0-9]\+\)).*/\1/p' <<<"$info")
+fi
+pgrep -f "$DAEMON_RE" >/dev/null && daemon=1 || daemon=0
+
+text="$ICON" klass="" line=""
+if [[ -z "$mac" ]]; then
+    line="not paired"
+elif (( ! connected )); then
+    line="not connected"
+elif (( ! daemon )); then
+    line="connected, but the dial daemon is not running"
+else
+    klass="active"
+    line="connected${battery:+ · battery ${battery}%}"
+fi
+# A low battery is the one thing worth a number on the bar itself.
+[[ -n "$battery" && "$battery" -le 15 ]] && text="$ICON ${battery}%"
+
+hint='Left-click: tool settings\nRight-click: restart dial daemon (applies tool changes)'
+# text/tooltip/class are the Waybar-style fields Omarchy's stock bar reads; the
+# rest are for bars that draw their own widget (the Quickshell Rise bar).
+# What single/double/triple click currently do, as labels (null if the daemon hasn't
+# published clicks.json yet -- restart it once).
+clicks=$(jq -c -n --slurpfile c "$HOME/.config/dial-radial/config.json" \
+    --slurpfile m "$HOME/.config/dial-radial/clicks.json" '
+    ($m[0].defaults // {}) as $d | ($c[0].clicks // {}) as $u | ($m[0].actions // []) as $a
+    | ["single","double","triple"] | map(. as $k | ($u[$k] // $d[$k]) as $n
+        | {($k): (($a | map(select(.name == $n)) | first | .label) // $n)}) | add' 2>/dev/null) || clicks=null
+[[ -n "$clicks" ]] || clicks=null
+
+printf '{"text":"%s","tooltip":"Surface Dial: %s\\n%s","class":"%s","paired":%s,"connected":%s,"daemon":%s,"battery":%s,"clicks":%s}\n' \
+    "$text" "$line" "$hint" "$klass" \
+    "$([[ -n "$mac" ]] && echo true || echo false)" \
+    "$( ((connected)) && echo true || echo false)" \
+    "$( ((daemon)) && echo true || echo false)" \
+    "${battery:-null}" "$clicks"
