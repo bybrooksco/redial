@@ -145,7 +145,10 @@ Item {
         anchors.centerIn: parent
         text: modelData.icon || ""
         font.family: Style.font.family
-        font.pixelSize: active ? Style.font.title : Style.font.body
+        // Deliberately a size (not two) smaller than the circle than it
+        // first shipped with -- the glyph was nearly touching the accent
+        // circle's edge with no breathing room.
+        font.pixelSize: active ? Style.font.body : Style.font.caption
         color: active ? face.cfg.backgroundColor : Util.alpha(face.cfg.lineColor, 0.5)
         Behavior on font.pixelSize { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
         Behavior on color { ColorAnimation { duration: 130 } }

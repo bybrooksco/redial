@@ -78,8 +78,18 @@ Item {
       // which icon is selected - a stray "open" call (e.g. Volume's live
       // readout refresh) landing late must not stomp a newer pos-derived index.
       if (p.index !== undefined && !live) index = p.index
-      if (p.anchor !== undefined) anchor = String(p.anchor)
-      if (p.layout !== undefined) layout = String(p.layout)
+      // anchor/layout are NOT taken from the daemon's payload (found and
+      // fixed 2026-09-30): both already have their own live binding to cfg
+      // (see `property string anchor: cfg.anchor` / `layout: cfg.layout`
+      // above), reading the same config file the daemon also reads. Assigning
+      // them here imperatively, even to the "right" value, permanently
+      // replaces that binding with a static one -- and the daemon validates
+      // "layout" against its own allowed-values tuple, so the moment that
+      // tuple was stale (missing carousel/toast) the daemon silently sent
+      // "dial" back on every real dial rotation, which then froze root.layout
+      // at "dial" forever, no matter what the settings window wrote to
+      // config.json afterward. cfg's own binding is the single source of
+      // truth; nothing needs to round-trip through the daemon to reach it.
       freeX = p.x === undefined ? -1 : p.x
       freeY = p.y === undefined ? -1 : p.y
       mode = "live"

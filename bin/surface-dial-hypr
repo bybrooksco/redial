@@ -208,7 +208,12 @@ def cfg_str(doc, key, default, allowed=None):
     return v
 
 
-# "deck" = card rail along an edge; "dial" = the radial instrument plate.
+# "deck"/"carousel" = card rail along an edge (carousel: friendlier, center-
+# emphasis sizing); "dial" = the radial instrument plate (face picks which
+# one); "toast" = a single pill plus a dot strip. Only used to validate what
+# the daemon echoes back in the open() payload -- QML reads "layout" (and
+# "face") straight out of config.json itself and no longer trusts this
+# payload field for either (see DialMenu.qml's open(), fixed 2026-09-30).
 MENU_ANCHOR = "bottom"
 MENU_LAYOUT = "dial"
 ANCHORS = ("center", "top", "bottom", "left", "right",
@@ -488,7 +493,8 @@ class MenuUI:
         # Re-read per open so config edits land without restarting the daemon.
         doc = load_config()
         anchor = os.environ.get("DIAL_MENU_ANCHOR") or cfg_str(doc, "anchor", MENU_ANCHOR, ANCHORS)
-        layout = os.environ.get("DIAL_MENU_LAYOUT") or cfg_str(doc, "layout", MENU_LAYOUT, ("dial", "deck"))
+        layout = os.environ.get("DIAL_MENU_LAYOUT") or cfg_str(
+            doc, "layout", MENU_LAYOUT, ("dial", "deck", "carousel", "toast"))
         vol = self._volume()
         tools = []
         for t in TOOLS:
