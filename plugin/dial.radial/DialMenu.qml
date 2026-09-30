@@ -504,8 +504,13 @@ Item {
       id: toast
       visible: root.mode === "live" && root.layout === "toast"
       readonly property var activeTool: root.tools.length > root.index ? root.tools[root.index] : null
-      width: Math.max(pill.width, dots.width)
-      height: pill.height + Style.space(14) + dots.height
+      // dots (a Row) never has its own `width` set explicitly, so unlike
+      // `pill` (an explicit width) its `width` property itself stays 0 --
+      // `implicitWidth`/`implicitHeight` are the ones that actually reflect
+      // its content size, same property Carousel's `row` above is read
+      // through for exactly this reason.
+      width: Math.max(pill.width, dots.implicitWidth)
+      height: pill.height + Style.space(14) + dots.implicitHeight
 
       readonly property bool free: root.freeX >= 0 && root.freeY >= 0
       readonly property bool atTop: root.anchor.indexOf("top") === 0
@@ -658,7 +663,16 @@ Item {
       Rectangle {
         visible: cfg.plate === "disc"
         anchors.centerIn: parent
-        width: Math.min(parent.width, parent.height)
+        // Hugs the face's own content radius (each disc face declares one)
+        // plus a small margin, rather than always filling the full square --
+        // that used to leave a wide ring of dead backing past the wedges/
+        // capsules. Faces that don't declare one (there are none today, but
+        // a future one might not need a disc at all) fall back to the old
+        // full-square sizing.
+        readonly property real contentR: (faceLoader.item && faceLoader.item.contentRadius !== undefined)
+                                          ? faceLoader.item.contentRadius
+                                          : Math.min(parent.width, parent.height) / 2
+        width: (contentR + 28) * 2
         height: width
         radius: width / 2
         // The theme's background can itself carry alpha, so take only its RGB

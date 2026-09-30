@@ -33,6 +33,10 @@ Item {
   readonly property real rInner: 104 * unit
   readonly property real rIcon:  (rOuter + rInner) / 2
   readonly property real rHub:    96 * unit
+  // How far this face's own drawing actually reaches -- DialMenu's disc
+  // backing sizes itself to this (plus its own small margin) instead of
+  // always filling the whole square.
+  readonly property real contentRadius: rOuter
   // Small angular gap between wedges so they read as separate slices rather
   // than one ring with tick marks - a fixed radian value, not a fraction of
   // the wedge, so it stays a clean hairline regardless of tool count.

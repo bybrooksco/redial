@@ -49,6 +49,10 @@ Item {
   readonly property real arcPerTool: 2 * Math.PI * rCapsule / n
   readonly property real capWide:    arcPerTool * cfg.capsuleSpan
   readonly property real capWideSel: capWide * 1.26
+  // How far this face's own drawing actually reaches (the selected capsule's
+  // outer edge) -- DialMenu's disc backing sizes itself to this instead of
+  // always filling the whole square.
+  readonly property real contentRadius: rCapsule + capLenSel / 2
 
   function angleOf(i) { return -Math.PI / 2 + i * 2 * Math.PI / n }
 

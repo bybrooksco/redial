@@ -70,19 +70,32 @@ Item {
       // a direction flag, not the ambiguous large-arc/sweep flags an SVG path
       // would need for the same shape - safe to draw directly rather than
       // sampling a polyline.
+      //
+      // Filled close to opaque with the theme's own background (same idea as
+      // DialMenu's disc/rect plate -- a near-transparent band read as
+      // "undefined" over real desktop content) plus a real rim stroke, not a
+      // hairline, so the dome reads as a backing rather than a faint tint.
       ctx.beginPath()
       ctx.arc(cx, cy, face.rOuter, Math.PI, Math.PI * 2, false)
       ctx.arc(cx, cy, face.rInner, Math.PI * 2, Math.PI, true)
       ctx.closePath()
-      ctx.fillStyle = Util.alpha(face.cfg.lineColor, 0.06)
+      var bg = face.cfg.backgroundColor
+      ctx.fillStyle = Qt.rgba(bg.r, bg.g, bg.b, Math.max(0.85, face.cfg.plateOpacity))
       ctx.fill()
 
-      // Rim hairline.
+      ctx.lineWidth = Math.max(1.5, face.cfg.ringWidth * 2)
+      ctx.strokeStyle = String(face.cfg.lineColor)
+      ctx.globalAlpha = 0.38
+      ctx.stroke()
+      ctx.globalAlpha = 1
+
+      // Rim hairline, one step further out, catching the light edge of the
+      // band the way Classic's outermost ring does.
       ctx.beginPath()
       ctx.arc(cx, cy, face.rOuter, Math.PI, Math.PI * 2, false)
       ctx.lineWidth = face.cfg.ringWidth
-      ctx.strokeStyle = String(face.cfg.lineColor)
-      ctx.globalAlpha = 0.14
+      ctx.strokeStyle = String(face.cfg.accentColor)
+      ctx.globalAlpha = 0.30
       ctx.stroke()
       ctx.globalAlpha = 1
     }
