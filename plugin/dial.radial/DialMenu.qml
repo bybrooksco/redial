@@ -548,51 +548,65 @@ Item {
       Rectangle {
         id: pill
         anchors.horizontalCenter: parent.horizontalCenter
-        width: pillRow.implicitWidth + Style.space(36)
+        // Fixed, not content-sized: a pill that resizes to fit each tool's
+        // name (and re-centers, since it's anchored by horizontalCenter)
+        // was the real source of the "jittery, moving back and forth"
+        // motion -- every rotation past a differently-long name shoved the
+        // whole thing sideways. Long names elide instead of resizing it.
+        // Solid fill, no border -- outlines read as clutter the color
+        // contrast alone already carries.
+        width: Style.space(240)
         height: Style.space(64)
         radius: height / 2
         color: cfg.backgroundColor
-        border.width: Math.max(1, Style.space(2))
-        border.color: Util.alpha(cfg.lineColor, 0.30)
 
-        Row {
-          id: pillRow
-          anchors.centerIn: parent
-          spacing: Style.space(12)
-
-          Rectangle {
-            width: Style.space(40); height: width
-            radius: width / 2
-            color: cfg.accentColor
-            anchors.verticalCenter: parent.verticalCenter
-            Text {
-              anchors.centerIn: parent
-              text: toast.activeTool ? (toast.activeTool.icon || "") : ""
-              font.family: Style.font.family
-              font.pixelSize: Style.font.title
-              color: cfg.backgroundColor
-            }
+        Rectangle {
+          id: pillIcon
+          anchors.left: parent.left
+          anchors.leftMargin: Style.space(12)
+          anchors.verticalCenter: parent.verticalCenter
+          width: Style.space(40); height: width
+          radius: width / 2
+          color: cfg.accentColor
+          Text {
+            anchors.centerIn: parent
+            text: toast.activeTool ? (toast.activeTool.icon || "") : ""
+            font.family: Style.font.family
+            font.pixelSize: Style.font.title
+            color: cfg.backgroundColor
           }
-          Column {
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(1)
-            Text {
-              text: toast.activeTool ? (toast.activeTool.name || "") : ""
-              font.family: Style.font.family
-              font.pixelSize: Style.font.body
-              font.bold: true
-              color: cfg.lineColor
+        }
+        // Left-anchored off the icon, not centered as one group with it --
+        // centering the pair would itself have moved the icon sideways by
+        // however much shorter or longer the next tool's name is, same
+        // jitter one layer in.
+        Column {
+          anchors.left: pillIcon.right
+          anchors.leftMargin: Style.space(12)
+          anchors.right: parent.right
+          anchors.rightMargin: Style.space(12)
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: Style.space(1)
+          Text {
+            width: parent.width
+            elide: Text.ElideRight
+            text: toast.activeTool ? (toast.activeTool.name || "") : ""
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+            font.bold: true
+            color: cfg.lineColor
+          }
+          Text {
+            width: parent.width
+            elide: Text.ElideRight
+            visible: text !== ""
+            text: {
+              var h = toast.activeTool ? toast.activeTool.hint : ""
+              return (h && h !== "—") ? ("click: " + h) : ""
             }
-            Text {
-              visible: text !== ""
-              text: {
-                var h = toast.activeTool ? toast.activeTool.hint : ""
-                return (h && h !== "—") ? ("click: " + h) : ""
-              }
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-              color: Util.alpha(cfg.lineColor, 0.55)
-            }
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            color: Util.alpha(cfg.lineColor, 0.55)
           }
         }
       }
@@ -609,11 +623,19 @@ Item {
           delegate: Rectangle {
             required property int index
             readonly property bool active: index === root.index
-            width: active ? Style.space(16) : Style.space(7)
+            // Fixed size, not a growing width -- a dot that widened on
+            // selection reflowed every dot after it in the Row each time
+            // (and the whole row re-centers on top of that), which was the
+            // other half of the jitter. Scale doesn't feed back into the
+            // Row's layout the way width does, so the active dot can still
+            // stand out without moving its neighbors.
+            width: Style.space(7)
             height: Style.space(7)
             radius: height / 2
+            scale: active ? 1.7 : 1
             color: active ? cfg.accentColor : Util.alpha(cfg.lineColor, 0.25)
-            Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+            Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+            Behavior on color { ColorAnimation { duration: 160 } }
           }
         }
       }

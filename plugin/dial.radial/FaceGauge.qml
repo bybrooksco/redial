@@ -73,8 +73,11 @@ Item {
       //
       // Filled close to opaque with the theme's own background (same idea as
       // DialMenu's disc/rect plate -- a near-transparent band read as
-      // "undefined" over real desktop content) plus a real rim stroke, not a
-      // hairline, so the dome reads as a backing rather than a faint tint.
+      // "undefined" over real desktop content). Solid fill only, no rim
+      // stroke -- an outlined edge around the whole backdrop competed with
+      // the icons for attention instead of just sitting behind them; the
+      // fill's own contrast against the desktop already reads as a defined
+      // shape without one.
       ctx.beginPath()
       ctx.arc(cx, cy, face.rOuter, Math.PI, Math.PI * 2, false)
       ctx.arc(cx, cy, face.rInner, Math.PI * 2, Math.PI, true)
@@ -82,22 +85,6 @@ Item {
       var bg = face.cfg.backgroundColor
       ctx.fillStyle = Qt.rgba(bg.r, bg.g, bg.b, Math.max(0.85, face.cfg.plateOpacity))
       ctx.fill()
-
-      ctx.lineWidth = Math.max(1.5, face.cfg.ringWidth * 2)
-      ctx.strokeStyle = String(face.cfg.lineColor)
-      ctx.globalAlpha = 0.38
-      ctx.stroke()
-      ctx.globalAlpha = 1
-
-      // Rim hairline, one step further out, catching the light edge of the
-      // band the way Classic's outermost ring does.
-      ctx.beginPath()
-      ctx.arc(cx, cy, face.rOuter, Math.PI, Math.PI * 2, false)
-      ctx.lineWidth = face.cfg.ringWidth
-      ctx.strokeStyle = String(face.cfg.accentColor)
-      ctx.globalAlpha = 0.30
-      ctx.stroke()
-      ctx.globalAlpha = 1
     }
   }
 
@@ -157,14 +144,13 @@ Item {
   }
 
   // --- pivot + readout, sitting just above the needle's base -------------------
+  // Solid fill, no border -- same reasoning as the dome band above.
   Rectangle {
     x: face.cx - face.rHub
     y: face.cy - face.rHub
     width: face.rHub * 2; height: width
     radius: width / 2
     color: face.cfg.backgroundColor
-    border.width: Math.max(1, face.cfg.ringWidth)
-    border.color: Util.alpha(face.cfg.lineColor, 0.25)
   }
   Rectangle {
     x: face.cx - width / 2

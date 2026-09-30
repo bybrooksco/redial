@@ -1830,7 +1830,22 @@ class Dial:
                 self.show_menu()
             # Continuous position in tool units: the whole point of the socket.
             # menu_accum stays within one step, so this is smooth across a wrap.
-            MENU_STREAM.pos(self.menu_pick + self.menu_accum / MENU_STEP, now)
+            #
+            # Divisor is 2*MENU_STEP, not MENU_STEP (Brooks, 2026-09-30: real
+            # use found the overlay's highlight and the actual pick could
+            # disagree -- "the previous tool, not the one I meant"). The loop
+            # above only increments menu_pick once menu_accum reaches a FULL
+            # MENU_STEP, but menu_accum/MENU_STEP alone ranges up to +-1.0 --
+            # so Math.round() on the QML side (which is what turns this
+            # position into a highlighted tool) was flipping to the NEXT tool
+            # at the HALFWAY point of a detent, a full half-detent before
+            # menu_pick itself -- and therefore a release/click -- actually
+            # moved there. Dividing by 2*MENU_STEP instead keeps the fraction
+            # within +-0.5 of menu_pick for the entire detent, so the visual
+            # highlight and the real pick cross the boundary at the exact
+            # same instant, every time -- not two different thresholds a half
+            # step apart.
+            MENU_STREAM.pos(self.menu_pick + self.menu_accum / (2 * MENU_STEP), now)
             return
 
         if TOOLS[self.tool].get("continuous"):

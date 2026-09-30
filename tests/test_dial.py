@@ -35,6 +35,7 @@ def load_daemon():
 
 m = load_daemon()
 EVENTS = []
+POSITIONS = []
 
 
 class Haptics:
@@ -48,6 +49,7 @@ class Recorder:
     def open(self, i): EVENTS.append("MENU-OPENED")
     def connect(self): pass
     def highlight(self, i): pass
+    def pos(self, p, now): POSITIONS.append(p)
 
 
 def install_stubs(cfg_path):
@@ -340,6 +342,38 @@ class Resize(unittest.TestCase):
 
     def test_fullscreen_is_left_alone(self):
         self.assertEqual(self.run_resize(self.win(0, 1536, fullscreen=True)), [])
+
+
+class MenuPositionAlignment(unittest.TestCase):
+    """The overlay's highlighted tool -- round(position), on the QML side --
+    must flip to the next tool at the exact same rotation count as
+    menu_pick itself (the real value a release/click arms). Regression for
+    a 2026-09-30 bug: the position sent over the socket divided menu_accum
+    by MENU_STEP, which ranges up to +-1.0 within one detent, so round()
+    flipped the visual highlight a half-detent early -- a click right after
+    the highlight changed could still arm the OLD tool. Fixed by dividing
+    by 2*MENU_STEP instead, keeping the fraction within +-0.5."""
+
+    def test_visual_highlight_never_leads_the_real_pick(self):
+        install_stubs(os.path.join(tempfile.mkdtemp(), "config.json"))
+        POSITIONS.clear()
+        d = m.Dial()
+        d.menu = True
+        d.menu_pick = 0
+        d.menu_accum = 0.0
+        t = 0.0
+        # A few full laps, one count per rotate event -- MENU_STEP counts is
+        # one detent, so this crosses many tool boundaries in both directions.
+        for value in ([1] * (m.MENU_STEP * len(m.TOOLS) * 2)
+                      + [-1] * (m.MENU_STEP * len(m.TOOLS) * 2)):
+            d.on_rotate(value, t)
+            t += 0.002
+            if POSITIONS:
+                visual = round(POSITIONS[-1]) % len(m.TOOLS)
+                self.assertEqual(
+                    visual, d.menu_pick,
+                    f"visual highlight={visual} but the real pick is still "
+                    f"{d.menu_pick} (position={POSITIONS[-1]!r})")
 
 
 if __name__ == "__main__":
