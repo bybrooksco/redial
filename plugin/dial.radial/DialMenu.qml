@@ -425,9 +425,10 @@ Item {
       width: row.implicitWidth + Style.space(40)
       height: row.implicitHeight + Style.space(40)
       radius: Style.cornerRadius
+      // Solid fill, no border -- same pass as Gauge's/Toast's backdrops and
+      // Pie's hub: an outline here was just competing with the cards for
+      // attention, and the fill already reads as a defined panel on its own.
       color: cfg.backgroundColor
-      border.width: Math.max(1, Style.space(2))
-      border.color: Util.alpha(cfg.lineColor, 0.30)
 
       readonly property bool free: root.freeX >= 0 && root.freeY >= 0
       readonly property bool atTop: root.anchor.indexOf("top") === 0

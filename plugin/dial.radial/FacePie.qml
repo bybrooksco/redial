@@ -124,6 +124,9 @@ Item {
   }
 
   // --- hub -------------------------------------------------------------------
+  // Solid fill, no border -- matches Gauge's pivot (same backdrop-vs-icon
+  // reasoning: the fill's own contrast is definition enough, a stroke was
+  // just competing with the icons around it for attention).
   Rectangle {
     x: face.cx - width / 2
     y: face.cy - height / 2
@@ -131,8 +134,6 @@ Item {
     height: width
     radius: width / 2
     color: face.cfg.backgroundColor
-    border.width: Math.max(1, face.cfg.ringWidth)
-    border.color: Util.alpha(face.cfg.lineColor, 0.18)
   }
   Column {
     x: face.cx - width / 2
