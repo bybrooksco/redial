@@ -1,4 +1,4 @@
-# Surface Dial (045e:091b) -- Brooks, 2026-08-28
+# Surface Dial (045e:091b)
 #
 # The dial arrives over Bluetooth LE, so it is a virtual `uhid` device with
 # no ATTRS{idVendor}; a conventional USB-style rule will NOT match it. The

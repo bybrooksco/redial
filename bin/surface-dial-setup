@@ -4,9 +4,8 @@
 # safe to re-run: every change is behind its own y/N prompt, nothing silent.
 #
 # This exists because every one of the checks below has independently caused a
-# silent, hard-to-diagnose failure on this project before -- see the Process
-# Book (~/Projects/Surface Dial Redesigned/Process Book.md) for the incident
-# history. Run with no arguments for a read-only report.
+# silent, hard-to-diagnose failure on this project before. Run with no arguments
+# for a read-only report.
 set -uo pipefail
 
 # Matches surface-dial-hypr's own find_node(): a loose case-insensitive

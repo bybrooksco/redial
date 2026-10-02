@@ -69,7 +69,7 @@ membership, the `70-surface-dial.rules` udev rule (hidraw + uinput
 permissions), Bluetooth pairing, the daemon's Hyprland autostart entry, and
 whether this plugin is enabled — all four of hidraw, uinput, BLE pairing, and
 group membership have independently caused silent, hard-to-diagnose failures
-on this project before (see the Process Book), which is the whole reason the
+on this project before, which is the whole reason the
 script exists rather than leaving this as tribal knowledge.
 
 Copy this directory to `~/.config/omarchy/plugins/dial.radial/`, then:

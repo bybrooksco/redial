@@ -6,54 +6,24 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 
-// Pick and reorder which of the daemon's tools are active on the dial.
+// Pick and reorder which of the daemon's tools are active, and where the overlay sits.
 //
-// This is a settings screen, not a live instrument face, so unlike
-// DialMenu.qml's overlay it takes real mouse input (no `mask: Region {}`)
-// and needs no rotation socket -- it only reads/writes files.
+// A settings screen: real mouse input, no rotation socket; it only reads and writes files in
+// ~/.config/dial-radial/:
+//   tools.json   - written by the daemon at startup: [{name, icon}] for every tool it can
+//                  build, so a tool added to TOOL_LIBRARY just shows up here.
+//   config.json  - the shared config. Keys this panel doesn't own are read whole and
+//                  written back untouched.
 //
-// Also picks where the overlay itself sits on screen (the existing `anchor`
-// config key, previously only reachable by hand-editing config.json or
-// calling `omarchy-shell dialmenu anchor ...`).
-//
-// Two files, both in ~/.config/dial-radial/:
-//   tools.json   - written by the daemon at every startup: [{name, icon}]
-//                  for every tool it knows how to build, in its library
-//                  order. This panel never hardcodes a tool list -- a tool
-//                  added to the daemon's TOOL_LIBRARY just shows up here.
-//   config.json  - the shared config. This panel only ever touches its
-//                  "active_tools" and "anchor" keys; every other key --
-//                  colours, dial/deck geometry -- is read whole and written
-//                  back untouched.
-//
-// An active_tools change here is picked up live by the daemon the next time
-// the dial is idle (see Dial.maybe_reload_tools there) -- no restart.
-// anchor has no such lag: DialMenu.qml's Settings watches config.json live
-// (see Settings.qml), so an anchor click here is written and takes effect
-// immediately, with no Save step and no restart -- it isn't state the
-// running daemon holds, just where Quickshell draws the overlay.
-//
-// Reordering active tools is still up/down arrows, not drag-and-drop: a drag
-// gesture isn't something this session could verify without a live mouse in
-// hand, and shipping an unverified drag interaction risked a worse result
-// than the plain arrows. Worth revisiting if the arrows feel clunky in
-// practice.
+// active_tools and anchor both apply live: no Save step, no restart.
 Item {
   id: root
   required property var cfg
 
-  // Window lifecycle (opened/mode/mask/keyboard-focus) is owned by the
-  // embedder now (DialMenu.qml), which shows this content on its "settings"
-  // tab of one shared PanelWindow. This used to be a PanelWindow of its own;
-  // see the Process Book, 2026-09-26, for why the two were merged. This
-  // signal is the one thing the embedder still needs to react to.
+  // Window lifecycle is owned by the embedder (DialMenu.qml); this signal is all it needs.
   signal closeRequested()
-  // Peek at the live tool-rail/radial overlay without leaving this window --
-  // see closeRequested above for why the embedder (DialMenu.qml) owns what
-  // happens next. There's no matching in-window way back (the live tab is
-  // fully click-through by design, see DialMenu.qml), so getting back to
-  // Settings goes through the same hotkey/bar-widget entry point as opening
-  // it the first time -- that's a deliberate trade, not an oversight.
+  // Peek at the live overlay. There's no in-window way back (the live tab is click-through by
+  // design); return via the same hotkey/bar widget. Deliberate.
   signal liveRequested()
   property var manifest: []     // [{name, icon}], in TOOL_LIBRARY order
   property var configDoc: ({})  // full parsed config.json, kept intact
@@ -101,12 +71,8 @@ Item {
     configDoc = out
   }
 
-  // Appearance: one picker across all six overlay options, even though under
-  // the hood three are a "face" (still layout "dial") and three are their own
-  // top-level "layout" -- nobody picking a look needs to know that split.
-  // Writes both keys in one go so a "layout"-only option (carousel/toast)
-  // never leaves a stale "face" implying the wrong thing, and a "dial" option
-  // never leaves a stale "layout" from a previous carousel/toast choice.
+  // One picker across all six overlay options, though three are a "face" and three a "layout".
+  // Writes both keys together so neither is left stale.
   readonly property var appearanceOptions: [
     { key: "classic",  label: "Classic",       layout: "dial",     face: "classic" },
     { key: "capsule",  label: "Capsule",       layout: "dial",     face: "capsule" },
@@ -130,13 +96,9 @@ Item {
     configDoc = out
   }
 
-  // Click gestures. The action list comes from the daemon (clicks.json /
-  // pen_clicks.json, written at every startup) so this window never hardcodes
-  // it; the choice lives in config.json ("clicks" for the dial, "pen.tail_clicks"
-  // for the pen's tail button) and the daemon re-reads it live. Both use the
-  // same picker logic below, parametrized by `group` ("dial" | "pentail") so
-  // it isn't written out three times over (the barrel button is one action +
-  // a toggle, not three kinds, and gets its own small block further down).
+  // Click gestures. Options come from clicks.json / pen_clicks.json (written by the daemon at
+  // startup); the choice lives in config.json and is re-read live. One picker, parametrized by
+  // `group` ("dial" | "pentail"); the barrel button has its own block below.
   property var clickActions: []      // [{name, label, description}] -- dial
   property var clickDefaults: ({ "single": "tool", "double": "dictation", "triple": "enter" })
   property var penTailActions: []    // [{name, label, description}] -- pen tail button
@@ -261,11 +223,7 @@ Item {
     writePen(function (pen) { pen.enabled = v })
   }
 
-  // Writes through immediately -- unlike active_tools, anchor is not state
-  // the running daemon holds, so there's nothing to batch behind a restart.
-  // Does not assign root.anchor directly: it's a binding off configDoc (see
-  // above), and an imperative assignment would permanently break that
-  // binding for the rest of this panel's life.
+  // Writes through immediately. Never assigns root.anchor directly: it's a binding off configDoc.
   function setAnchor(a) {
     var out = ({})
     for (var k in configDoc) out[k] = configDoc[k]
@@ -441,14 +399,8 @@ Item {
       width: Style.space(420)
       height: col.implicitHeight + Style.space(40)
       radius: Style.cornerRadius
-      // Forced fully opaque via explicit alpha=1, same reasoning as the
-      // dial disc plate's backing (see DialMenu.qml): the resolved theme
-      // background color can itself carry alpha, and "opacity: 1" on this
-      // Rectangle doesn't fix that -- the color's OWN alpha channel still
-      // lets desktop content read straight through. A settings dialog
-      // needs to be fully legible, more so than the live dial overlay,
-      // so this always forces full opacity rather than following a
-      // configurable plateOpacity.
+      // Forced fully opaque (alpha=1): the theme background can carry its own alpha. A settings
+      // dialog must be fully legible, so this ignores plateOpacity.
       color: Qt.rgba(root.cfg.backgroundColor.r, root.cfg.backgroundColor.g,
                      root.cfg.backgroundColor.b, 1.0)
       border.width: Math.max(1, Style.space(2))
@@ -950,20 +902,10 @@ Item {
           }
         }
 
-        // Active tools, arranged on a ring in the same order the real dial
-        // face lays them out -- drag one around the circumference to
-        // reorder. Center is deliberately empty: that's the click/dictation
-        // zone on the actual dial, never a tool slot, so it stays empty here
-        // too rather than implying a 10th position that doesn't exist.
-        //
-        // Reordering happens on release, not live mid-drag: a Repeater bound
-        // to a plain JS array (root.selected) has no stable delegate
-        // identity across a reorder, so live-swapping mid-gesture would
-        // destroy and recreate the very delegate the mouse is holding,
-        // aborting the drag. Simpler and more robust to let the dragged chip
-        // move freely as a visual overlay, then commit one moveTo() on
-        // release. The cost: other chips don't preview-shuffle while you
-        // drag, they just settle once you let go.
+        // Active tools on a ring, in the same order as the real dial face; drag to reorder. Center
+        // is empty on purpose (the dial's click zone). Reordering commits on release, not live: a
+        // Repeater over a plain JS array has no stable delegate identity, so a live swap would
+        // destroy the delegate being dragged. See docs/DESIGN.md#settings-window.
         Item {
           id: ring
           width: parent.width

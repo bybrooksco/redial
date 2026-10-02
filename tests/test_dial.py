@@ -7,7 +7,7 @@
 Every side effect (keys, hyprctl, playerctl, brightnessctl, notifications, haptics) is
 replaced with a recorder, and the click gestures are driven through a real temporary
 config file, so this checks decisions, not hardware. What it deliberately cannot check
-is feel on the physical dial, and real media/window behaviour -- see the Process Book.
+is feel on the physical dial, and real media/window behaviour.
 """
 
 import sys
@@ -449,7 +449,7 @@ class LiveToolReload(Base):
         super().setUp()
         self.saved = list(m.TOOLS)
         m._tools_state["mtime"] = None
-        self.addCleanup(lambda: (m.TOOLS.__setitem__(slice(None), self.saved)))
+        self.addCleanup(lambda: m.TOOLS.__setitem__(slice(None), self.saved))
 
     def write_active(self, names):
         time.sleep(0.005)  # distinct mtime

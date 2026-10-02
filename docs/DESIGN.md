@@ -14,6 +14,10 @@ decision live here. Dates are when a decision was made or measured.
 - [Eraser](#eraser)
 - [Tool history](#tool-history)
 - [Click gestures](#click-gestures)
+- [Overlay window](#overlay-window)
+- [Config bindings](#config-bindings)
+- [Faces and layouts](#faces-and-layouts)
+- [Settings window](#settings-window)
 
 ## Interaction model
 
@@ -199,3 +203,92 @@ which is why it is the default there. Choices are re-read whenever `config.json`
 changes, so the settings window applies them on the next click. The option lists
 are published to `clicks.json` and `pen_clicks.json` at startup so that window
 never hardcodes them.
+
+## Overlay window
+
+`DialMenu.qml` owns one shared `PanelWindow` with a `mode` of `live` or
+`settings` (merged 2026-09-26; before that they were two windows). `live` is the
+tool-rail/radial overlay, driven by the daemon while the dial turns, and must be
+fully click-through: the dial is the input device, so it can never eat a click
+meant for the window underneath. `settings` is `ToolPicker`'s content, with real
+mouse and keyboard input (IPC target `dialtools`, bar widget,
+`SUPER+SHIFT+CTRL+D`). `mode` picks the content and the mask/focus policy.
+
+The inactivity watchdog is scoped to the "popped up because you're using the
+dial" case. A manual peek at the Live tab from Settings should sit there until
+you leave it, like Settings itself.
+
+The Live tab has no in-window way back to Settings, because it is click-through
+by design. Returning goes through the same hotkey or bar widget as opening it.
+That is a deliberate trade.
+
+A one-time check still needs a human: open Settings, flip to Live, click an app
+under where the overlay sits, and confirm the click lands there. If it ever
+fails, the scoped fallback is two `PanelWindow`s sharing the same `mode` state.
+
+## Config bindings
+
+`anchor` and `layout` are deliberately not taken from the daemon's `open()`
+payload (found and fixed 2026-09-30). Both already have a live binding to `cfg`,
+which reads the same config file the daemon reads. Assigning them imperatively,
+even to the right value, permanently replaces that binding with a static one.
+The daemon validates `layout` against its own allowed-values tuple, so when that
+tuple was stale (missing carousel and toast) it echoed back `dial` on every real
+rotation, which froze `root.layout` at `dial` no matter what the settings window
+wrote afterward. `cfg`'s binding is the single source of truth.
+
+`ToolPicker` follows the same rule: it never assigns `root.anchor` directly,
+because that is a binding off `configDoc`.
+
+## Faces and layouts
+
+- **Carousel** is a lower-detail restyle of the row-of-cards idea. It is not
+  routed through the face `Loader`, because it isn't circular and the dial face
+  contract (`angleOf`, a square `Canvas`) would fight it. Sizing is binary
+  (selected large, everyone else small) rather than a falloff by distance: the
+  sum of one large plus (n-1) small widths is constant wherever the large one is,
+  so the container never needs recomputing as the selection moves.
+- **Minimal Toast** is the smallest footprint: one pill naming the armed tool
+  plus a dot strip, like a phone onboarding screen. It gives up the free "how far
+  to the next tool" feedback that circular and ordered layouts show.
+- **Toast jitter.** A pill that resized to each tool's name (and re-centered)
+  shoved the whole thing sideways on every rotation past a longer name. It is now
+  fixed-size, with long names eliding. A dot that widened on selection reflowed
+  every dot after it, the other half of the jitter. Scale doesn't feed back into
+  layout the way width does. Solid fill, no border: outlines read as clutter the
+  color contrast already carries.
+- The dot strip never sets `width`, so its `width` stays 0; read
+  `implicitWidth` and `implicitHeight`, as Carousel's row is.
+- **Disc backing** hugs the face's declared content radius plus a margin. It used
+  to fill the full square, leaving a wide ring of dead backing past the wedges.
+  Faces that declare no radius fall back to full-square sizing.
+- **Backing opacity.** The theme background can carry its own alpha, so take only
+  its RGB and set alpha explicitly; `opacity: 0.97` alone still let a terminal
+  read straight through. The settings window forces alpha to 1, ignoring
+  `plateOpacity`, since a dialog must be fully legible.
+- Each `highlight` IPC call is a fire-and-forget round trip with no ordering
+  guarantee. Once the position socket is live it alone drives index and position,
+  so a stale call can't flicker the highlight backwards.
+
+## Settings window
+
+- Both `active_tools` and `anchor` apply live. `anchor` is just where Quickshell
+  draws the overlay, not state the daemon holds. `active_tools` is reloaded by the
+  daemon while the dial is idle.
+- `tools.json`, `clicks.json` and `pen_clicks.json` are written by the daemon at
+  startup, so the window never hardcodes a tool or action list. A tool added to
+  the daemon's library just shows up. Keys the window doesn't own are read whole
+  and written back untouched.
+- **Appearance** is one picker across all six overlay options, though three are a
+  `face` (still layout `dial`) and three are their own `layout`. It writes both
+  keys together so a layout-only choice never leaves a stale `face` and vice
+  versa.
+- **Click gestures** share one picker parametrized by `group` (`dial` or
+  `pentail`). The barrel button is one action plus a toggle, so it has its own
+  block.
+- **Reordering** is drag on a ring in the same order the real dial face uses. The
+  center is empty on purpose: that is the dial's click/dictation zone, never a
+  tool slot. The reorder commits on release, not live: a `Repeater` over a plain
+  JS array has no stable delegate identity across a reorder, so a live swap would
+  destroy the delegate the mouse is holding and abort the drag. The cost is that
+  other chips don't preview-shuffle while you drag.

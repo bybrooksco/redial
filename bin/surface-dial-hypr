@@ -31,7 +31,6 @@ Requires write access to the dial's hidraw node. Without it the daemon still
 works, silently, and says so once in the log.
 
 Hardware: 3600 counts/revolution (0.1 deg/count), REL_DIAL + BTN_0.
-See Obsidian: Session Log (2026-08-28).
 """
 
 import argparse
@@ -251,8 +250,7 @@ SCROLL_TICK = 60  # dial counts between haptic ticks while scrolling --
 
 # Zoom is also continuous (Ctrl+scroll), but a "notch" of zoom is a much
 # bigger visual jump than a notch of scroll, so it starts gentler than
-# SCROLL_GAIN. Untested by hand yet -- retune after Brooks feels it on the
-# actual dial.
+# SCROLL_GAIN. Untested by hand yet -- retune on the actual dial.
 ZOOM_GAIN = 2.0
 
 # Window Size tool: pixels per detent, and how close (px) a window's far edge
@@ -265,7 +263,7 @@ RESIZE_EDGE_SLACK = 30
 # two-hour film is still reachable. See seek_media().
 SEEK_STEP_S = 5
 
-# Brightness tool: percent per detent at a slow turn -- 2 (Brooks, 2026-09-20: 5 moved the
+# Brightness tool: percent per detent at a slow turn -- 2 (5 moved the
 # screen too fast, 1 too slow). A faster spin multiplies it by the rotation-speed
 # magnitude (1..4), like Volume. Then the floor -- never dim to a
 # black screen you can't see to undo.
@@ -1363,8 +1361,7 @@ TOOL_LIBRARY = [
         "click": {"do": "none", "label": "toggle width/height"},
     },
     {
-        # Brooks's request, 2026-09-20: the laptop has an intel backlight the
-        # Studio lacks, so this only shows up where active_tools names it.
+        # Needs a backlight: laptops have an intel one that desktops lack, so this only shows up where active_tools names it.
         # Magnitude like Volume: a faster spin takes bigger steps. The device is
         # always named explicitly (see backlight_device()).
         "name": "Brightness",

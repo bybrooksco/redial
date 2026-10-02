@@ -7,11 +7,9 @@ import qs.Ui
 
 // Surface Dial tool dashboard.
 //
-// A horizontal strip of cards that slots past a fixed centre as the dial turns:
-// the active tool sits in the middle at full size, its neighbours flank it
-// dimmed, and rotation slides the whole rail. A dial is a 1-D control, so a
-// 1-D rail reads more honestly than a ring - and unlike a ring it stays legible
-// when parked along a screen edge.
+// A card rail: the active tool sits at full size in the centre, neighbours dimmed, and
+// rotation slides the rail. A dial is a 1-D control, so a 1-D rail reads more honestly than
+// a ring, and stays legible when parked along a screen edge.
 //
 // Driven over IPC by ~/.local/bin/surface-dial-hypr:
 //   omarchy-shell dialmenu open '{"tools":[{"icon":"♫","name":"Volume","hint":"mute"}],
@@ -28,18 +26,12 @@ Item {
   // All tunables live here, with defaults in code - see Settings.qml.
   Settings { id: cfg }
 
-  // One shared window, two tabs (merged 2026-09-26 -- see the Process Book
-  // entry for that date for why): "live" is the tool-rail/radial overlay
-  // below, driven by the daemon while the dial is actually turning; "settings"
-  // is ToolPicker's content, driven by the "dialtools" IPC target (bar widget,
-  // SUPER+SHIFT+CTRL+D). `opened` gates the one PanelWindow either mode uses;
-  // `mode` picks which content (and which mask/keyboard-focus policy) is live.
+  // One shared window, two modes: "live" is the daemon-driven overlay; "settings" is
+  // ToolPicker's content (IPC target "dialtools"). `mode` picks the content and the mask/focus
+  // policy. See docs/DESIGN.md#overlay-window.
   property string mode: "live"
-  // True only while the *current* live-mode display is actually being driven
-  // by dial rotation right now (the "pos"/"open" paths below set it). Used to
-  // scope the inactivity watchdog to the "popped up because you're using the
-  // dial" case -- not to a manual peek at the Live tab from Settings, which
-  // should sit there until you leave it, same as Settings itself does today.
+  // True only while the live display is being driven by dial rotation; scopes the inactivity
+  // watchdog (a manual peek from Settings should stay up).
   property bool liveDriven: false
 
   property bool opened: false
@@ -78,18 +70,9 @@ Item {
       // which icon is selected - a stray "open" call (e.g. Volume's live
       // readout refresh) landing late must not stomp a newer pos-derived index.
       if (p.index !== undefined && !live) index = p.index
-      // anchor/layout are NOT taken from the daemon's payload (found and
-      // fixed 2026-09-30): both already have their own live binding to cfg
-      // (see `property string anchor: cfg.anchor` / `layout: cfg.layout`
-      // above), reading the same config file the daemon also reads. Assigning
-      // them here imperatively, even to the "right" value, permanently
-      // replaces that binding with a static one -- and the daemon validates
-      // "layout" against its own allowed-values tuple, so the moment that
-      // tuple was stale (missing carousel/toast) the daemon silently sent
-      // "dial" back on every real dial rotation, which then froze root.layout
-      // at "dial" forever, no matter what the settings window wrote to
-      // config.json afterward. cfg's own binding is the single source of
-      // truth; nothing needs to round-trip through the daemon to reach it.
+      // anchor/layout are deliberately not taken from the daemon's payload: assigning them here
+      // would replace their live bindings to cfg for good. cfg is the single source of truth.
+      // See docs/DESIGN.md#config-bindings.
       freeX = p.x === undefined ? -1 : p.x
       freeY = p.y === undefined ? -1 : p.y
       mode = "live"
@@ -101,11 +84,8 @@ Item {
   readonly property int n: tools.length
 
   function setIndex(i) {
-    // Each call is its own fire-and-forget IPC round trip (see the daemon's
-    // MenuUI.highlight): under fast rotation several can be in flight at
-    // once with no ordering guarantee, so a stale one arriving after a
-    // fresher pos-socket update must not flicker the highlight backwards.
-    // Once the socket is live it alone drives index/position.
+    // Each call is a fire-and-forget IPC round trip with no ordering guarantee; once the pos
+    // socket is live it alone drives index/position, so a stale call can't flicker the highlight.
     if (i >= 0 && i < tools.length && !live) {
       index = i
       position = i
@@ -185,7 +165,7 @@ Item {
 
   // Settings tab of the same shared window (bar widget left-click,
   // SUPER+SHIFT+CTRL+D). Moved here from ToolPicker.qml when the two windows
-  // merged, 2026-09-26 -- see the Process Book entry for that date.
+  // merged (see docs/DESIGN.md#overlay-window).
   IpcHandler {
     target: "dialtools"
     function open(): string { root.mode = "settings"; root.liveDriven = false; root.opened = true; return "ok" }
@@ -206,11 +186,7 @@ Item {
     color: "transparent"
     WlrLayershell.namespace: "dial-dashboard"
     WlrLayershell.layer: WlrLayer.Overlay
-    // Live: the dial (not the mouse) is the input device, so this must never
-    // eat a click meant for the window underneath -- unchanged from before
-    // the merge. Settings: real mouse/keyboard input, same as ToolPicker's
-    // own window used to be. Both windows used to be fixed one way or the
-    // other; now one window switches policy with `mode`.
+    // Live: click-through (the dial is the input device). Settings: real mouse/keyboard input.
     WlrLayershell.keyboardFocus: root.mode === "settings" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     mask: root.mode === "settings" ? null : clickThroughMask
@@ -408,15 +384,9 @@ Item {
       }
     }
 
-    // Carousel: a friendlier, lower-detail restyle of the same "row of cards"
-    // idea as deck above -- not routed through the face Loader below, same
-    // reasoning deck never was: it's not circular, so the dial face contract
-    // (angleOf, a square Canvas) would fight it rather than fit it. Sizing is
-    // binary (selected = large, everyone else = small) rather than a
-    // continuous falloff by distance from selection -- the sum of one large
-    // plus (n-1) small card widths is constant regardless of WHICH one is
-    // large, so the container's own width/height never has to be
-    // recomputed as the selection moves, only individual card sizes.
+    // Carousel: binary sizing (selected large, others small) keeps the container's total size
+    // constant as the selection moves. Not routed through the face Loader: it isn't circular.
+    // See docs/DESIGN.md#faces-and-layouts.
     Rectangle {
       id: carousel
       visible: root.mode === "live" && root.layout === "carousel"
@@ -505,21 +475,13 @@ Item {
       }
     }
 
-    // Minimal Toast: the smallest-footprint option -- one pill naming the
-    // armed tool (icon, name, click hint) plus a dot-pagination strip, same
-    // idea as a phone onboarding screen's "3 of 6". No rings, no needle, no
-    // per-tool layout math -- the tradeoff called out when this was scoped
-    // is that it gives up the free "how far to the next tool" feedback every
-    // other layout/face shows just by being circular or ordered.
+    // Minimal Toast: one pill naming the armed tool plus a dot strip. Gives up the free
+    // distance-to-next-tool feedback that circular and ordered layouts show.
     Item {
       id: toast
       visible: root.mode === "live" && root.layout === "toast"
       readonly property var activeTool: root.tools.length > root.index ? root.tools[root.index] : null
-      // dots (a Row) never has its own `width` set explicitly, so unlike
-      // `pill` (an explicit width) its `width` property itself stays 0 --
-      // `implicitWidth`/`implicitHeight` are the ones that actually reflect
-      // its content size, same property Carousel's `row` above is read
-      // through for exactly this reason.
+      // dots never sets `width`, so read implicitWidth/implicitHeight (as Carousel's row is).
       width: Math.max(pill.width, dots.implicitWidth)
       height: pill.height + Style.space(14) + dots.implicitHeight
 
@@ -549,13 +511,8 @@ Item {
       Rectangle {
         id: pill
         anchors.horizontalCenter: parent.horizontalCenter
-        // Fixed, not content-sized: a pill that resizes to fit each tool's
-        // name (and re-centers, since it's anchored by horizontalCenter)
-        // was the real source of the "jittery, moving back and forth"
-        // motion -- every rotation past a differently-long name shoved the
-        // whole thing sideways. Long names elide instead of resizing it.
-        // Solid fill, no border -- outlines read as clutter the color
-        // contrast alone already carries.
+        // Fixed size, solid fill, no border: a pill that resized per tool name caused the jitter.
+        // Long names elide. See docs/DESIGN.md#faces-and-layouts.
         width: Style.space(240)
         height: Style.space(64)
         radius: height / 2
@@ -624,12 +581,8 @@ Item {
           delegate: Rectangle {
             required property int index
             readonly property bool active: index === root.index
-            // Fixed size, not a growing width -- a dot that widened on
-            // selection reflowed every dot after it in the Row each time
-            // (and the whole row re-centers on top of that), which was the
-            // other half of the jitter. Scale doesn't feed back into the
-            // Row's layout the way width does, so the active dot can still
-            // stand out without moving its neighbors.
+            // Fixed size: a dot that widened on selection reflowed the Row (the other half of the
+            // jitter). Scale doesn't affect layout.
             width: Style.space(7)
             height: Style.space(7)
             radius: height / 2
@@ -696,24 +649,16 @@ Item {
       Rectangle {
         visible: cfg.plate === "disc"
         anchors.centerIn: parent
-        // Hugs the face's own content radius (each disc face declares one)
-        // plus a small margin, rather than always filling the full square --
-        // that used to leave a wide ring of dead backing past the wedges/
-        // capsules. Faces that don't declare one (there are none today, but
-        // a future one might not need a disc at all) fall back to the old
-        // full-square sizing.
+        // Hugs the face's declared content radius plus a margin; faces that declare none fall
+        // back to full-square sizing.
         readonly property real contentR: (faceLoader.item && faceLoader.item.contentRadius !== undefined)
                                           ? faceLoader.item.contentRadius
                                           : Math.min(parent.width, parent.height) / 2
         width: (contentR + 28) * 2
         height: width
         radius: width / 2
-        // The theme's background can itself carry alpha, so take only its RGB
-        // and set the alpha here - otherwise "opacity: 0.97" still lets a
-        // terminal read straight through, which measurably it did.
-        // The theme's background can itself carry alpha, so take only its RGB
-        // and set the alpha here - otherwise the backing lets content read
-        // straight through, which is the whole thing it exists to prevent.
+        // Use only the theme background's RGB and set alpha here: the theme color can carry its own
+        // alpha, which lets content read straight through.
         color: Qt.rgba(cfg.backgroundColor.r, cfg.backgroundColor.g,
                        cfg.backgroundColor.b, cfg.plateOpacity)
       }
