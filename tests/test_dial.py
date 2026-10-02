@@ -481,5 +481,26 @@ class LiveToolReload(Base):
         self.assertEqual(d.tool, 2)
 
 
+class LayoutPayload(Base):
+    def payload_layout(self, layout):
+        with open(self.cfg, "w") as f:
+            json.dump({"layout": layout}, f)
+        ui = m.MenuUI()
+        ui._volume = lambda: None
+        saved = m.read_brightness
+        m.read_brightness = lambda: None
+        try:
+            return json.loads(ui._payload(0))["layout"]
+        finally:
+            m.read_brightness = saved
+
+    def test_every_shipped_layout_is_accepted(self):
+        for layout in ("dial", "deck", "carousel", "toast", "omarchy"):
+            self.assertEqual(self.payload_layout(layout), layout)
+
+    def test_unknown_layout_falls_back(self):
+        self.assertEqual(self.payload_layout("nonsense"), m.MENU_LAYOUT)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -71,7 +71,7 @@ Item {
     configDoc = out
   }
 
-  // One picker across all six overlay options, though three are a "face" and three a "layout".
+  // One picker across all seven overlay options, though four are a "face" and three a "layout".
   // Writes both keys together so neither is left stale.
   readonly property var appearanceOptions: [
     { key: "classic",  label: "Classic",       layout: "dial",     face: "classic" },
@@ -79,12 +79,13 @@ Item {
     { key: "pie",      label: "Pie Wheel",     layout: "dial",     face: "pie" },
     { key: "gauge",    label: "Gauge",         layout: "dial",     face: "gauge" },
     { key: "carousel", label: "Carousel",      layout: "carousel", face: "" },
-    { key: "toast",    label: "Minimal Toast", layout: "toast",    face: "" }
+    { key: "toast",    label: "Minimal Toast", layout: "toast",    face: "" },
+    { key: "omarchy",  label: "Omarchy",       layout: "omarchy",  face: "" }
   ]
   readonly property string appearanceChoice: {
     var l = (configDoc && configDoc.layout) ? String(configDoc.layout) : "dial"
     var f = (configDoc && configDoc.face) ? String(configDoc.face) : "classic"
-    if (l !== "dial") return (l === "carousel" || l === "toast") ? l : "classic"
+    if (l !== "dial") return (l === "carousel" || l === "toast" || l === "omarchy") ? l : "classic"
     return (f === "pie" || f === "gauge" || f === "capsule") ? f : "classic"
   }
   function setAppearance(opt) {

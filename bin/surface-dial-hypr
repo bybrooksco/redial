@@ -192,8 +192,8 @@ def cfg_str(doc, key, default, allowed=None):
     return v
 
 
-# deck/carousel = card rail; dial = radial plate; toast = pill + dots. Only validates the
-# echoed payload; QML reads "layout" and "face" from config.json itself.
+# deck/carousel = card rail; dial = radial plate; toast = pill + dots; omarchy = the shell's OSD
+# style. Only validates the echoed payload; QML reads "layout" and "face" from config.json itself.
 MENU_ANCHOR = "bottom"
 MENU_LAYOUT = "dial"
 ANCHORS = (
@@ -475,7 +475,7 @@ class MenuUI:
         doc = load_config()
         anchor = os.environ.get("DIAL_MENU_ANCHOR") or cfg_str(doc, "anchor", MENU_ANCHOR, ANCHORS)
         layout = os.environ.get("DIAL_MENU_LAYOUT") or cfg_str(
-            doc, "layout", MENU_LAYOUT, ("dial", "deck", "carousel", "toast")
+            doc, "layout", MENU_LAYOUT, ("dial", "deck", "carousel", "toast", "omarchy")
         )
         vol = self._volume()
         tools = []

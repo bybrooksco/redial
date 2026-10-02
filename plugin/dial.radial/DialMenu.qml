@@ -622,6 +622,170 @@ Item {
       }
     }
 
+    // Omarchy: the shell's own OSD grammar (BorderSurface, popups border, popups text, accent bar,
+    // fixed-width columns so nothing shifts) carrying the dial's state. Follows the Omarchy theme
+    // rather than cfg.colors. See docs/DESIGN.md#faces-and-layouts.
+    Item {
+      id: omarchy
+      visible: root.mode === "live" && root.layout === "omarchy"
+      width: omarchyCard.width
+      height: omarchyCard.height
+
+      readonly property var activeTool: root.tools.length > root.index ? root.tools[root.index] : null
+      readonly property bool hasValue: activeTool !== null && activeTool.value !== undefined
+      readonly property int pad: Style.space(16)
+      readonly property int gap: Style.space(16)
+      readonly property int iconW: Math.round(Style.font.displayLarge * 1.1)
+      readonly property int barW: Style.space(142)
+      readonly property int readoutW: Math.ceil(readoutMetrics.advanceWidth)
+      // Widest tool name, so the card is one size for every tool.
+      property int nameW: 0
+      function measureNames() {
+        var w = 0
+        for (var i = 0; i < nameProbe.count; i++) {
+          var it = nameProbe.itemAt(i)
+          if (it) w = Math.max(w, Math.ceil(it.implicitWidth))
+        }
+        nameW = Math.min(w, Style.space(190))
+      }
+      Repeater {
+        id: nameProbe
+        model: root.tools
+        delegate: Text {
+          required property var modelData
+          visible: false
+          text: modelData.name || ""
+          font.family: Style.font.family
+          font.bold: true
+          font.pixelSize: Style.font.title
+        }
+        onItemAdded: omarchy.measureNames()
+        onItemRemoved: omarchy.measureNames()
+      }
+      TextMetrics {
+        id: readoutMetrics
+        font.family: Style.font.family
+        font.bold: true
+        font.pixelSize: Style.font.title
+        text: "100%"
+      }
+
+      readonly property bool free: root.freeX >= 0 && root.freeY >= 0
+      readonly property bool atTop: root.anchor.indexOf("top") === 0
+      readonly property bool atBottom: root.anchor.indexOf("bottom") === 0
+      readonly property bool atLeft: root.anchor.indexOf("left") === 0 || root.anchor.indexOf("-left") > 0
+      readonly property bool atRight: root.anchor.indexOf("right") === 0 || root.anchor.indexOf("-right") > 0
+      // Bottom-centre sits in the OSD's own slot, so the two read as one family.
+      readonly property int bottomMargin: Style.space(67)
+
+      x: free ? Math.max(root.edgeMargin, Math.min(parent.width - width - root.edgeMargin, root.freeX - width / 2))
+              : (atLeft ? root.edgeMargin
+                        : (atRight ? parent.width - width - root.edgeMargin
+                                   : (parent.width - width) / 2))
+      y: free ? Math.max(root.edgeMargin, Math.min(parent.height - height - root.edgeMargin, root.freeY - height / 2))
+              : (atTop ? root.edgeMargin
+                       : (atBottom ? parent.height - height - bottomMargin
+                                   : (parent.height - height) / 2))
+      Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+      Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+      opacity: root.opened ? 1 : 0
+      Behavior on opacity { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+
+      BorderSurface {
+        id: omarchyCard
+        width: borderLeft + omarchy.pad + omarchy.iconW + omarchy.gap + omarchy.nameW + omarchy.gap
+               + omarchy.barW + omarchy.gap + omarchy.readoutW + omarchy.pad + borderRight
+        height: borderTop + omarchy.pad + Style.font.displayLarge + omarchy.pad + borderBottom
+        color: Util.alpha(Color.background, 0.97)
+        borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
+        radius: Style.cornerRadius
+
+        Row {
+          anchors.fill: parent
+          anchors.topMargin: omarchyCard.borderTop + omarchy.pad
+          anchors.rightMargin: omarchyCard.borderRight + omarchy.pad
+          anchors.bottomMargin: omarchyCard.borderBottom + omarchy.pad
+          anchors.leftMargin: omarchyCard.borderLeft + omarchy.pad
+          spacing: omarchy.gap
+
+          Item {
+            width: omarchy.iconW
+            height: parent.height
+            Text {
+              textFormat: Text.PlainText
+              anchors.centerIn: parent
+              text: omarchy.activeTool ? (omarchy.activeTool.icon || "") : ""
+              font.family: Style.font.family
+              font.pixelSize: Style.font.displayLarge
+              color: Color.popups.text
+            }
+          }
+
+          Text {
+            textFormat: Text.PlainText
+            width: omarchy.nameW
+            anchors.verticalCenter: parent.verticalCenter
+            text: omarchy.activeTool ? (omarchy.activeTool.name || "") : ""
+            font.family: Style.font.family
+            font.bold: true
+            font.pixelSize: Style.font.title
+            color: Color.popups.text
+            elide: Text.ElideRight
+            maximumLineCount: 1
+          }
+
+          // A value bar when the tool has a live value (Volume, Brightness), exactly as the OSD
+          // draws it; otherwise one segment per tool, so position in the list stays visible.
+          Item {
+            width: omarchy.barW
+            height: Math.max(Style.space(6), Style.spacing.sm)
+            anchors.verticalCenter: parent.verticalCenter
+
+            Rectangle {
+              visible: omarchy.hasValue
+              anchors.fill: parent
+              color: Util.alpha(Color.popups.text, 0.45)
+              Rectangle {
+                height: parent.height
+                width: parent.width * Math.max(0, Math.min(1, (omarchy.hasValue ? omarchy.activeTool.value : 0) / 100))
+                color: Color.accent
+                Behavior on width { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+              }
+            }
+
+            Row {
+              visible: !omarchy.hasValue
+              anchors.fill: parent
+              spacing: Style.space(3)
+              Repeater {
+                model: root.tools
+                delegate: Rectangle {
+                  required property int index
+                  width: Math.max(1, (omarchy.barW - Style.space(3) * (root.tools.length - 1)) / Math.max(1, root.tools.length))
+                  height: parent.height
+                  color: index === root.index ? Color.accent : Util.alpha(Color.popups.text, 0.45)
+                  Behavior on color { ColorAnimation { duration: 140 } }
+                }
+              }
+            }
+          }
+
+          Text {
+            textFormat: Text.PlainText
+            width: omarchy.readoutW
+            anchors.verticalCenter: parent.verticalCenter
+            horizontalAlignment: Text.AlignRight
+            text: omarchy.hasValue ? (omarchy.activeTool.valueText || "") : ((root.index + 1) + "/" + root.tools.length)
+            font.family: Style.font.family
+            font.bold: true
+            font.pixelSize: Style.font.title
+            color: Color.popups.text
+          }
+        }
+      }
+    }
+
     // ---------------------------------------------------------- instrument
     // Round by default. The face is square and the backing is either absent, a
     // disc, or the old rectangular plate - nothing about the layout assumes a

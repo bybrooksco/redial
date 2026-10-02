@@ -31,7 +31,7 @@ Item {
 
   // ---------------------------------------------------------------- defaults
   readonly property var defaults: ({
-    "_layout": "dial | deck | carousel | toast - the overlay's overall shape. dial is the circular instrument (see face, below, for which one); deck and carousel are both horizontal card rows (deck: dense, original; carousel: fewer visual details, center-emphasis sizing); toast is a single small pill plus a dot strip, the smallest footprint of the four.",
+    "_layout": "dial | deck | carousel | toast | omarchy - the overlay's overall shape. dial is the circular instrument (see face, below, for which one); deck and carousel are both horizontal card rows (deck: dense, original; carousel: fewer visual details, center-emphasis sizing); toast is a single small pill plus a dot strip, the smallest footprint of the four.",
     "layout": "dial",
     "_face": "classic | capsule | pie | gauge - which instrument face the dial layout draws",
     "face": "classic",
@@ -137,7 +137,7 @@ Item {
 
   readonly property string layout: {
     var v = String(get("layout"))
-    return (v === "deck" || v === "dial" || v === "carousel" || v === "toast") ? v : "dial"
+    return (v === "deck" || v === "dial" || v === "carousel" || v === "toast" || v === "omarchy") ? v : "dial"
   }
   readonly property string anchor: String(get("anchor"))
   // Overall scale of the dial overlay. "large" is the original full-size look and

@@ -1,6 +1,6 @@
 {
   "_comment": "Copy to ~/.config/dial-radial/config.json. Every key is optional; anything omitted uses the default shown here. Appearance keys are watched and apply live; 'active_tools', 'tools' and the pen settings apply live too, with no restart.",
-  "_layout": "dial | deck | carousel | toast. dial is the circular instrument (see 'face' below for which one); deck and carousel are both horizontal card rows (deck: dense, original; carousel: fewer details, selected card simply larger); toast is a single pill plus a dot strip, the smallest footprint. All four are pickable live from the settings window's Appearance section.",
+  "_layout": "dial | deck | carousel | toast | omarchy. dial is the circular instrument (see 'face' below for which one); deck and carousel are both horizontal card rows (deck: dense, original; carousel: fewer details, selected card simply larger); toast is a single pill plus a dot strip, the smallest footprint; omarchy is a single card in the shell's own OSD style (it follows the Omarchy theme, not 'colors'). All of them are pickable live from the settings window's Appearance section.",
   "layout": "dial",
   "anchor": "bottom",
   "watchdogMs": 15000,

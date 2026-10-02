@@ -257,6 +257,15 @@ because that is a binding off `configDoc`.
   the glyph every frame. Now the icon is laid out once at full size and only
   scaled, and the label fades in below it, always laid out. A wrap-around jumps
   instead of sweeping across every card.
+- **Omarchy** reuses the vocabulary of Omarchy 4's own OSD (`osd/Osd.qml`):
+  `BorderSurface` with the `popups` border spec, `Color.popups.text`, an accent
+  bar, 16px padding, and the OSD's bottom-centre slot (67px up). Like the OSD,
+  every column is pinned to a fixed width (the widest tool name, the widest
+  readout "100%") so the card never changes size between tools. It deliberately
+  ignores `cfg.colors` and follows the shell theme, because its job is to look
+  like part of the shell. Tools with a live value (Volume, Brightness) get the
+  OSD's value bar; the rest get one segment per tool plus a `k/n` readout, which
+  keeps the "where am I in the list" feedback that Minimal Toast gave up.
 - **Minimal Toast** is the smallest footprint: one pill naming the armed tool
   plus a dot strip, like a phone onboarding screen. It gives up the free "how far
   to the next tool" feedback that circular and ordered layouts show.
@@ -288,7 +297,7 @@ because that is a binding off `configDoc`.
   startup, so the window never hardcodes a tool or action list. A tool added to
   the daemon's library just shows up. Keys the window doesn't own are read whole
   and written back untouched.
-- **Appearance** is one picker across all six overlay options, though three are a
+- **Appearance** is one picker across all seven overlay options, though four are a
   `face` (still layout `dial`) and three are their own `layout`. It writes both
   keys together so a layout-only choice never leaves a stale `face` and vice
   versa.

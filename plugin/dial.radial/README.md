@@ -48,17 +48,23 @@ Four layouts, same data and same IPC — pick one from the settings window's
 - **`deck`** — a horizontal card rail along a screen edge, every tool the
   same size.
 - **`carousel`** — a friendlier restyle of the same row-of-cards idea:
-  fewer visual details, and the selected card is simply larger than every
-  other one (not a continuous size falloff by distance — that would make the
-  row's own width shift as the selection moves, which `carousel` avoids by
-  construction: one large plus *n*−1 small card widths sums to the same
-  total regardless of which tool is large).
+  fewer visual details, and the selected card is larger than the rest. One
+  animated position drives every card's size, and the sizes are weighted so
+  they always sum to the same total, so the row never changes width mid-turn.
+  The icon is scaled rather than resized and the name fades in beneath it, so
+  nothing jumps.
 - **`toast`** — the smallest footprint: one pill naming the armed tool (icon,
   name, click hint) plus a dot-pagination strip below it, the same idea as a
   phone's "3 of 6" onboarding screens. No needle, no ring, no per-tool
   layout math — the tradeoff is that it gives up the free "how far to the
   next tool" feedback every other layout/face shows just by being circular
   or ordered.
+- **`omarchy`** — one card in the same visual language as Omarchy's own volume
+  OSD: the shell's `popups` border and text colours, the accent bar, the same
+  bottom-centre slot. Icon, tool name, then a value bar (Volume, Brightness) or
+  one segment per tool, then a readout (`42%`, or `3/8`). It follows the
+  Omarchy theme rather than `colors` in the config, so it always matches the
+  shell. Every column is fixed-width, so nothing shifts as the tool changes.
 
 ## Install
 
@@ -131,8 +137,7 @@ is the reachable one, and a centred overlay collides with the bar.
 `FaceClassic.qml`, `FaceCapsule.qml`, `FacePie.qml` and `FaceGauge.qml` are
 peers behind a `Loader` (`DialMenu.qml`'s `faceFiles` map), sharing one
 contract (`cfg`, `tools`, `index`, `position`, `live`) and everything outside
-the face: settings, socket, IPC, plate, anchor, daemon. `carousel` and
-`toast` are **not** faces — they're not circular, so the `dial` contract
+the face: settings, socket, IPC, plate, anchor, daemon. `carousel`, `toast` and `omarchy` are **not** faces — they're not circular, so the `dial` contract
 (`angleOf()`, a square Canvas) would fight them rather than fit them; they're
 two more top-level `layout` values instead, hardcoded directly in
 `DialMenu.qml` next to `deck`, which was never a face either.
