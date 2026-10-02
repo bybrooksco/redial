@@ -19,9 +19,13 @@ import json
 import os
 import subprocess
 import tempfile
+import threading
 import time
 import types
 import unittest
+
+# Importing the daemon writes manifests into its config dir; keep that off the real one.
+os.environ["DIAL_CONFIG_DIR"] = tempfile.mkdtemp()
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DAEMON = os.environ.get("DIAL_DAEMON") or os.path.join(HERE, "..", "bin", "surface-dial-hypr")
@@ -75,6 +79,7 @@ def install_stubs(cfg_path):
     m.run = lambda cmd: EVENTS.append("EXEC:" + " ".join(cmd[:2]))
     m.hypr = lambda lua: EVENTS.append("HYPR:" + lua)
     m.CONFIG_PATH = cfg_path
+    m.ACTIONS.inline = True  # assert straight after a gesture, not after a worker thread
     m.TOOLS = m.build_tools(m.TOOL_LIBRARY)
     m._click_cache.update(mtime=object())
 
@@ -373,13 +378,9 @@ class Resize(unittest.TestCase):
     def run_resize(self, win, axis="x", grow=True):
         sent = []
         m.hypr = sent.append
-
-        def fake(cmd, **kw):
-            data = win if "activewindow" in cmd else [self.MON]
-            return types.SimpleNamespace(stdout=json.dumps(data), stderr="", returncode=0)
-
-        m.subprocess = types.SimpleNamespace(run=fake, Popen=subprocess.Popen)
-        self.addCleanup(lambda: setattr(m, "subprocess", subprocess))
+        real = m.hypr_json
+        m.hypr_json = lambda what: win if what == "activewindow" else [self.MON]
+        self.addCleanup(lambda: setattr(m, "hypr_json", real))
         m.resize_active(axis, grow)
         return sent
 
@@ -500,6 +501,139 @@ class LayoutPayload(Base):
 
     def test_unknown_layout_falls_back(self):
         self.assertEqual(self.payload_layout("nonsense"), m.MENU_LAYOUT)
+
+
+class HyprIpc(unittest.TestCase):
+    """hypr_json() asks Hyprland's own socket, and falls back to hyprctl without one."""
+
+    def setUp(self):
+        self.rt = tempfile.mkdtemp()
+        self.addCleanup(lambda: [os.environ.pop(k, None) for k in self._set])
+        self._set = ("XDG_RUNTIME_DIR", "HYPRLAND_INSTANCE_SIGNATURE")
+
+        # hyprctl would talk to the same fake socket, so a fallback would look identical.
+        # Make any process spawn a failure so these tests can only pass via the socket.
+        def no_spawn(cmd, **kw):
+            raise AssertionError(f"spawned {cmd}; expected the socket path")
+
+        real = m.subprocess
+        m.subprocess = types.SimpleNamespace(run=no_spawn, Popen=real.Popen)
+        self.addCleanup(lambda: setattr(m, "subprocess", real))
+
+    def serve(self, reply):
+        import socket as _s
+        import threading
+
+        d = os.path.join(self.rt, "hypr", "sig")
+        os.makedirs(d)
+        path = os.path.join(d, ".socket.sock")
+        srv = _s.socket(_s.AF_UNIX, _s.SOCK_STREAM)
+        srv.bind(path)
+        srv.listen(1)
+        seen = []
+
+        def once():
+            c, _ = srv.accept()
+            seen.append(c.recv(256))
+            c.sendall(reply)
+            c.close()
+            srv.close()
+
+        threading.Thread(target=once, daemon=True).start()
+        os.environ["XDG_RUNTIME_DIR"] = self.rt
+        os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = "sig"
+        return seen
+
+    def test_reads_through_the_socket(self):
+        seen = self.serve(b'{"class": "foot"}')
+        self.assertEqual(m.hypr_json("activewindow"), {"class": "foot"})
+        self.assertEqual(seen, [b"j/activewindow"])
+
+    def test_focused_class_uses_it(self):
+        self.serve(b'{"class": "obsidian"}')
+        self.assertEqual(m.focused_class(), "obsidian")
+
+    def test_no_window_is_an_empty_class(self):
+        self.serve(b"{}")
+        self.assertEqual(m.focused_class(), "")
+
+    def test_falls_back_to_hyprctl_without_a_socket(self):
+        os.environ["XDG_RUNTIME_DIR"] = self.rt  # no socket file there
+        os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = "missing"
+        calls = []
+
+        def fake(cmd, **kw):
+            calls.append(cmd)
+            return types.SimpleNamespace(stdout='{"class": "via-hyprctl"}', stderr="", returncode=0)
+
+        m.subprocess = types.SimpleNamespace(run=fake)
+        self.assertEqual(m.focused_class(), "via-hyprctl")
+        self.assertEqual(calls, [["hyprctl", "activewindow", "-j"]])
+
+
+class ActionWorker(unittest.TestCase):
+    def setUp(self):
+        self.a = m.Actions()
+
+    def drain(self):
+        done = threading.Event()
+        self.a.submit(done.set)
+        self.assertTrue(done.wait(2), "worker never reached the sentinel")
+
+    def test_submit_does_not_block_on_a_slow_action(self):
+        t0 = time.perf_counter()
+        self.a.submit(time.sleep, 0.2)
+        self.assertLess(time.perf_counter() - t0, 0.05)
+        self.drain()
+
+    def test_actions_run_in_order(self):
+        out = []
+        for i in range(20):
+            self.a.submit(out.append, i)
+        self.drain()
+        self.assertEqual(out, list(range(20)))
+
+    def test_a_raising_action_does_not_stop_the_worker(self):
+        out = []
+        self.a.submit(lambda: 1 / 0)
+        self.a.submit(out.append, "after")
+        self.drain()
+        self.assertEqual(out, ["after"])
+
+    def test_a_full_queue_drops_instead_of_blocking(self):
+        gate = threading.Event()
+        self.a.submit(gate.wait)  # occupies the worker
+        time.sleep(0.05)
+        t0 = time.perf_counter()
+        for _ in range(200):
+            self.a.submit(lambda: None)
+        self.assertLess(time.perf_counter() - t0, 0.5)
+        self.assertEqual(self.a.q.qsize(), 64)  # full: the rest were dropped, not queued
+        gate.set()
+        deadline = time.time() + 2
+        while not self.a.q.empty() and time.time() < deadline:
+            time.sleep(0.01)
+        self.drain()
+
+    def test_inline_mode_runs_on_the_callers_thread(self):
+        self.a.inline = True
+        out = []
+        self.a.submit(out.append, 1)
+        self.assertEqual(out, [1])
+
+
+class EventClock(unittest.TestCase):
+    def test_a_sane_kernel_timestamp_is_used(self):
+        self.assertAlmostEqual(m.event_time(100, 500_000, 100.6), 100.5)
+
+    def test_a_timestamp_in_another_clock_falls_back_to_now(self):
+        self.assertEqual(m.event_time(1_790_000_000, 0, 100.0), 100.0)  # wall-clock seconds
+
+    def test_a_timestamp_from_the_future_falls_back_to_now(self):
+        self.assertEqual(m.event_time(105, 0, 100.0), 100.0)
+
+    def test_a_stale_timestamp_falls_back_to_now(self):
+        self.assertEqual(m.event_time(10, 0, 100.0), 100.0)
 
 
 if __name__ == "__main__":

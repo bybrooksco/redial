@@ -14,6 +14,12 @@ shellcheck install.sh bin/surface-dial-setup bin/surface-dial-bar scripts/pair-d
 
 Install `ruff` and `shellcheck` from your package manager or `pip`.
 
+## Debugging
+
+`DIAL_DEBUG=1` logs every detent and press. The tests set `DIAL_CONFIG_DIR` to a
+temporary directory so importing the daemon never touches your real config; set it
+yourself if you import the daemon in a script.
+
 ## Working on the QML plugin
 
 After editing QML, run `omarchy-restart-shell`. In testing on Omarchy 4.0.4 the

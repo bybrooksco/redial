@@ -165,9 +165,12 @@ HOLD_S = 0.40  # press longer than this opens the menu
 # opens. Env vars win.
 __version__ = "1.0.0"
 
+# DIAL_CONFIG_DIR exists so tests can keep importing this file away from the real config.
 CONFIG_PATH = os.path.join(
-    os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
-    "dial-radial",
+    os.environ.get("DIAL_CONFIG_DIR")
+    or os.path.join(
+        os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "dial-radial"
+    ),
     "config.json",
 )
 
@@ -275,6 +278,54 @@ def log(msg):
     print(f"surface-dial: {msg}", file=sys.stderr, flush=True)
 
 
+DEBUG = bool(os.environ.get("DIAL_DEBUG"))
+
+
+def debug(msg):
+    """Per-detent and per-press chatter; off unless DIAL_DEBUG is set (it goes to the journal)."""
+    if DEBUG:
+        log(msg)
+
+
+class Actions:
+    """Runs tool actions off the input thread, one at a time, in order.
+
+    An action is a subprocess or a Hyprland query; run on the thread that reads the dial it
+    stalls rotation for as long as it takes. A single worker keeps strict ordering (a
+    resize's read-then-dispatch stays sequential) and contains any exception an action
+    raises, which used to propagate out of the read loop. `inline` runs actions on the
+    caller's thread instead; the tests use it so they can assert straight after a gesture.
+    """
+
+    def __init__(self):
+        self.inline = False
+        self.q = queue.Queue(maxsize=64)
+        self._started = False
+
+    def submit(self, fn, *args):
+        if self.inline:
+            fn(*args)
+            return
+        if not self._started:
+            self._started = True
+            threading.Thread(target=self._worker, daemon=True).start()
+        try:
+            self.q.put_nowait((fn, args))
+        except queue.Full:
+            log("action queue full; dropped one")
+
+    def _worker(self):
+        while True:
+            fn, args = self.q.get()
+            try:
+                fn(*args)
+            except Exception as exc:
+                log(f"action failed: {exc}")
+
+
+ACTIONS = Actions()
+
+
 def run(cmd):
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
@@ -309,18 +360,14 @@ def resize_active(axis, grow, step=RESIZE_STEP):
     the bottom-right corner; a fullscreen window has nothing to resize.
     """
 
-    def hyprctl_json(what):
-        p = subprocess.run(["hyprctl", what, "-j"], capture_output=True, text=True, timeout=2)
-        return json.loads(p.stdout or "null")
-
     try:
-        w = hyprctl_json("activewindow")
+        w = hypr_json("activewindow")
         if not w or w.get("fullscreen"):
             return
         delta = step if grow else -step
         if not w.get("floating"):
             mon = next(
-                (m for m in hyprctl_json("monitors") or [] if m.get("id") == w.get("monitor")), None
+                (m for m in hypr_json("monitors") or [] if m.get("id") == w.get("monitor")), None
             )
             if mon:
                 scale = mon.get("scale") or 1
@@ -836,14 +883,33 @@ def repeat_key(mag, *combo):
         key(*combo)
 
 
+def hypr_json(what):
+    """Query Hyprland for `what` (activewindow, monitors, ...) and return the parsed JSON.
+
+    Talks to Hyprland's own socket, which takes ~0.03 ms; `hyprctl` costs a process spawn
+    (~3.6 ms) and this is called on every rotation event by the Scroll tool. Falls back to
+    hyprctl if the socket is unavailable. Raises on failure.
+    """
+    sig, rt = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"), os.environ.get("XDG_RUNTIME_DIR")
+    if sig and rt:
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.settimeout(0.5)
+                s.connect(os.path.join(rt, "hypr", sig, ".socket.sock"))
+                s.sendall(f"j/{what}".encode())
+                chunks = []
+                while chunk := s.recv(65536):
+                    chunks.append(chunk)
+            return json.loads(b"".join(chunks) or b"null")
+        except (OSError, ValueError):
+            pass
+    p = subprocess.run(["hyprctl", what, "-j"], capture_output=True, text=True, timeout=2)
+    return json.loads(p.stdout or "null")
+
+
 def focused_class():
     try:
-        p = subprocess.run(
-            ["hyprctl", "activewindow", "-j"], capture_output=True, text=True, timeout=2
-        )
-        import json
-
-        return json.loads(p.stdout).get("class", "")
+        return (hypr_json("activewindow") or {}).get("class", "")
     except Exception:
         return ""
 
@@ -1893,22 +1959,22 @@ class Dial:
             self.accum -= d * step
             mag = self.magnitude()
             t = TOOLS[self.tool]
-            log(f"detent {t['name']} {'cw' if d > 0 else 'ccw'} mag={mag} speed={self.speed:.0f}")
+            debug(f"detent {t['name']} {'cw' if d > 0 else 'ccw'} mag={mag} speed={self.speed:.0f}")
             if t.get("axis_toggle") and self.arrow_horizontal:
                 alt = t.get("alt")
                 if alt:
                     fn = alt["cw" if d > 0 else "ccw"]
                     if fn:
-                        fn(mag)
+                        ACTIONS.submit(fn, mag)
                 else:
-                    key("Right" if d > 0 else "Left")
+                    ACTIONS.submit(key, "Right" if d > 0 else "Left")
             else:
-                t["cw" if d > 0 else "ccw"](mag)
+                ACTIONS.submit(t["cw" if d > 0 else "ccw"], mag)
             HAPTIC.fire(PAT_TICK)
             self.last_action = now
 
     def on_press(self, now):
-        log("button down")
+        debug("button down")
         if self.pending_double is not None:
             # Third press inside the window: the triple-click action, and NOT the
             # double-click one.
@@ -1934,7 +2000,7 @@ class Dial:
         fn = click_fn(name)
         if not fn:
             return
-        fn(1)
+        ACTIONS.submit(fn, 1)
         if name == "dictation":
             HAPTIC.fire(PAT_DICTATION, rate_limit=False)
             notify("\U0001f399  Dictation", "voxtype toggled")
@@ -2012,7 +2078,7 @@ class Dial:
                 if single != "tool":
                     fn = click_fn(single)
                     if fn:
-                        fn(1)
+                        ACTIONS.submit(fn, 1)
                         HAPTIC.fire(PAT_TICK, rate_limit=False)
                         self.last_action = now
                 elif t.get("axis_toggle"):
@@ -2036,7 +2102,7 @@ class Dial:
                     fn = t["click"]
                     if fn:
                         # Compiled actions all take a magnitude; a click is one step.
-                        fn(1)
+                        ACTIONS.submit(fn, 1)
                         HAPTIC.fire(PAT_TICK, rate_limit=False)
                         self.last_action = now
             else:
@@ -2061,9 +2127,32 @@ class Dial:
         return timeout
 
 
+EVIOCSCLOCKID = 0x400445A0  # _IOW('E', 0xa0, int)
+
+
+def event_time(sec, usec, now):
+    """An input event's kernel timestamp as a monotonic time, or `now` if it looks wrong.
+
+    The kernel stamps each event when it happens. Re-stamping at read time lets any stall in
+    this loop bunch buffered events together, which the speed estimate reads as a spin.
+    """
+    t = sec + usec / 1e6
+    return t if 0 <= now - t < 5.0 else now
+
+
+def use_monotonic_event_clock(fd):
+    """Ask the kernel to stamp this device's events with CLOCK_MONOTONIC (our own clock)."""
+    try:
+        fcntl.ioctl(fd, EVIOCSCLOCKID, struct.pack("i", time.CLOCK_MONOTONIC))
+        return True
+    except OSError:
+        return False
+
+
 def pump(fh, dial):
     fd = fh.fileno()
     os.set_blocking(fd, False)
+    kernel_clock = use_monotonic_event_clock(fd)
     try:
         while True:
             timeout = dial.tick(time.monotonic())
@@ -2077,8 +2166,10 @@ def pump(fh, dial):
                     break
                 if not data or len(data) < EV_SIZE:
                     return
-                _, _, etype, code, value = struct.unpack(EV_FORMAT, data)
+                sec, usec, etype, code, value = struct.unpack(EV_FORMAT, data)
                 now = time.monotonic()
+                if kernel_clock:
+                    now = event_time(sec, usec, now)
                 if etype == EV_REL and code == REL_DIAL:
                     dial.on_rotate(value, now)
                 elif etype == EV_KEY and code == BTN_0:

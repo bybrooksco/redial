@@ -13,6 +13,10 @@ versions follow [Semantic Versioning](https://semver.org/).
 - `SECURITY.md`, `CONTRIBUTING.md`, issue templates, `.editorconfig`.
 
 ### Changed
+- The dial's input loop no longer blocks on subprocesses: tool actions run on an ordered worker, and focused-window lookups use Hyprland's socket instead of spawning `hyprctl` (3.6 ms to 0.03 ms per lookup).
+- Rotation speed uses the kernel's event timestamps, so a stall can't be mistaken for a fast spin.
+- A failing tool action is logged instead of crashing the daemon.
+- Per-detent logging needs `DIAL_DEBUG=1`.
 - Carousel: one animated position drives every card, removing the icon pop and keeping the row width constant on every frame.
 - `active_tools` and `tools` changes now apply live, while the dial is idle. No daemon restart.
 - Python sources are ruff-formatted; shell scripts are shellcheck-clean.

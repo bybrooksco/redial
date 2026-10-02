@@ -14,6 +14,7 @@ decision live here. Dates are when a decision was made or measured.
 - [Eraser](#eraser)
 - [Tool history](#tool-history)
 - [Click gestures](#click-gestures)
+- [Input loop and threads](#input-loop-and-threads)
 - [Overlay window](#overlay-window)
 - [Config bindings](#config-bindings)
 - [Faces and layouts](#faces-and-layouts)
@@ -203,6 +204,46 @@ which is why it is the default there. Choices are re-read whenever `config.json`
 changes, so the settings window applies them on the next click. The option lists
 are published to `clicks.json` and `pen_clicks.json` at startup so that window
 never hardcodes them.
+
+## Input loop and threads
+
+The main thread does one thing: read the dial, decide, and return. Anything that
+can take time goes elsewhere, in order. This came out of a latency review of the
+daemon (2026-10-02), with measurements.
+
+- **Tool actions run on one ordered worker (`ACTIONS`).** An action is a
+  subprocess or a Hyprland query. On the reading thread it stalls rotation for
+  as long as it takes (about 4 ms per `wpctl`/`hyprctl` spawn). One worker keeps
+  strict FIFO order, so `resize_active`'s read-then-dispatch stays sequential,
+  and contains any exception an action raises (it used to propagate out of the
+  read loop and kill the daemon). The queue is bounded at 64 and drops rather
+  than blocks, because blocking is the thing being avoided. Magnitude and axis
+  are decided on the input thread at submit time, so a queued action never
+  depends on later state.
+- **Haptics** already had their own thread and a small queue. The overlay socket
+  is non-blocking and drops frames when the panel is behind.
+- **The pen's watchers** are separate threads that block only themselves.
+- **Focused-window lookups use Hyprland's own socket**, not `hyprctl`. The Scroll
+  tool asks on every rotation event (up to about 100 a second). Measured: 3.6 ms
+  per `hyprctl` spawn against 0.03 ms through the socket, with the same answer.
+  It falls back to `hyprctl` if the socket is unavailable. On a 300-event spin
+  the input loop spent 1124 ms blocked before and 12 ms after.
+- **Events keep the kernel's timestamp.** The loop used to re-stamp each event
+  with `time.monotonic()` when it read it, so any stall bunched buffered events
+  into one instant and the speed estimate read that as a fast spin. The daemon
+  now asks the kernel for `CLOCK_MONOTONIC` stamps (`EVIOCSCLOCKID`) and uses
+  them. A timestamp in another clock domain, or from the future or distant past,
+  is ignored in favour of the read time. Checked against a virtual input device:
+  three events 50 ms apart read 150 ms later kept their 50 ms spacing.
+- **Per-detent logging is off by default.** Set `DIAL_DEBUG=1` to log each detent
+  and press; the journal otherwise gets one line every two seconds while rotating.
+
+Considered and left alone: the idle loop wakes about four times a second
+(measured 0.0% CPU over eight hours), events are read one per syscall (about 100
+a second), and opening the Volume overlay still runs one `wpctl get-volume` on
+the input thread. Moving the overlay's open/highlight/close onto the worker is
+possible, but they would all have to move together or a close could overtake an
+open and leave the overlay stuck up.
 
 ## Overlay window
 
