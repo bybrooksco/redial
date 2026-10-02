@@ -1361,7 +1361,8 @@ TOOL_LIBRARY = [
         "click": {"do": "none", "label": "toggle width/height"},
     },
     {
-        # Needs a backlight: laptops have an intel one that desktops lack, so this only shows up where active_tools names it.
+        # Needs a backlight: laptops have an intel one that desktops lack, so this only
+        # shows up where active_tools names it.
         # Magnitude like Volume: a faster spin takes bigger steps. The device is
         # always named explicitly (see backlight_device()).
         "name": "Brightness",

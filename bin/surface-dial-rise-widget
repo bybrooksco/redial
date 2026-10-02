@@ -126,7 +126,7 @@ Item {
     }
 
     Process { id: settingsProc; command: ["bash", "-c", "omarchy-shell dialtools toggle"] }
-    Process { id: restartProc;  command: ["bash", "-c", "$HOME/.local/bin/surface-dial-bar restart"] }  # noqa: E501
+    Process { id: restartProc;  command: ["bash", "-c", "$HOME/.local/bin/surface-dial-bar restart"] }
 
     TooltipMixin { id: tip; root: rootMod.root; owner: rootMod; text: rootMod.tooltipText }
 
@@ -139,8 +139,8 @@ Item {
         onExited: tip.hide()
         onClicked: (e) => {
             tip.hide()
-            if (e.button === Qt.RightButton) { restartProc.running = false; restartProc.running = true; poll.restart() }  # noqa: E501
-            else                             { settingsProc.running = false; settingsProc.running = true }  # noqa: E501
+            if (e.button === Qt.RightButton) { restartProc.running = false; restartProc.running = true; poll.restart() }
+            else                             { settingsProc.running = false; settingsProc.running = true }
         }
     }
 }
@@ -207,7 +207,7 @@ NEW_PERM = (
 )
 
 TILE = (
-    'WidgetStateTile { gid: "G19"; width: root.evenW((wwCol.width - 4) / 2); label: "Surface Dial";  '  # noqa: E501
+    'WidgetStateTile { gid: "G19"; width: root.evenW((wwCol.width - 4) / 2); label: "Surface Dial";  '
     'shown: root.modDial;          supportsCompact: true; compact: root.iconOnly("G19"); '
     'onVisibilityToggled: root.modDial = !root.modDial; onModeToggled: root.toggleIconOnly("G19") }'
 )
@@ -219,7 +219,7 @@ EDITS = [
         "prop",
         "    property bool modStorage:    true\n",
         "    property bool modStorage:    true\n"
-        "    property bool modDial:       false   // Surface Dial button (G19) -- off until switched on\n",  # noqa: E501
+        "    property bool modDial:       false   // Surface Dial button (G19) -- off until switched on\n",
         False,
     ),
     (
@@ -233,7 +233,7 @@ EDITS = [
     (
         "Theme.qml",
         "save",
-        r'^(\s*)\+ \(panelTooltipBorderEnabled \? "1" : "0"\)\s*// \+44 panel \+ tooltip outer border$',  # noqa: E501
+        r'^(\s*)\+ \(panelTooltipBorderEnabled \? "1" : "0"\)\s*// \+44 panel \+ tooltip outer border$',
         r'\1+ (panelTooltipBorderEnabled ? "1" : "0") + " "     // +44 panel + tooltip outer border'
         "\n"
         r'\1+ (modDial ? "1" : "0")                            // +45 Surface Dial button',
@@ -311,7 +311,7 @@ def compute(root):
         if n != 1:
             sys.exit(
                 f"surface-dial-rise-widget: '{name}' in {f} matched {n} times (need exactly 1) -- "
-                "these Rise files differ from the version this was written against. Nothing was changed."  # noqa: E501
+                "these Rise files differ from the version this was written against. Nothing was changed."
             )
         out[f] = (
             re.sub(pat, lambda m: m.expand(repl) if rx else repl, s, count=1, flags=re.M)
