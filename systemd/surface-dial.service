@@ -1,0 +1,20 @@
+# Optional. The default autostart is Omarchy's launch_on_start (see
+# config/autostart.snippet.lua). Use this instead if you want the daemon
+# restarted automatically when it crashes:
+#
+#   cp systemd/surface-dial.service ~/.config/systemd/user/
+#   systemctl --user enable --now surface-dial.service
+#
+# Remove the launch_on_start line from autostart.lua first, or two copies run.
+[Unit]
+Description=Surface Dial and Surface Pen daemon
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/surface-dial-hypr
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target
