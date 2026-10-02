@@ -14,6 +14,14 @@ shellcheck install.sh bin/surface-dial-setup bin/surface-dial-bar scripts/pair-d
 
 Install `ruff` and `shellcheck` from your package manager or `pip`.
 
+## Working on the QML plugin
+
+After editing QML, run `omarchy-restart-shell`. In testing on Omarchy 4.0.4 the
+shell logged "Local plugin changed, reloading" but kept running the old
+`DialMenu.qml`, so a change can look like it did nothing, or worse, look like it
+worked when it didn't. Drive the overlay without a dial with
+`omarchy-shell dialmenu open '<json>'` and `omarchy-shell dialmenu highlight N`.
+
 ## Ground rules
 
 - **Tests pass and lint is clean** before a PR. CI checks both.

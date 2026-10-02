@@ -244,10 +244,19 @@ because that is a binding off `configDoc`.
 
 - **Carousel** is a lower-detail restyle of the row-of-cards idea. It is not
   routed through the face `Loader`, because it isn't circular and the dial face
-  contract (`angleOf`, a square `Canvas`) would fight it. Sizing is binary
-  (selected large, everyone else small) rather than a falloff by distance: the
-  sum of one large plus (n-1) small widths is constant wherever the large one is,
-  so the container never needs recomputing as the selection moves.
+  contract (`angleOf`, a square `Canvas`) would fight it.
+  Every card is driven by one animated scalar, `pos`. A card's weight is a "hat"
+  function of its distance from `pos` (1 on the selection, 0 two or more cards
+  away, linear between), and those weights always sum to exactly 1. So the row's
+  total width is constant on every frame, even when the dial outruns the
+  animation. Measured in the live shell: 47 frames through a fast spin including
+  a wrap-around, row width 400.0 on all of them.
+  The first version animated each card's width, glyph size and colour on
+  separate timers and toggled the name label's `visible`. That jumped the icon
+  vertically (the label changed the column height instantly) and re-rasterised
+  the glyph every frame. Now the icon is laid out once at full size and only
+  scaled, and the label fades in below it, always laid out. A wrap-around jumps
+  instead of sweeping across every card.
 - **Minimal Toast** is the smallest footprint: one pill naming the armed tool
   plus a dot strip, like a phone onboarding screen. It gives up the free "how far
   to the next tool" feedback that circular and ordered layouts show.

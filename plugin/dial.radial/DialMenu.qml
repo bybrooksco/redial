@@ -417,13 +417,37 @@ Item {
 
       Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
       Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-      Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-      Behavior on height { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
       opacity: root.opened ? 1 : 0
       scale: root.opened ? 1 : 0.96
       Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
       Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+
+      // One animated scalar drives every card. A card's weight is a "hat" of its distance from
+      // `pos`, and the weights always sum to exactly 1, so the row's total width is constant on
+      // every frame, even when the dial outruns the animation. See docs/DESIGN.md#faces-and-layouts.
+      property real pos: 0
+      Component.onCompleted: snapTo(root.index)
+      Connections {
+        target: root
+        function onIndexChanged() { carousel.glideTo(root.index) }
+        function onNChanged() { carousel.snapTo(root.index) }
+        function onOpenedChanged() { if (root.opened) carousel.snapTo(root.index) }
+      }
+      function snapTo(i) { posAnim.stop(); pos = i }
+      function glideTo(i) {
+        posAnim.stop()
+        // Hidden, or a wrap-around: jump instead of sweeping across every card.
+        if (!root.opened || Math.abs(i - pos) > 1.5) { pos = i; return }
+        posAnim.from = pos
+        posAnim.to = i
+        posAnim.start()
+      }
+      function mix(a, b, t) {
+        return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t,
+                       a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t)
+      }
+      NumberAnimation { id: posAnim; target: carousel; property: "pos"; duration: 170; easing.type: Easing.OutCubic }
 
       Row {
         id: row
@@ -436,39 +460,42 @@ Item {
             id: card
             required property int index
             required property var modelData
-            readonly property bool active: index === root.index
-            readonly property real size: active ? carousel.cardLarge : carousel.cardSmall
-            width: size; height: size
+            // 1 on the selection, 0 two or more cards away, linear in between.
+            readonly property real t: Math.max(0, 1 - Math.abs(index - carousel.pos))
+            width: carousel.cardSmall + (carousel.cardLarge - carousel.cardSmall) * t
+            height: width
             radius: Style.space(16)
-            color: active ? cfg.accentColor : Util.alpha(cfg.lineColor, 0.08)
-            Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-            Behavior on height { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-            Behavior on color { ColorAnimation { duration: 150 } }
+            color: carousel.mix(Util.alpha(cfg.lineColor, 0.08), cfg.accentColor, t)
 
-            Column {
-              anchors.centerIn: parent
-              spacing: Style.space(4)
-              Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: card.modelData.icon || ""
-                font.family: Style.font.family
-                font.pixelSize: card.active ? Style.font.displayLarge : Style.font.title
-                color: card.active ? cfg.backgroundColor : Util.alpha(cfg.lineColor, 0.55)
-                Behavior on font.pixelSize { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
-                Behavior on color { ColorAnimation { duration: 130 } }
-              }
-              Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                visible: card.active
-                text: card.modelData.name || ""
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                color: cfg.backgroundColor
-                elide: Text.ElideRight
-                width: card.width - Style.space(12)
-                horizontalAlignment: Text.AlignHCenter
-              }
+            // The icon is laid out once at its largest size and only scaled, so nothing relayouts
+            // or re-rasterises mid-transition. The label fades in below it; it is always laid out.
+            Text {
+              id: glyph
+              readonly property real smallScale: Style.font.title / Style.font.displayLarge
+              readonly property real lift: (label.implicitHeight + Style.space(4)) / 2
+              textFormat: Text.PlainText
+              anchors.horizontalCenter: parent.horizontalCenter
+              y: (parent.height - height) / 2 - lift * card.t
+              scale: smallScale + (1 - smallScale) * card.t
+              text: card.modelData.icon || ""
+              font.family: Style.font.family
+              font.pixelSize: Style.font.displayLarge
+              color: carousel.mix(Util.alpha(cfg.lineColor, 0.55), cfg.backgroundColor, card.t)
+            }
+            Text {
+              id: label
+              textFormat: Text.PlainText
+              width: carousel.cardLarge - Style.space(12)
+              x: (parent.width - width) / 2
+              y: parent.height / 2 - glyph.lift * card.t + glyph.height * glyph.scale / 2 + Style.space(4)
+              opacity: Math.max(0, Math.min(1, (card.t - 0.6) / 0.4))
+              text: card.modelData.name || ""
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              color: cfg.backgroundColor
+              elide: Text.ElideRight
+              horizontalAlignment: Text.AlignHCenter
             }
           }
         }
