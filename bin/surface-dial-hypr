@@ -55,38 +55,18 @@ DEVICE_NAME = "Surface Dial System Multi Axis"
 STYLUS_NAME = "Surface Touch Device Stylus"
 PEN_KBD_NAME = "Surface Pen Keyboard"
 
-# The Surface Pen tail button reports as a KEYBOARD over BLE, sending
-# SUPER + F18/F19/F20. Those keycodes sit in the F13-F24 range, which is not
-# reliably present in xkb keymaps -- so a Hyprland binding on "SUPER + F20"
-# never matches, even though the kernel delivers the key. Omarchy's own
-# bindings.lua warns about exactly this range. Handled here instead, straight
-# off the evdev stream, which needs no keymap at all.
+# Pen tail button arrives as SUPER+F18/19/20: not bindable via xkb, so read off evdev.
+# See docs/DESIGN.md#pen-buttons.
 KEY_F18, KEY_F19, KEY_F20 = 188, 189, 190
-# Enter defaults to DOUBLE click, not single: a single click is far too easy
-# to trigger by accident while holding the pen, and Enter submits things.
-# Defaulted by ACCIDENT RISK, not by convenience: the pen sits in the hand
-# for hours, so the easiest control to brush gets the most harmless default,
-# and anything that commits needs deliberate effort.
-#   single click  -> easy to brush      -> Space     (default; costs nothing)
-#   double click  -> needs intent       -> Enter      (default; commits)
-#   press + hold  -> was assumed hardest to trigger, wasn't -> Dictation
-#                    (default; harmless either way -- see PEN_TAIL_DEFAULTS)
-# Escape lives on the eraser TAP instead -- flipping the pen over cannot be
-# done by accident, which is what a disruptive key needs. All three are now
-# configurable (config.json "pen.tail_clicks") -- see PEN_TAIL_ACTIONS /
-# PEN_TAIL_DEFAULTS below; these keycodes only say which physical event maps
-# to which named slot.
+# Maps the physical event to a named slot. Defaults are chosen by accident risk and are
+# configurable (pen.tail_clicks). See docs/DESIGN.md#pen-buttons.
 PEN_BUTTON = {
     KEY_F20: ("single click", "single"),
     KEY_F19: ("double click", "double"),
     KEY_F18: ("press and hold", "hold"),
 }
 
-# Dragging the stylus ERASER on the screen scrolls, like a touch-drag --
-# but ONLY in these window classes. This is an allowlist on purpose: the
-# stylus is never grabbed, so the eraser behaves completely normally
-# everywhere else. Creative apps (Krita, GIMP, Blender, Inkscape, ...) are
-# never matched, so their eraser cannot be broken by this.
+# Eraser drag scrolls only in these window classes (allowlist; the stylus is never grabbed).
 ERASER_SCROLL_CLASSES = {
     "foot",
     "alacritty",
@@ -104,11 +84,8 @@ ERASER_SCROLL_CLASSES = {
     "google-chrome",
     "org.mozilla.firefox",
 }
-# Hi-res wheel units per unit of ABS_Y travel (digitizer reports 18/mm).
-# Per-class, because apps consume wheel events very differently: a terminal
-# moves in discrete LINES (~3 per notch) so it needs a big push to feel
-# responsive, while a browser treats hi-res events as smooth pixel motion
-# and the same gain sends it flying. One value cannot serve both.
+# Hi-res wheel units per unit of ABS_Y travel (18/mm), per class: terminals need more
+# push than browsers. See docs/DESIGN.md#eraser.
 ERASER_SCROLL_GAIN_DEFAULT = 0.6
 # An eraser TAP (down and up with almost no travel) is Escape. Flipping the
 # pen over is a deliberate two-step act, so unlike the tail button's single
@@ -119,11 +96,7 @@ ERASER_TAP_MAX_TRAVEL = 90  # ABS_Y units, ~5mm
 # text cursor. The axis is chosen once, by whichever accumulates more travel
 # first, and then locked for that drag so a wobble cannot flip it mid-stroke.
 ERASER_CURSOR_STEP = 55  # ABS_X units per cursor move, ~3mm
-# The eraser's second "level" is DURATION, not pressure: the eraser end
-# reports a constant 2432 with zero tilt (measured 2026-08-28, 12 contacts),
-# so there is no pressure signal to threshold there. A stationary contact is
-# classified on RELEASE -- quick tap is Escape, held is delete-word. Deciding
-# at release needs no timer and cannot misfire while the pen is still down.
+# Eraser tap vs hold is classified on release by duration; there is no pressure signal.
 ERASER_HOLD_S = 0.45
 ERASER_SCROLL_GAIN = {
     "foot": 1.6,
@@ -143,23 +116,8 @@ ERASER_SCROLL_GAIN = {
     "google-chrome": 0.30,
 }
 
-# Wheel-based scroll (dial Scroll tool, pen eraser-drag -- both funnel through
-# scroll_mode() below) breaks in exactly one known situation, not "terminals"
-# generally: foot's alternate-scroll-mode (DECSET 1007) converts wheel motion
-# into Up/Down KEY events only for an app that has both switched to the
-# alternate screen AND asked for that fallback itself -- a bare shell prompt
-# does neither, so it was never in danger; real wheel events sent there
-# today are already inert (no alt screen, nothing to translate them). See the
-# Process Book, 2026-08-29 + 2026-09-18, for the full chain.
-#
-# An earlier version of this fix sent literal Up/Down directly to every
-# terminal-emulator window class, on the theory that it was "more honest"
-# than relying on the conversion. That was wrong and reintroduced the same
-# bug against bash history instead of Claude Code's prompt: window class
-# alone cannot tell a bare prompt (arrows = history, destructive) apart from
-# a full-screen pager in the SAME window class (arrows = safe navigation).
-# Only an app that both opts into 1007 *and* binds the resulting arrows
-# destructively is actually broken -- so far, only Claude Code.
+# Wheel scroll breaks only where an app opts into alt-scroll (DECSET 1007) and binds the
+# resulting arrows destructively (Claude Code). See docs/DESIGN.md#scroll-routing.
 SCROLL_SUPPRESS_CLASSES = {
     "org.omarchy.agent",  # Claude Code -- Up/Down there is prompt history.
 }
@@ -204,10 +162,8 @@ COUNTS_PER_REV = 3600
 HOLD_S = 0.40  # press longer than this opens the menu
 # Where the dashboard parks. center | top | bottom | left | right |
 # top-left | top-right | bottom-left | bottom-right
-# Shared config, read by both the daemon and the overlay plugin, so one
-# document configures the whole tool. Every key is optional; the defaults below
-# are what ships. Re-read each time the menu opens, so edits apply without a
-# restart. Env vars still win, for one-off experiments.
+# Config is shared with the overlay plugin; every key is optional and re-read when the menu
+# opens. Env vars win.
 __version__ = "1.0.0"
 
 CONFIG_PATH = os.path.join(
@@ -237,12 +193,8 @@ def cfg_str(doc, key, default, allowed=None):
     return v
 
 
-# "deck"/"carousel" = card rail along an edge (carousel: friendlier, center-
-# emphasis sizing); "dial" = the radial instrument plate (face picks which
-# one); "toast" = a single pill plus a dot strip. Only used to validate what
-# the daemon echoes back in the open() payload -- QML reads "layout" (and
-# "face") straight out of config.json itself and no longer trusts this
-# payload field for either (see DialMenu.qml's open(), fixed 2026-09-30).
+# deck/carousel = card rail; dial = radial plate; toast = pill + dots. Only validates the
+# echoed payload; QML reads "layout" and "face" from config.json itself.
 MENU_ANCHOR = "bottom"
 MENU_LAYOUT = "dial"
 ANCHORS = (
@@ -257,24 +209,13 @@ ANCHORS = (
     "bottom-right",
 )
 DOUBLE_S = 0.25  # second click inside this window = double click
-# What single / double / triple click do is configurable -- see CLICK_ACTIONS below.
-# Triple click exists for dictation (double-click starts/stops recording, triple-
-# click submits what it typed). To tell a double from a triple, a double click
-# waits DOUBLE_S for a possible third press before it fires; set "triple" to
-# "none" and there is nothing to wait for, so a double fires instantly again.
+# Click actions are configurable (CLICK_ACTIONS). A double click waits DOUBLE_S for a
+# possible triple unless "triple" is "none".
 DISARM_S = 6.00  # armed tool reverts to idle after this much stillness
 
-# --- stepping -------------------------------------------------------------
-# The DETENT IS CONSTANT per tool -- the angle you turn per click never
-# changes, so the rhythm under your hand is uniform and predictable. Speed
-# instead scales the MAGNITUDE of each step (a fast spin moves 4 volume
-# points per click, not 1), which is how a good jog wheel behaves. Scaling
-# the angle instead makes the feel shift while you turn, which reads cheap.
-# Speed is measured as counts accumulated over a fixed WINDOW, not from the
-# gap between consecutive events: the dial emits several rotation events
-# sharing one timestamp, so a per-event dt collapses toward zero and the
-# computed speed explodes (observed: 3.7M counts/sec on a device that tops
-# out near 1600). That pinned magnitude at its ceiling on every turn.
+# --- stepping ---
+# Detent angle is constant per tool; speed scales step magnitude, measured over a fixed
+# window. See docs/DESIGN.md#stepping.
 SPEED_WINDOW = 0.20  # seconds
 MAG_FALLOFF = 500.0  # counts/sec per extra unit of magnitude
 MAG_MAX = 4  # never more than this many units per detent
@@ -290,11 +231,8 @@ HAPTIC_MIN_GAP = 0.10  # never fire ticks closer than this, or they smear.
 # 100ms is the measured floor: clicks stayed countable
 # down to group E (100ms) in hand testing 2026-08-28.
 
-# Vocabulary, confirmed by hand 2026-08-28. There is NO intensity control on
-# this device -- HID usage 0x23 is absent from the descriptor, and the three
-# waveforms are indistinguishable by feel. Every distinction is therefore
-# built from pulse COUNT and SPACING, expressed as (repeat, retrigger_ms)
-# and handed to the dial's firmware in a single write.
+# Haptic vocabulary: no intensity control, so meaning is pulse count and spacing,
+# (repeat, retrigger_ms) in one write. See docs/DESIGN.md#haptics.
 PAT_TICK = (0, 0)  # one detent -- fires constantly, must stay light
 PAT_MENU = (3, 0)  # menu opened -- rare, wants weight not a count
 PAT_SELECT = (3, 30)  # tool selected -- distinct but still quick
@@ -463,14 +401,9 @@ def key(*combo):
     run(args)
 
 
-# --- held modifier (ctrl+scroll zoom) --------------------------------------
-# wtype's own docs: "modifiers get released automatically once the program
-# terminates" -- so a modifier can be HELD across many separate scroll events
-# by keeping one wtype process alive (pressed, then parked in a long sleep)
-# and killing it to release. This is a real stuck-key risk if the daemon
-# dies uncleanly while a tool is holding one, so both a normal-exit path
-# (atexit) and SIGTERM are wired to release it -- SIGKILL can still leak the
-# wtype child, but `pkill wtype` recovers that by hand.
+# --- held modifier (ctrl+scroll zoom) ---
+# One parked wtype process holds the modifier; killing it releases. Released on atexit and
+# SIGTERM; after a SIGKILL run `pkill wtype`. See docs/DESIGN.md#held-modifier-zoom.
 _mod_proc = None
 
 
@@ -572,14 +505,9 @@ class MenuUI:
             self._call("open", self._payload(index))
             return
         if MENU_STREAM.sock is not None:
-            # The position socket (ordered, low-latency) already drives which
-            # icon is highlighted on the QML side once it's live -- see
-            # DialMenu.qml's `live` gate. This IPC call is a separate
-            # fire-and-forget subprocess per detent with no ordering
-            # guarantee against it; under fast rotation a stale one landing
-            # late used to flicker the highlight to the wrong tool. Skip it
-            # entirely while the stream covers this, both for correctness
-            # and to stop spawning a process per detent for nothing.
+            # The position socket already drives the highlight; this per-detent call can
+            # land late and flicker it, so skip it while the stream is live.
+            # See docs/DESIGN.md#menu-highlight-alignment.
             return
         if not self.open_now:
             self.open(index)
@@ -972,12 +900,8 @@ def _match_block(block, name):
     return None
 
 
-# Force a specific node per device name, e.g.
-#   DIAL_DEVICE=/dev/input/event27
-# Two devices can legitimately share a name (a real dial plus a virtual one
-# used for testing), and the by-name search takes whichever comes first. The
-# name check below still runs, so this can only select a device that really is
-# what it claims to be.
+# DIAL_DEVICE=/dev/input/eventN forces a node when two devices share a name. The name
+# check below still runs.
 DEVICE_OVERRIDES = {
     DEVICE_NAME: os.environ.get("DIAL_DEVICE", ""),
     STYLUS_NAME: os.environ.get("STYLUS_DEVICE", ""),
@@ -1037,17 +961,9 @@ def eraser_watcher():
                     _, _, etype, code, value = struct.unpack(EV_FORMAT, data)
 
                     if etype == EV_KEY and code == BTN_STYLUS:
-                        # Barrel button -> a configurable action (config.json
-                        # "pen.barrel"). Bound globally and deliberately NOT
-                        # allowlisted, same reasoning as always: right-click
-                        # (the default) is what a stylus barrel is
-                        # conventionally for (Krita's pop-up palette expects
-                        # it), and the click lands wherever hover has put the
-                        # cursor, i.e. under the pen. A "mouse" action keeps
-                        # real press/release passthrough, so a held barrel +
-                        # drag still works (e.g. that same Krita gesture);
-                        # any other action type fires once on press only,
-                        # same accident-risk reasoning as the tail button.
+                        # Barrel button -> pen.barrel action. Bound globally, not
+                        # allowlisted. A "mouse" action passes press/release through;
+                        # any other action fires once on press.
                         enabled, name = pen_barrel_config()
                         if enabled:
                             spec = _PEN_BARREL_BY_NAME[name][3]
@@ -1078,14 +994,8 @@ def eraser_watcher():
                                 cur_accum = 0.0
                                 touch_at = time.monotonic()
                                 gain = ERASER_SCROLL_GAIN.get(cls, ERASER_SCROLL_GAIN_DEFAULT)
-                                # Same routing as the dial's Scroll tool, and
-                                # for the same reason -- ERASER_SCROLL_CLASSES
-                                # includes org.omarchy.agent (Claude Code),
-                                # which would otherwise hit the identical
-                                # wheel-becomes-arrow-keys-becomes-destroyed-
-                                # prompt bug via a drag instead of a rotation.
-                                # Decided once per touch, like gain/cls above,
-                                # not re-checked per motion event.
+                                # Same routing as the dial's Scroll tool
+                                # (SCROLL_SUPPRESS_CLASSES); decided once per touch.
                                 y_mode = scroll_mode()
                                 log(f"eraser down in {cls} (gain {gain}, y_mode {y_mode})")
                             else:
@@ -1172,15 +1082,7 @@ def dictation_toggle():
 
 
 # --------------------------------------------------------------------------
-# Volume is index 0 and is the idle home: rotating at rest only changes
-# volume. A continuous, scroll-wheel-driven Zoom was tried and removed --
-# it earned nothing and made the dial feel loose. A discrete Ctrl+=/Ctrl+-
-# Zoom was added back later, then replaced (same session, 2026-09-16) by
-# Ctrl+scroll: Ctrl+=/- only changes editor font size, which several apps --
-# Obsidian's Graph/Canvas/PDF views among them -- don't treat as "zoom" at
-# all, while Ctrl+scroll is the pinch-zoom convention those views (and
-# browsers, which already supported it) actually listen for. See the tool
-# itself, near the end of this list.
+# Volume is index 0 and is the idle home: rotating at rest only changes volume.
 # "detent" is the constant angle (in counts) between clicks for this tool.
 # "mag" tools accept a magnitude 1..MAG_MAX derived from rotation speed;
 # discrete tools ignore it because "1.6 windows" is meaningless.
@@ -1395,14 +1297,7 @@ TOOL_LIBRARY = [
         "click": None,
     },
     {
-        # Ctrl+scroll, held for as long as Zoom stays armed -- not Ctrl+=/-.
-        # Ctrl+=/- only changes editor font size in most apps; Obsidian's
-        # Graph view, Canvas, and embedded PDFs/images don't treat that as
-        # zoom at all and just ignored it. Ctrl+scroll is the actual
-        # pinch-zoom convention those views listen for, and browsers already
-        # treated it as page zoom too, so nothing that worked before regresses.
-        # Built for using the pen one-handed with no free hand for the
-        # keyboard, but not Obsidian-specific.
+        # Ctrl+scroll held while armed, not Ctrl+=/- (apps like Obsidian's Graph view ignore that).
         "name": "Zoom",
         "icon": "\uf00e",
         "detent": 60,
@@ -1416,11 +1311,7 @@ TOOL_LIBRARY = [
         "click": {"do": "key", "label": "reset zoom", "keys": ["ctrl", "0"]},
     },
     {
-        # Scrubs rather than skips (Brooks, 2026-09-20): rotation moves the playhead
-        # of whatever is playing, song or video. Unlike track changes, "a bit
-        # further" is meaningful, so it takes magnitude -- a fast spin jumps further.
-        # Detent is the standard 60 for fine control (it was 150 when this skipped
-        # tracks). Next/previous track are still available as click-gesture options.
+        # Scrubs the playhead; takes magnitude so a fast spin jumps further.
         "name": "Media",
         "icon": "\uf001",
         "detent": 60,
@@ -1442,18 +1333,8 @@ TOOL_LIBRARY = [
         "click": None,
     },
     {
-        # Brooks's idea, 2026-09-18: plain single-line/character navigation,
-        # a sibling to Word Nav rather than a replacement -- Word Nav skips a
-        # word at a time, this skips a line (or a character, once toggled)
-        # at a time. Click flips between the two axes rather than doing a
-        # fixed action, which the declarative do/cw/ccw vocabulary above has
-        # no way to express (it has no notion of state that persists between
-        # detents), so "axis_toggle" is handled directly in the Dial class --
-        # see arrow_horizontal in on_rotate's discrete branch and the click
-        # handling in Dial.tick(). cw/ccw below are the vertical (default)
-        # behavior; horizontal overrides them at dispatch time rather than
-        # replacing them, so a bug in the override can't lose the tool
-        # entirely. No magnitude, same reasoning as Word Nav.
+        # Click flips vertical/horizontal, handled in Dial (arrow_horizontal) because the do/cw/ccw
+        # vocabulary has no persistent state. cw/ccw are the vertical default.
         "name": "Arrow Keys",
         "icon": "\uf047",
         "detent": 60,
@@ -1463,12 +1344,8 @@ TOOL_LIBRARY = [
         "click": {"do": "none", "label": "toggle vertical/horizontal"},
     },
     {
-        # Brooks's request, 2026-09-20: resize the focused window from the dial.
-        # Same click-flips-the-axis shape as Arrow Keys, but the alternate axis
-        # is data ("alt") rather than hardcoded keys. Clockwise always grows and
-        # counter-clockwise always shrinks -- resize_active() sorts out which
-        # edge Hyprland has to move for that to be true. No magnitude: a fixed
-        # RESIZE_STEP per detent keeps every click of the dial the same size.
+        # Click flips the axis (alt axis is data). cw always grows; resize_active() picks the edge.
+        # Fixed RESIZE_STEP per detent, no magnitude.
         "name": "Window Size",
         "icon": "\uf065",
         "detent": 60,
@@ -1506,15 +1383,10 @@ TOOL_LIBRARY = [
 DEFAULT_TOOLS = TOOL_LIBRARY
 
 
-# --- click gestures ---------------------------------------------------------
-# Single, double and triple click each run an action chosen in config.json:
-#     "clicks": {"single": "tool", "double": "dictation", "triple": "enter"}
-# (name, label, description, action spec). Specs use the same vocabulary as the
-# tools above. "tool" is single-click only: the armed tool's own click action
-# (Volume mutes, Windows maximizes, Arrow Keys flips axis, ...), which is why it
-# is the default there. The choice is re-read whenever config.json changes, so
-# the settings window applies it on the next click with no daemon restart. The
-# list is published to clicks.json at startup so that window never hardcodes it.
+# --- click gestures ---
+# "clicks": {"single": "tool", "double": ..., "triple": ...} in config.json, re-read live.
+# (name, label, description, action spec), published to clicks.json for the settings window.
+# "tool" (single only) runs the armed tool's own click.
 CLICK_ACTIONS = [
     ("tool", "Tool's own click", "What the armed tool does on click.", None),
     ("dictation", "Dictation on/off", "Start or stop voice dictation.", {"do": "dictation"}),
@@ -1595,13 +1467,9 @@ def click_hint(tool):
     return tool["click_label"] if name == "tool" else _CLICK_BY_NAME[name][1]
 
 
-# --- pen button gestures -----------------------------------------------------
-# Same idea as the dial's click gestures above, applied to the two physical
-# pen buttons: each one runs a configurable action, re-read live from
-# config.json (no daemon restart), published to a manifest so the settings
-# window never hardcodes the option list. The shared, non-dial-specific
-# actions (dictation, Enter, Escape, ...) are reused from CLICK_ACTIONS
-# instead of being duplicated -- "tool" is dial-specific and left out.
+# --- pen button gestures ---
+# Like the dial's clicks: configurable, live, published to pen_clicks.json. Reuses
+# CLICK_ACTIONS minus the dial-specific "tool".
 _PEN_SHARED_ACTIONS = [a for a in CLICK_ACTIONS if a[0] != "tool"]
 
 # Tail button: firmware only ever reports single / double / press-and-hold --
@@ -1617,15 +1485,8 @@ PEN_TAIL_ACTIONS = _PEN_SHARED_ACTIONS + [
     ),
 ]
 PEN_TAIL_DEFAULTS = {"single": "space", "double": "enter", "hold": "dictation"}
-# The Omarchy menu was the original default for "hold" (see PEN_BUTTON above --
-# comment left there for history), on the theory that a hold was the hardest
-# of the three to trigger by accident. Real-world use (2026-09-26, Brooks)
-# proved that wrong: the menu includes power/sleep entries, and a hold turned
-# out to be easy to trigger while just holding the pen normally -- exactly the
-# accident-risk category this default was supposed to avoid, not fall into.
-# Dictation is harmless to fire by accident (toggles back off next press) and
-# was Brooks's own fix once he could reassign it live -- baked in as the new
-# default rather than leaving every fresh install to rediscover the same bug.
+# Hold defaults to Dictation: the old Omarchy-menu default was easy to trigger by accident
+# and includes power entries. See docs/DESIGN.md#pen-buttons.
 _PEN_TAIL_BY_NAME = {a[0]: a for a in PEN_TAIL_ACTIONS}
 _pen_tail_cache = {"mtime": object(), "choice": dict(PEN_TAIL_DEFAULTS)}
 _pen_tail_fns = {}
@@ -2007,23 +1868,9 @@ class Dial:
                 self.menu_pick = (self.menu_pick + d) % len(TOOLS)
                 HAPTIC.fire(PAT_TICK)
                 self.show_menu()
-            # Continuous position in tool units: the whole point of the socket.
-            # menu_accum stays within one step, so this is smooth across a wrap.
-            #
-            # Divisor is 2*MENU_STEP, not MENU_STEP (Brooks, 2026-09-30: real
-            # use found the overlay's highlight and the actual pick could
-            # disagree -- "the previous tool, not the one I meant"). The loop
-            # above only increments menu_pick once menu_accum reaches a FULL
-            # MENU_STEP, but menu_accum/MENU_STEP alone ranges up to +-1.0 --
-            # so Math.round() on the QML side (which is what turns this
-            # position into a highlighted tool) was flipping to the NEXT tool
-            # at the HALFWAY point of a detent, a full half-detent before
-            # menu_pick itself -- and therefore a release/click -- actually
-            # moved there. Dividing by 2*MENU_STEP instead keeps the fraction
-            # within +-0.5 of menu_pick for the entire detent, so the visual
-            # highlight and the real pick cross the boundary at the exact
-            # same instant, every time -- not two different thresholds a half
-            # step apart.
+            # Continuous position in tool units. The divisor 2*MENU_STEP keeps the
+            # fraction within +-0.5 of menu_pick so the QML highlight and the real pick
+            # flip together. See docs/DESIGN.md#menu-highlight-alignment.
             MENU_STREAM.pos(self.menu_pick + self.menu_accum / (2 * MENU_STEP), now)
             return
 
