@@ -87,10 +87,21 @@ PEN_BUTTON = {
 # everywhere else. Creative apps (Krita, GIMP, Blender, Inkscape, ...) are
 # never matched, so their eraser cannot be broken by this.
 ERASER_SCROLL_CLASSES = {
-    "foot", "alacritty", "Alacritty", "kitty", "ghostty",
-    "com.mitchellh.ghostty", "wezterm", "org.wezfurlong.wezterm",
-    "xterm", "org.omarchy.agent",
-    "zen", "firefox", "chromium", "google-chrome", "org.mozilla.firefox",
+    "foot",
+    "alacritty",
+    "Alacritty",
+    "kitty",
+    "ghostty",
+    "com.mitchellh.ghostty",
+    "wezterm",
+    "org.wezfurlong.wezterm",
+    "xterm",
+    "org.omarchy.agent",
+    "zen",
+    "firefox",
+    "chromium",
+    "google-chrome",
+    "org.mozilla.firefox",
 }
 # Hi-res wheel units per unit of ABS_Y travel (digitizer reports 18/mm).
 # Per-class, because apps consume wheel events very differently: a terminal
@@ -102,11 +113,11 @@ ERASER_SCROLL_GAIN_DEFAULT = 0.6
 # pen over is a deliberate two-step act, so unlike the tail button's single
 # click it cannot be brushed by accident -- which is what makes it a safe
 # home for a disruptive key. Anything past this much travel is a scroll.
-ERASER_TAP_MAX_TRAVEL = 90    # ABS_Y units, ~5mm
+ERASER_TAP_MAX_TRAVEL = 90  # ABS_Y units, ~5mm
 # An eraser drag carries TWO axes. Vertical scrolls; horizontal steps the
 # text cursor. The axis is chosen once, by whichever accumulates more travel
 # first, and then locked for that drag so a wobble cannot flip it mid-stroke.
-ERASER_CURSOR_STEP = 55       # ABS_X units per cursor move, ~3mm
+ERASER_CURSOR_STEP = 55  # ABS_X units per cursor move, ~3mm
 # The eraser's second "level" is DURATION, not pressure: the eraser end
 # reports a constant 2432 with zero tilt (measured 2026-08-28, 12 contacts),
 # so there is no pressure signal to threshold there. A stationary contact is
@@ -114,11 +125,21 @@ ERASER_CURSOR_STEP = 55       # ABS_X units per cursor move, ~3mm
 # at release needs no timer and cannot misfire while the pen is still down.
 ERASER_HOLD_S = 0.45
 ERASER_SCROLL_GAIN = {
-    "foot": 1.6, "alacritty": 1.6, "Alacritty": 1.6, "kitty": 1.6,
-    "ghostty": 1.6, "com.mitchellh.ghostty": 1.6, "wezterm": 1.6,
-    "org.wezfurlong.wezterm": 1.6, "xterm": 1.6, "org.omarchy.agent": 1.6,
-    "zen": 0.30, "firefox": 0.30, "org.mozilla.firefox": 0.30,
-    "chromium": 0.30, "google-chrome": 0.30,
+    "foot": 1.6,
+    "alacritty": 1.6,
+    "Alacritty": 1.6,
+    "kitty": 1.6,
+    "ghostty": 1.6,
+    "com.mitchellh.ghostty": 1.6,
+    "wezterm": 1.6,
+    "org.wezfurlong.wezterm": 1.6,
+    "xterm": 1.6,
+    "org.omarchy.agent": 1.6,
+    "zen": 0.30,
+    "firefox": 0.30,
+    "org.mozilla.firefox": 0.30,
+    "chromium": 0.30,
+    "google-chrome": 0.30,
 }
 
 # Wheel-based scroll (dial Scroll tool, pen eraser-drag -- both funnel through
@@ -139,7 +160,7 @@ ERASER_SCROLL_GAIN = {
 # Only an app that both opts into 1007 *and* binds the resulting arrows
 # destructively is actually broken -- so far, only Claude Code.
 SCROLL_SUPPRESS_CLASSES = {
-    "org.omarchy.agent",   # Claude Code -- Up/Down there is prompt history.
+    "org.omarchy.agent",  # Claude Code -- Up/Down there is prompt history.
 }
 
 _scroll_warned_class = None
@@ -158,12 +179,15 @@ def scroll_mode():
     if cls in SCROLL_SUPPRESS_CLASSES:
         if _scroll_warned_class != cls:
             _scroll_warned_class = cls
-            notify("🚫  Scroll unavailable here",
-                   f"{cls} maps Up/Down to prompt history, not scroll")
+            notify(
+                "🚫  Scroll unavailable here", f"{cls} maps Up/Down to prompt history, not scroll"
+            )
         return "suppress"
     _scroll_warned_class = None
     return "wheel"
-HID_ID = "091B"          # Microsoft Surface Dial product id
+
+
+HID_ID = "091B"  # Microsoft Surface Dial product id
 
 EV_FORMAT = "llHHi"
 EV_SIZE = struct.calcsize(EV_FORMAT)
@@ -176,7 +200,7 @@ ABS_X, ABS_Y = 0x00, 0x01
 COUNTS_PER_REV = 3600
 
 # --- timing ---------------------------------------------------------------
-HOLD_S = 0.40      # press longer than this opens the menu
+HOLD_S = 0.40  # press longer than this opens the menu
 # Where the dashboard parks. center | top | bottom | left | right |
 # top-left | top-right | bottom-left | bottom-right
 # Shared config, read by both the daemon and the overlay plugin, so one
@@ -185,7 +209,9 @@ HOLD_S = 0.40      # press longer than this opens the menu
 # restart. Env vars still win, for one-off experiments.
 CONFIG_PATH = os.path.join(
     os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
-    "dial-radial", "config.json")
+    "dial-radial",
+    "config.json",
+)
 
 
 def load_config():
@@ -216,15 +242,24 @@ def cfg_str(doc, key, default, allowed=None):
 # payload field for either (see DialMenu.qml's open(), fixed 2026-09-30).
 MENU_ANCHOR = "bottom"
 MENU_LAYOUT = "dial"
-ANCHORS = ("center", "top", "bottom", "left", "right",
-           "top-left", "top-right", "bottom-left", "bottom-right")
-DOUBLE_S = 0.25    # second click inside this window = double click
+ANCHORS = (
+    "center",
+    "top",
+    "bottom",
+    "left",
+    "right",
+    "top-left",
+    "top-right",
+    "bottom-left",
+    "bottom-right",
+)
+DOUBLE_S = 0.25  # second click inside this window = double click
 # What single / double / triple click do is configurable -- see CLICK_ACTIONS below.
 # Triple click exists for dictation (double-click starts/stops recording, triple-
 # click submits what it typed). To tell a double from a triple, a double click
 # waits DOUBLE_S for a possible third press before it fires; set "triple" to
 # "none" and there is nothing to wait for, so a double fires instantly again.
-DISARM_S = 6.00    # armed tool reverts to idle after this much stillness
+DISARM_S = 6.00  # armed tool reverts to idle after this much stillness
 
 # --- stepping -------------------------------------------------------------
 # The DETENT IS CONSTANT per tool -- the angle you turn per click never
@@ -237,41 +272,41 @@ DISARM_S = 6.00    # armed tool reverts to idle after this much stillness
 # sharing one timestamp, so a per-event dt collapses toward zero and the
 # computed speed explodes (observed: 3.7M counts/sec on a device that tops
 # out near 1600). That pinned magnitude at its ceiling on every turn.
-SPEED_WINDOW = 0.20   # seconds
-MAG_FALLOFF = 500.0   # counts/sec per extra unit of magnitude
-MAG_MAX = 4           # never more than this many units per detent
+SPEED_WINDOW = 0.20  # seconds
+MAG_FALLOFF = 500.0  # counts/sec per extra unit of magnitude
+MAG_MAX = 4  # never more than this many units per detent
 # Menu highlight uses the SAME detent as the tools themselves (60 counts,
 # 6 deg) so the whole device has one consistent rhythm -- one click, one
 # step, whether that step is a volume point or the next tool. At 250 the
 # menu felt heavy and unlike the rest of the dial.
-MENU_STEP = 60        # counts per menu-highlight change
+MENU_STEP = 60  # counts per menu-highlight change
 
 # --- haptics --------------------------------------------------------------
-HAPTIC_WAVEFORM = 3    # ordinal 3 == CLICK; 4 and 5 feel the same, unused
+HAPTIC_WAVEFORM = 3  # ordinal 3 == CLICK; 4 and 5 feel the same, unused
 HAPTIC_MIN_GAP = 0.10  # never fire ticks closer than this, or they smear.
-                       # 100ms is the measured floor: clicks stayed countable
-                       # down to group E (100ms) in hand testing 2026-08-28.
+# 100ms is the measured floor: clicks stayed countable
+# down to group E (100ms) in hand testing 2026-08-28.
 
 # Vocabulary, confirmed by hand 2026-08-28. There is NO intensity control on
 # this device -- HID usage 0x23 is absent from the descriptor, and the three
 # waveforms are indistinguishable by feel. Every distinction is therefore
 # built from pulse COUNT and SPACING, expressed as (repeat, retrigger_ms)
 # and handed to the dial's firmware in a single write.
-PAT_TICK      = (0, 0)     # one detent -- fires constantly, must stay light
-PAT_MENU      = (3, 0)     # menu opened -- rare, wants weight not a count
-PAT_SELECT    = (3, 30)    # tool selected -- distinct but still quick
-PAT_IDLE      = (3, 120)   # auto-disarmed -- slow, unmistakable, unasked for
-PAT_DICTATION = (6, 0)     # heaviest event on the device
+PAT_TICK = (0, 0)  # one detent -- fires constantly, must stay light
+PAT_MENU = (3, 0)  # menu opened -- rare, wants weight not a count
+PAT_SELECT = (3, 30)  # tool selected -- distinct but still quick
+PAT_IDLE = (3, 120)  # auto-disarmed -- slow, unmistakable, unasked for
+PAT_DICTATION = (6, 0)  # heaviest event on the device
 
 # Scroll is CONTINUOUS, not detented: wheel motion is emitted proportional to
 # rotation for smooth movement, while haptic ticks fire on their own coarser
 # interval. A tick every 6 deg felt chunky against how little the page moved.
-SCROLL_GAIN = 4.0     # hi-res wheel units per dial count (120 = one notch)
-SCROLL_TICK = 60      # dial counts between haptic ticks while scrolling --
-                      # same 6 deg detent as every other tool, so the whole
-                      # device has one rhythm. Below ~45 counts the motor
-                      # cannot keep up at normal scrolling speed and ticks
-                      # start being dropped, which feels worse than fewer.
+SCROLL_GAIN = 4.0  # hi-res wheel units per dial count (120 = one notch)
+SCROLL_TICK = 60  # dial counts between haptic ticks while scrolling --
+# same 6 deg detent as every other tool, so the whole
+# device has one rhythm. Below ~45 counts the motor
+# cannot keep up at normal scrolling speed and ticks
+# start being dropped, which feels worse than fewer.
 
 # Zoom is also continuous (Ctrl+scroll), but a "notch" of zoom is a much
 # bigger visual jump than a notch of scroll, so it starts gentler than
@@ -334,9 +369,9 @@ def resize_active(axis, grow, step=RESIZE_STEP):
     the edge that actually has a neighbour. Floating windows always resize from
     the bottom-right corner; a fullscreen window has nothing to resize.
     """
+
     def hyprctl_json(what):
-        p = subprocess.run(["hyprctl", what, "-j"], capture_output=True,
-                           text=True, timeout=2)
+        p = subprocess.run(["hyprctl", what, "-j"], capture_output=True, text=True, timeout=2)
         return json.loads(p.stdout or "null")
 
     try:
@@ -345,8 +380,9 @@ def resize_active(axis, grow, step=RESIZE_STEP):
             return
         delta = step if grow else -step
         if not w.get("floating"):
-            mon = next((m for m in hyprctl_json("monitors") or []
-                        if m.get("id") == w.get("monitor")), None)
+            mon = next(
+                (m for m in hyprctl_json("monitors") or [] if m.get("id") == w.get("monitor")), None
+            )
             if mon:
                 scale = mon.get("scale") or 1
                 (ax, ay), (sw, sh) = w["at"], w["size"]
@@ -376,12 +412,16 @@ def _seek_player_args():
         return _seek_cache["args"]
     args = []
     try:
-        p = subprocess.run(["playerctl", "-a", "metadata", "--format",
-                            "{{playerName}}\t{{status}}"],
-                           capture_output=True, text=True, timeout=2)
+        p = subprocess.run(
+            ["playerctl", "-a", "metadata", "--format", "{{playerName}}\t{{status}}"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
         rows = [ln.split("\t") for ln in p.stdout.splitlines() if "\t" in ln]
-        pick = (next((r[0] for r in rows if r[1] == "Playing"), None)
-                or next((r[0] for r in rows if r[1] == "Paused"), None))
+        pick = next((r[0] for r in rows if r[1] == "Playing"), None) or next(
+            (r[0] for r in rows if r[1] == "Paused"), None
+        )
         if pick:
             args = ["-p", pick]
     except Exception:
@@ -470,8 +510,11 @@ class MenuUI:
 
     def _call(self, method, *args):
         try:
-            subprocess.Popen(["omarchy-shell", "-q", "dialmenu", method, *args],
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen(
+                ["omarchy-shell", "-q", "dialmenu", method, *args],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         except Exception as e:
             log(f"menu ui {method} failed: {e}")
 
@@ -479,8 +522,12 @@ class MenuUI:
     def _volume():
         """Current sink volume as a percent, or None if wpctl is unhappy."""
         try:
-            out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"],
-                                 capture_output=True, text=True, timeout=1).stdout
+            out = subprocess.run(
+                ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"],
+                capture_output=True,
+                text=True,
+                timeout=1,
+            ).stdout
             m = re.search(r"([\d.]+)", out)
             if not m:
                 return None
@@ -494,7 +541,8 @@ class MenuUI:
         doc = load_config()
         anchor = os.environ.get("DIAL_MENU_ANCHOR") or cfg_str(doc, "anchor", MENU_ANCHOR, ANCHORS)
         layout = os.environ.get("DIAL_MENU_LAYOUT") or cfg_str(
-            doc, "layout", MENU_LAYOUT, ("dial", "deck", "carousel", "toast"))
+            doc, "layout", MENU_LAYOUT, ("dial", "deck", "carousel", "toast")
+        )
         vol = self._volume()
         tools = []
         for t in TOOLS:
@@ -506,8 +554,7 @@ class MenuUI:
                 if pct is not None:
                     entry["value"], entry["valueText"] = pct, f"{pct}%"
             tools.append(entry)
-        return json.dumps({"tools": tools, "index": index,
-                           "anchor": anchor, "layout": layout})
+        return json.dumps({"tools": tools, "index": index, "anchor": anchor, "layout": layout})
 
     def open(self, index):
         payload = self._payload(index)
@@ -556,7 +603,7 @@ class MenuStream:
     """
 
     PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "dial-radial.sock")
-    MIN_INTERVAL = 0.012          # ~80Hz ceiling; the panel cannot use more
+    MIN_INTERVAL = 0.012  # ~80Hz ceiling; the panel cannot use more
 
     def __init__(self):
         self.sock = None
@@ -582,7 +629,7 @@ class MenuStream:
         try:
             self.sock.sendall(f"pos {value:.4f}\n".encode())
         except BlockingIOError:
-            pass                  # panel is behind; dropping a frame is correct
+            pass  # panel is behind; dropping a frame is correct
         except Exception as e:
             log(f"menu stream write failed: {e}")
             self.close()
@@ -601,9 +648,19 @@ MENU_STREAM = MenuStream()
 
 
 def notify(title, body=""):
-    run(["notify-send", "-a", "Surface Dial", "-t", "1100",
-         "-h", "string:x-canonical-private-synchronous:surface-dial",
-         title, body])
+    run(
+        [
+            "notify-send",
+            "-a",
+            "Surface Dial",
+            "-t",
+            "1100",
+            "-h",
+            "string:x-canonical-private-synchronous:surface-dial",
+            title,
+            body,
+        ]
+    )
 
 
 # --------------------------------------------------------------------------
@@ -633,8 +690,7 @@ class Haptics:
                 with open(f"{base}/{name}/device/uevent") as fh:
                     if HID_ID not in fh.read().upper():
                         continue
-                inst = os.path.basename(
-                    os.path.realpath(f"{base}/{name}/device"))
+                inst = os.path.basename(os.path.realpath(f"{base}/{name}/device"))
                 return (f"/dev/{name}", inst)
             except OSError:
                 continue
@@ -646,7 +702,7 @@ class Haptics:
             return False
         if self.fd is not None and inst == self.inst:
             return True
-        if self.fd is not None:          # same path, new device: reopen
+        if self.fd is not None:  # same path, new device: reopen
             try:
                 self.fd.close()
             except Exception:
@@ -661,16 +717,19 @@ class Haptics:
             return True
         except OSError as exc:
             if not self.warned:
-                log(f"haptics unavailable ({exc}) -- running silently. "
-                    f"Needs write access to {path}.")
+                log(
+                    f"haptics unavailable ({exc}) -- running silently. "
+                    f"Needs write access to {path}."
+                )
                 self.warned = True
             self.fd = None
             return False
 
     def _fire(self, repeat, period):
         try:
-            self.fd.write(bytes([0x01, repeat, HAPTIC_WAVEFORM,
-                                 period & 0xFF, (period >> 8) & 0xFF]))
+            self.fd.write(
+                bytes([0x01, repeat, HAPTIC_WAVEFORM, period & 0xFF, (period >> 8) & 0xFF])
+            )
         except OSError as exc:
             log(f"haptic write failed ({exc})")
             try:
@@ -691,7 +750,7 @@ class Haptics:
         the dial's firmware times the repeats, so nothing sleeps here."""
         now = time.monotonic()
         if rate_limit and now - self.last < HAPTIC_MIN_GAP:
-            return          # too soon; this would smear into the last one
+            return  # too soon; this would smear into the last one
         self.last = now
         try:
             self.q.put_nowait(pattern)
@@ -712,7 +771,7 @@ class VirtualPointer:
     UI_SET_EVBIT, UI_SET_KEYBIT, UI_SET_RELBIT = 0x40045564, 0x40045565, 0x40045566
     UI_DEV_CREATE, UI_DEV_DESTROY = 0x5501, 0x5502
     EV_SYN, EV_KEY, EV_REL = 0x00, 0x01, 0x02
-    REL_X, REL_Y, REL_WHEEL, REL_WHEEL_HI_RES = 0x00, 0x01, 0x08, 0x0b
+    REL_X, REL_Y, REL_WHEEL, REL_WHEEL_HI_RES = 0x00, 0x01, 0x08, 0x0B
     BTN_LEFT, BTN_RIGHT, BTN_MIDDLE = 0x110, 0x111, 0x112
 
     def __init__(self):
@@ -735,12 +794,15 @@ class VirtualPointer:
                 fcntl.ioctl(fd, self.UI_SET_EVBIT, ev)
             for btn in (self.BTN_LEFT, self.BTN_RIGHT, self.BTN_MIDDLE):
                 fcntl.ioctl(fd, self.UI_SET_KEYBIT, btn)
-            for r in (self.REL_X, self.REL_Y, self.REL_WHEEL,
-                      self.REL_WHEEL_HI_RES):
+            for r in (self.REL_X, self.REL_Y, self.REL_WHEEL, self.REL_WHEEL_HI_RES):
                 fcntl.ioctl(fd, self.UI_SET_RELBIT, r)
             name = b"Surface Dial Virtual Pointer".ljust(80, b"\0")
-            dev = (name + struct.pack("HHHH", 0x0003, 0x045E, 0x091B, 1)
-                   + struct.pack("i", 0) + struct.pack("i" * 256, *([0] * 256)))
+            dev = (
+                name
+                + struct.pack("HHHH", 0x0003, 0x045E, 0x091B, 1)
+                + struct.pack("i", 0)
+                + struct.pack("i" * 256, *([0] * 256))
+            )
             os.write(fd, dev)
             fcntl.ioctl(fd, self.UI_DEV_CREATE)
         except OSError as exc:
@@ -813,8 +875,9 @@ def read_brightness(device=None):
     if not dev:
         return None
     try:
-        out = subprocess.run(["brightnessctl", "-m", "-d", dev, "info"],
-                             capture_output=True, text=True, timeout=2).stdout
+        out = subprocess.run(
+            ["brightnessctl", "-m", "-d", dev, "info"], capture_output=True, text=True, timeout=2
+        ).stdout
         return int(out.strip().split(",")[3].rstrip("%"))
     except Exception:
         return None
@@ -846,15 +909,17 @@ def repeat_key(mag, *combo):
 
 def focused_class():
     try:
-        p = subprocess.run(["hyprctl", "activewindow", "-j"],
-                           capture_output=True, text=True, timeout=2)
+        p = subprocess.run(
+            ["hyprctl", "activewindow", "-j"], capture_output=True, text=True, timeout=2
+        )
         import json
+
         return json.loads(p.stdout).get("class", "")
     except Exception:
         return ""
 
 
-EVIOCGNAME = 0x81004506   # _IOR('E', 0x06, char[256])
+EVIOCGNAME = 0x81004506  # _IOR('E', 0x06, char[256])
 
 
 def device_name(fd):
@@ -911,8 +976,8 @@ def _match_block(block, name):
 # name check below still runs, so this can only select a device that really is
 # what it claims to be.
 DEVICE_OVERRIDES = {
-    DEVICE_NAME:  os.environ.get("DIAL_DEVICE", ""),
-    STYLUS_NAME:  os.environ.get("STYLUS_DEVICE", ""),
+    DEVICE_NAME: os.environ.get("DIAL_DEVICE", ""),
+    STYLUS_NAME: os.environ.get("STYLUS_DEVICE", ""),
     PEN_KBD_NAME: os.environ.get("PEN_KBD_DEVICE", ""),
 }
 
@@ -1009,8 +1074,7 @@ def eraser_watcher():
                                 axis = None
                                 cur_accum = 0.0
                                 touch_at = time.monotonic()
-                                gain = ERASER_SCROLL_GAIN.get(
-                                    cls, ERASER_SCROLL_GAIN_DEFAULT)
+                                gain = ERASER_SCROLL_GAIN.get(cls, ERASER_SCROLL_GAIN_DEFAULT)
                                 # Same routing as the dial's Scroll tool, and
                                 # for the same reason -- ERASER_SCROLL_CLASSES
                                 # includes org.omarchy.agent (Claude Code),
@@ -1126,9 +1190,11 @@ def dictation_toggle():
 #   {"do": "hypr",      "lua": "hl.dsp.window.cycle_next()"}
 #   {"do": "key",       "keys": ["ctrl", "z"], "repeat": false}
 #   {"do": "volume",    "direction": "up" | "down"}
-#   {"do": "brightness","direction": "up" | "down", "step": 2}   - backlight percent per detent x magnitude
+#   {"do": "brightness","direction": "up" | "down", "step": 2}
+#                                                - backlight percent per detent x magnitude
 #   {"do": "seek",      "direction": "forward" | "back", "step": 5}   - scrub media; step is seconds
-#                        at a slow turn, doubled per speed step (needs "magnitude": true on the tool)
+#                        at a slow turn, doubled per speed step
+#                        (needs "magnitude": true on the tool)
 #   {"do": "resize",    "axis": "x" | "y", "direction": "grow" | "shrink", "step": 40}
 #   {"do": "dictation"}
 #   {"do": "wheel"}      - marker only; the continuous path drives the pointer
@@ -1156,8 +1222,11 @@ def dictation_toggle():
 
 def mouse_button(spec):
     """VirtualPointer button constant for a "mouse" action spec's "button", or None."""
-    return {"left": VirtualPointer.BTN_LEFT, "right": VirtualPointer.BTN_RIGHT,
-            "middle": VirtualPointer.BTN_MIDDLE}.get(str(spec.get("button", "right")).lower())
+    return {
+        "left": VirtualPointer.BTN_LEFT,
+        "right": VirtualPointer.BTN_RIGHT,
+        "middle": VirtualPointer.BTN_MIDDLE,
+    }.get(str(spec.get("button", "right")).lower())
 
 
 def make_action(spec):
@@ -1217,7 +1286,7 @@ def make_action(spec):
     if verb == "resize":
         axis = str(spec.get("axis", "x")).lower()
         if axis not in ("x", "y"):
-            log(f"resize axis must be \"x\" or \"y\": {spec!r}")
+            log(f'resize axis must be "x" or "y": {spec!r}')
             return None
         grow = str(spec.get("direction", "grow")).lower() != "shrink"
         try:
@@ -1242,6 +1311,7 @@ def make_action(spec):
         def _click(mag, _b=btn):
             POINTER.click(_b, True)
             POINTER.click(_b, False)
+
         return _click
 
     if verb == "wheel":
@@ -1258,45 +1328,66 @@ def make_action(spec):
 # and in this order -- the config only ever narrows or reorders it.
 TOOL_LIBRARY = [
     {
-        "name": "Volume", "icon": "\uf028", "detent": 60, "magnitude": True,
-        "cw":  {"do": "volume", "direction": "up"},
+        "name": "Volume",
+        "icon": "\uf028",
+        "detent": 60,
+        "magnitude": True,
+        "cw": {"do": "volume", "direction": "up"},
         "ccw": {"do": "volume", "direction": "down"},
-        "click": {"do": "exec", "label": "mute",
-                  "cmd": ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]},
+        "click": {
+            "do": "exec",
+            "label": "mute",
+            "cmd": ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"],
+        },
     },
     {
-        "name": "Windows", "icon": "\uf2d0", "detent": 150,
-        "cw":  {"do": "hypr", "lua": "hl.dsp.window.cycle_next()"},
+        "name": "Windows",
+        "icon": "\uf2d0",
+        "detent": 150,
+        "cw": {"do": "hypr", "lua": "hl.dsp.window.cycle_next()"},
         "ccw": {"do": "hypr", "lua": "hl.dsp.window.cycle_next({ next = false })"},
-        "click": {"do": "hypr", "label": "maximize",
-                  "lua": "hl.dsp.window.fullscreen({ mode = \"maximized\" })"},
+        "click": {
+            "do": "hypr",
+            "label": "maximize",
+            "lua": 'hl.dsp.window.fullscreen({ mode = "maximized" })',
+        },
     },
     {
-        "name": "Workspaces", "icon": "\uf00a", "detent": 450,
+        "name": "Workspaces",
+        "icon": "\uf00a",
+        "detent": 450,
         # Deliberately unscaled by speed: "+1" can create workspaces, so a fast
         # spin under magnitude scaling would fling you into workspace 20.
-        "cw":  {"do": "hypr", "lua": "hl.dsp.focus({ workspace = \"+1\" })"},
-        "ccw": {"do": "hypr", "lua": "hl.dsp.focus({ workspace = \"-1\" })"},
-        "click": {"do": "hypr", "label": "last workspace",
-                  "lua": "hl.dsp.focus({ workspace = \"previous\" })"},
+        "cw": {"do": "hypr", "lua": 'hl.dsp.focus({ workspace = "+1" })'},
+        "ccw": {"do": "hypr", "lua": 'hl.dsp.focus({ workspace = "-1" })'},
+        "click": {
+            "do": "hypr",
+            "label": "last workspace",
+            "lua": 'hl.dsp.focus({ workspace = "previous" })',
+        },
     },
     {
         # Keyboard scrolling follows keyboard FOCUS and only works where arrow
         # keys scroll; in a terminal they walk shell history instead. Real wheel
         # events need the uinput virtual pointer, which the continuous path uses.
-        "name": "Scroll", "icon": "\uf07d", "detent": 60, "magnitude": True,
+        "name": "Scroll",
+        "icon": "\uf07d",
+        "detent": 60,
+        "magnitude": True,
         "continuous": True,
         # Routes through scroll_mode() first, to suppress on the one known
         # class where a real wheel event would still land as destructive
         # keys downstream -- see SCROLL_SUPPRESS_CLASSES above.
         "terminal_aware": True,
-        "cw":  {"do": "wheel"},
+        "cw": {"do": "wheel"},
         "ccw": {"do": "wheel"},
         "click": None,
     },
     {
-        "name": "Undo", "icon": "\uf0e2", "detent": 150,
-        "cw":  {"do": "key", "keys": ["ctrl", "shift", "z"]},
+        "name": "Undo",
+        "icon": "\uf0e2",
+        "detent": 150,
+        "cw": {"do": "key", "keys": ["ctrl", "shift", "z"]},
         "ccw": {"do": "key", "keys": ["ctrl", "z"]},
         "click": None,
     },
@@ -1309,9 +1400,15 @@ TOOL_LIBRARY = [
         # treated it as page zoom too, so nothing that worked before regresses.
         # Built for using the pen one-handed with no free hand for the
         # keyboard, but not Obsidian-specific.
-        "name": "Zoom", "icon": "\uf00e", "detent": 60, "magnitude": True,
-        "continuous": True, "hold_mod": "ctrl", "gain": ZOOM_GAIN, "invert": True,
-        "cw":  {"do": "wheel"},
+        "name": "Zoom",
+        "icon": "\uf00e",
+        "detent": 60,
+        "magnitude": True,
+        "continuous": True,
+        "hold_mod": "ctrl",
+        "gain": ZOOM_GAIN,
+        "invert": True,
+        "cw": {"do": "wheel"},
         "ccw": {"do": "wheel"},
         "click": {"do": "key", "label": "reset zoom", "keys": ["ctrl", "0"]},
     },
@@ -1321,19 +1418,23 @@ TOOL_LIBRARY = [
         # further" is meaningful, so it takes magnitude -- a fast spin jumps further.
         # Detent is the standard 60 for fine control (it was 150 when this skipped
         # tracks). Next/previous track are still available as click-gesture options.
-        "name": "Media", "icon": "\uf001", "detent": 60, "magnitude": True,
-        "cw":  {"do": "seek", "direction": "forward"},
+        "name": "Media",
+        "icon": "\uf001",
+        "detent": 60,
+        "magnitude": True,
+        "cw": {"do": "seek", "direction": "forward"},
         "ccw": {"do": "seek", "direction": "back"},
-        "click": {"do": "exec", "label": "play/pause",
-                  "cmd": ["playerctl", "play-pause"]},
+        "click": {"do": "exec", "label": "play/pause", "cmd": ["playerctl", "play-pause"]},
     },
     {
         # Built for using the pen one-handed with no free hand for the
         # keyboard, same motivation as Zoom. No magnitude, for the same
         # reason as Undo: fast spins skipping unpredictable numbers of words
         # is worse than a steady one-word-per-detent rhythm.
-        "name": "Word Nav", "icon": "\uf035", "detent": 60,
-        "cw":  {"do": "key", "keys": ["ctrl", "Right"]},
+        "name": "Word Nav",
+        "icon": "\uf035",
+        "detent": 60,
+        "cw": {"do": "key", "keys": ["ctrl", "Right"]},
         "ccw": {"do": "key", "keys": ["ctrl", "Left"]},
         "click": None,
     },
@@ -1350,9 +1451,11 @@ TOOL_LIBRARY = [
         # behavior; horizontal overrides them at dispatch time rather than
         # replacing them, so a bug in the override can't lose the tool
         # entirely. No magnitude, same reasoning as Word Nav.
-        "name": "Arrow Keys", "icon": "\uf047", "detent": 60,
+        "name": "Arrow Keys",
+        "icon": "\uf047",
+        "detent": 60,
         "axis_toggle": True,
-        "cw":  {"do": "key", "keys": ["Down"]},
+        "cw": {"do": "key", "keys": ["Down"]},
         "ccw": {"do": "key", "keys": ["Up"]},
         "click": {"do": "none", "label": "toggle vertical/horizontal"},
     },
@@ -1363,14 +1466,18 @@ TOOL_LIBRARY = [
         # counter-clockwise always shrinks -- resize_active() sorts out which
         # edge Hyprland has to move for that to be true. No magnitude: a fixed
         # RESIZE_STEP per detent keeps every click of the dial the same size.
-        "name": "Window Size", "icon": "\uf065", "detent": 60,
+        "name": "Window Size",
+        "icon": "\uf065",
+        "detent": 60,
         "axis_toggle": True,
-        "cw":  {"do": "resize", "axis": "x", "direction": "grow"},
+        "cw": {"do": "resize", "axis": "x", "direction": "grow"},
         "ccw": {"do": "resize", "axis": "x", "direction": "shrink"},
         "alt": {
-            "base_title": "\u2194  Window Size", "base_subtitle": "width",
-            "title": "\u2195  Window Size", "subtitle": "height",
-            "cw":  {"do": "resize", "axis": "y", "direction": "grow"},
+            "base_title": "\u2194  Window Size",
+            "base_subtitle": "width",
+            "title": "\u2195  Window Size",
+            "subtitle": "height",
+            "cw": {"do": "resize", "axis": "y", "direction": "grow"},
             "ccw": {"do": "resize", "axis": "y", "direction": "shrink"},
         },
         "click": {"do": "none", "label": "toggle width/height"},
@@ -1380,8 +1487,11 @@ TOOL_LIBRARY = [
         # Studio lacks, so this only shows up where active_tools names it.
         # Magnitude like Volume: a faster spin takes bigger steps. The device is
         # always named explicitly (see backlight_device()).
-        "name": "Brightness", "icon": "\uf185", "detent": 60, "magnitude": True,
-        "cw":  {"do": "brightness", "direction": "up"},
+        "name": "Brightness",
+        "icon": "\uf185",
+        "detent": 60,
+        "magnitude": True,
+        "cw": {"do": "brightness", "direction": "up"},
         "ccw": {"do": "brightness", "direction": "down"},
         "click": None,
     },
@@ -1403,25 +1513,43 @@ DEFAULT_TOOLS = TOOL_LIBRARY
 # the settings window applies it on the next click with no daemon restart. The
 # list is published to clicks.json at startup so that window never hardcodes it.
 CLICK_ACTIONS = [
-    ("tool", "Tool's own click",
-     "What the armed tool does on click.", None),
+    ("tool", "Tool's own click", "What the armed tool does on click.", None),
     ("dictation", "Dictation on/off", "Start or stop voice dictation.", {"do": "dictation"}),
-    ("enter", "Enter", "Press Enter (submits dictation).",
-     {"do": "key", "keys": ["Return"]}),
+    ("enter", "Enter", "Press Enter (submits dictation).", {"do": "key", "keys": ["Return"]}),
     ("escape", "Escape", "Press Escape.", {"do": "key", "keys": ["Escape"]}),
     ("backspace", "Backspace", "Delete one character.", {"do": "key", "keys": ["BackSpace"]}),
     ("space", "Space", "Press Space.", {"do": "key", "keys": ["space"]}),
     ("tab", "Tab", "Press Tab.", {"do": "key", "keys": ["Tab"]}),
-    ("mute", "Mute", "Toggle output mute.",
-     {"do": "exec", "cmd": ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]}),
-    ("play_pause", "Play / pause", "Play or pause the player.",
-     {"do": "exec", "cmd": ["playerctl", "play-pause"]}),
-    ("next_track", "Next track", "Skip to the next track.",
-     {"do": "exec", "cmd": ["playerctl", "next"]}),
-    ("prev_track", "Previous track", "Go back to the previous track.",
-     {"do": "exec", "cmd": ["playerctl", "previous"]}),
-    ("maximize", "Maximize window", "Maximize the focused window.",
-     {"do": "hypr", "lua": "hl.dsp.window.fullscreen({ mode = \"maximized\" })"}),
+    (
+        "mute",
+        "Mute",
+        "Toggle output mute.",
+        {"do": "exec", "cmd": ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]},
+    ),
+    (
+        "play_pause",
+        "Play / pause",
+        "Play or pause the player.",
+        {"do": "exec", "cmd": ["playerctl", "play-pause"]},
+    ),
+    (
+        "next_track",
+        "Next track",
+        "Skip to the next track.",
+        {"do": "exec", "cmd": ["playerctl", "next"]},
+    ),
+    (
+        "prev_track",
+        "Previous track",
+        "Go back to the previous track.",
+        {"do": "exec", "cmd": ["playerctl", "previous"]},
+    ),
+    (
+        "maximize",
+        "Maximize window",
+        "Maximize the focused window.",
+        {"do": "hypr", "lua": 'hl.dsp.window.fullscreen({ mode = "maximized" })'},
+    ),
     ("none", "Nothing", "Do nothing.", None),
 ]
 CLICK_DEFAULTS = {"single": "tool", "double": "dictation", "triple": "enter"}
@@ -1478,8 +1606,12 @@ _PEN_SHARED_ACTIONS = [a for a in CLICK_ACTIONS if a[0] != "tool"]
 # only these three slots to make configurable. Defaults reproduce the old
 # hardcoded behaviour exactly (see the accident-risk reasoning above PEN_BUTTON).
 PEN_TAIL_ACTIONS = _PEN_SHARED_ACTIONS + [
-    ("menu", "Omarchy menu", "Toggle the Omarchy menu.",
-     {"do": "exec", "cmd": ["omarchy-menu", "toggle"]}),
+    (
+        "menu",
+        "Omarchy menu",
+        "Toggle the Omarchy menu.",
+        {"do": "exec", "cmd": ["omarchy-menu", "toggle"]},
+    ),
 ]
 PEN_TAIL_DEFAULTS = {"single": "space", "double": "enter", "hold": "dictation"}
 # The Omarchy menu was the original default for "hold" (see PEN_BUTTON above --
@@ -1511,8 +1643,10 @@ def pen_tail_choice(slot):
             if isinstance(v, str) and v in _PEN_TAIL_BY_NAME:
                 choice[k] = v
             elif v is not None:
-                log(f"pen.tail_clicks.{k}: {v!r} is not a usable action; "
-                    f"using {PEN_TAIL_DEFAULTS[k]!r}")
+                log(
+                    f"pen.tail_clicks.{k}: {v!r} is not a usable action; "
+                    f"using {PEN_TAIL_DEFAULTS[k]!r}"
+                )
         _pen_tail_cache.update(mtime=mtime, choice=choice)
     return _pen_tail_cache["choice"][slot]
 
@@ -1530,12 +1664,9 @@ def pen_tail_fn(slot):
 # enable toggle -- not split into click vs. long-press. Default reproduces
 # the old hardcoded behaviour (always right-click) exactly.
 PEN_BARREL_ACTIONS = _PEN_SHARED_ACTIONS + [
-    ("right_click", "Right click", "Right mouse click.",
-     {"do": "mouse", "button": "right"}),
-    ("middle_click", "Middle click", "Middle mouse click.",
-     {"do": "mouse", "button": "middle"}),
-    ("left_click", "Left click", "Left mouse click.",
-     {"do": "mouse", "button": "left"}),
+    ("right_click", "Right click", "Right mouse click.", {"do": "mouse", "button": "right"}),
+    ("middle_click", "Middle click", "Middle mouse click.", {"do": "mouse", "button": "middle"}),
+    ("left_click", "Left click", "Left mouse click.", {"do": "mouse", "button": "left"}),
 ]
 PEN_BARREL_DEFAULT = "right_click"
 _PEN_BARREL_BY_NAME = {a[0]: a for a in PEN_BARREL_ACTIONS}
@@ -1556,8 +1687,10 @@ def pen_barrel_config():
         action = raw.get("action")
         if not (isinstance(action, str) and action in _PEN_BARREL_BY_NAME):
             if action is not None:
-                log(f"pen.barrel.action: {action!r} is not a usable action; "
-                    f"using {PEN_BARREL_DEFAULT!r}")
+                log(
+                    f"pen.barrel.action: {action!r} is not a usable action; "
+                    f"using {PEN_BARREL_DEFAULT!r}"
+                )
             action = PEN_BARREL_DEFAULT
         _pen_barrel_cache.update(mtime=mtime, enabled=enabled, action=action)
     return _pen_barrel_cache["enabled"], _pen_barrel_cache["action"]
@@ -1610,23 +1743,25 @@ def build_tools(specs):
         except Exception:
             gain = SCROLL_GAIN
         hold_mod = t.get("hold_mod")
-        out.append({
-            "name": name,
-            "icon": str(t.get("icon", "")),
-            "detent": max(1, detent),
-            "mag": bool(t.get("magnitude", False)),
-            "continuous": bool(t.get("continuous", False)),
-            "terminal_aware": bool(t.get("terminal_aware", False)),
-            "axis_toggle": bool(t.get("axis_toggle", False)),
-            "alt": build_alt(t.get("alt")),
-            "gain": gain,
-            "invert": bool(t.get("invert", False)),
-            "hold_mod": hold_mod if isinstance(hold_mod, str) and hold_mod else None,
-            "cw": make_action(t.get("cw")),
-            "ccw": make_action(t.get("ccw")),
-            "click": make_action(click_spec),
-            "click_label": label or "\u2014",
-        })
+        out.append(
+            {
+                "name": name,
+                "icon": str(t.get("icon", "")),
+                "detent": max(1, detent),
+                "mag": bool(t.get("magnitude", False)),
+                "continuous": bool(t.get("continuous", False)),
+                "terminal_aware": bool(t.get("terminal_aware", False)),
+                "axis_toggle": bool(t.get("axis_toggle", False)),
+                "alt": build_alt(t.get("alt")),
+                "gain": gain,
+                "invert": bool(t.get("invert", False)),
+                "hold_mod": hold_mod if isinstance(hold_mod, str) and hold_mod else None,
+                "cw": make_action(t.get("cw")),
+                "ccw": make_action(t.get("ccw")),
+                "click": make_action(click_spec),
+                "click_label": label or "\u2014",
+            }
+        )
     if not out:
         log("no usable tools in config; falling back to the built-in set")
         return build_tools(DEFAULT_TOOLS)
@@ -1651,26 +1786,47 @@ def write_tool_manifest():
         log(f"could not write tool manifest ({exc})")
     # Same idea for the click gestures: the picker lists these, never hardcodes them.
     try:
-        with open(os.path.join(os.path.dirname(CONFIG_PATH), "clicks.json"), "w",
-                  encoding="utf-8") as f:
-            json.dump({"defaults": CLICK_DEFAULTS,
-                       "actions": [{"name": n, "label": l, "description": d}
-                                   for n, l, d, _ in CLICK_ACTIONS]}, f, indent=2)
+        with open(
+            os.path.join(os.path.dirname(CONFIG_PATH), "clicks.json"), "w", encoding="utf-8"
+        ) as f:
+            json.dump(
+                {
+                    "defaults": CLICK_DEFAULTS,
+                    "actions": [
+                        {"name": n, "label": lbl, "description": d} for n, lbl, d, _ in CLICK_ACTIONS
+                    ],
+                },
+                f,
+                indent=2,
+            )
     except OSError as exc:
         log(f"could not write click manifest ({exc})")
     # Same idea for the pen's two configurable buttons -- published together
     # so the settings window's Pen section never hardcodes either list.
     try:
-        with open(os.path.join(os.path.dirname(CONFIG_PATH), "pen_clicks.json"), "w",
-                  encoding="utf-8") as f:
-            json.dump({
-                "tail": {"defaults": PEN_TAIL_DEFAULTS,
-                         "actions": [{"name": n, "label": l, "description": d}
-                                     for n, l, d, _ in PEN_TAIL_ACTIONS]},
-                "barrel": {"default": PEN_BARREL_DEFAULT,
-                           "actions": [{"name": n, "label": l, "description": d}
-                                       for n, l, d, _ in PEN_BARREL_ACTIONS]},
-            }, f, indent=2)
+        with open(
+            os.path.join(os.path.dirname(CONFIG_PATH), "pen_clicks.json"), "w", encoding="utf-8"
+        ) as f:
+            json.dump(
+                {
+                    "tail": {
+                        "defaults": PEN_TAIL_DEFAULTS,
+                        "actions": [
+                            {"name": n, "label": lbl, "description": d}
+                            for n, lbl, d, _ in PEN_TAIL_ACTIONS
+                        ],
+                    },
+                    "barrel": {
+                        "default": PEN_BARREL_DEFAULT,
+                        "actions": [
+                            {"name": n, "label": lbl, "description": d}
+                            for n, lbl, d, _ in PEN_BARREL_ACTIONS
+                        ],
+                    },
+                },
+                f,
+                indent=2,
+            )
     except OSError as exc:
         log(f"could not write pen click manifest ({exc})")
 
@@ -1737,8 +1893,8 @@ class Dial:
         self.menu_pick = IDLE_TOOL
         self.down_at = None
         self.pending_click = None
-        self.pending_double = None   # second press seen; waiting to see if a third follows
-        self.double_down = False     # second press is still physically down
+        self.pending_double = None  # second press seen; waiting to see if a third follows
+        self.double_down = False  # second press is still physically down
         self.rot_events = 0
         self.last_rot_log = 0.0
         self.rot_hist = deque()
@@ -1811,8 +1967,10 @@ class Dial:
         self.rot_events += 1
         if now - self.last_rot_log > 2.0:
             self.last_rot_log = now
-            log(f"rotation alive: {self.rot_events} events, accum={self.accum:.0f}, "
-                f"tool={TOOLS[self.tool]['name']}, detent={self.detent()}")
+            log(
+                f"rotation alive: {self.rot_events} events, accum={self.accum:.0f}, "
+                f"tool={TOOLS[self.tool]['name']}, detent={self.detent()}"
+            )
         self.last_rot = now
         self.rot_hist.append((now, abs(value)))
         cutoff = now - SPEED_WINDOW
@@ -1853,7 +2011,7 @@ class Dial:
             sign = 1 if TOOLS[self.tool].get("invert") else -1
             if TOOLS[self.tool].get("terminal_aware") and scroll_mode() == "suppress":
                 return
-            POINTER.scroll(sign * value * gain)   # default: cw = scroll down
+            POINTER.scroll(sign * value * gain)  # default: cw = scroll down
             self.scroll_accum += value
             while abs(self.scroll_accum) >= SCROLL_TICK:
                 d = 1 if self.scroll_accum > 0 else -1
@@ -1869,8 +2027,7 @@ class Dial:
             self.accum -= d * step
             mag = self.magnitude()
             t = TOOLS[self.tool]
-            log(f"detent {t['name']} {'cw' if d > 0 else 'ccw'} mag={mag} "
-                f"speed={self.speed:.0f}")
+            log(f"detent {t['name']} {'cw' if d > 0 else 'ccw'} mag={mag} speed={self.speed:.0f}")
             if t.get("axis_toggle") and self.arrow_horizontal:
                 alt = t.get("alt")
                 if alt:
@@ -1914,7 +2071,7 @@ class Dial:
         fn(1)
         if name == "dictation":
             HAPTIC.fire(PAT_DICTATION, rate_limit=False)
-            notify("\U0001F399  Dictation", "voxtype toggled")
+            notify("\U0001f399  Dictation", "voxtype toggled")
         else:
             HAPTIC.fire(PAT_SELECT, rate_limit=False)
             notify(_CLICK_BY_NAME[name][1], f"{kind} click")
@@ -1975,13 +2132,17 @@ class Dial:
                     HAPTIC.fire(PAT_TICK, rate_limit=False)
                     alt = t.get("alt")
                     if alt:
-                        notify(alt["title"] if self.arrow_horizontal else alt["base_title"],
-                               alt["subtitle"] if self.arrow_horizontal else alt["base_subtitle"])
+                        notify(
+                            alt["title"] if self.arrow_horizontal else alt["base_title"],
+                            alt["subtitle"] if self.arrow_horizontal else alt["base_subtitle"],
+                        )
                     else:
-                        notify("↔  Arrow Keys" if self.arrow_horizontal
-                               else "↕  Arrow Keys",
-                               "horizontal (Left/Right)" if self.arrow_horizontal
-                               else "vertical (Up/Down)")
+                        notify(
+                            "↔  Arrow Keys" if self.arrow_horizontal else "↕  Arrow Keys",
+                            "horizontal (Left/Right)"
+                            if self.arrow_horizontal
+                            else "vertical (Up/Down)",
+                        )
                     self.last_action = now
                 else:
                     fn = t["click"]

@@ -1,0 +1,13 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["plugin"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP"]
+# B023: the one hit is a lambda that re.sub() calls immediately.
+ignore = ["B023"]
+
+[tool.ruff.lint.per-file-ignores]
+# The tests load the daemon by path, so imports follow the loader.
+"tests/test_dial.py" = ["E402"]
