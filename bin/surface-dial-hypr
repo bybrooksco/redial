@@ -34,6 +34,7 @@ Hardware: 3600 counts/revolution (0.1 deg/count), REL_DIAL + BTN_0.
 See Obsidian: Session Log (2026-08-28).
 """
 
+import argparse
 import atexit
 import os
 import fcntl
@@ -207,6 +208,8 @@ HOLD_S = 0.40  # press longer than this opens the menu
 # document configures the whole tool. Every key is optional; the defaults below
 # are what ships. Re-read each time the menu opens, so edits apply without a
 # restart. Env vars still win, for one-off experiments.
+__version__ = "1.0.0"
+
 CONFIG_PATH = os.path.join(
     os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
     "dial-radial",
@@ -1793,7 +1796,8 @@ def write_tool_manifest():
                 {
                     "defaults": CLICK_DEFAULTS,
                     "actions": [
-                        {"name": n, "label": lbl, "description": d} for n, lbl, d, _ in CLICK_ACTIONS
+                        {"name": n, "label": lbl, "description": d}
+                        for n, lbl, d, _ in CLICK_ACTIONS
                     ],
                 },
                 f,
@@ -1834,10 +1838,9 @@ def write_tool_manifest():
 def load_tools():
     """Tools from config if present, otherwise the built-in library.
 
-    Read once at startup, not per menu-open: the state machine holds a tool
-    index, so changing the set underneath it would leave the armed tool
-    pointing at the wrong entry. Editing tools needs a daemon restart, and the
-    log says as much.
+    Called at startup and again by Dial.maybe_reload_tools() when the config
+    file changes. The swap only happens while the dial is idle, because the
+    state machine holds a tool index that must not shift mid-gesture.
 
     Two ways a config can choose tools, checked in this order:
       "tools"        - a full replacement tool list (specs, not names) -- for
@@ -1876,9 +1879,27 @@ def load_tools():
     return build_tools(TOOL_LIBRARY)
 
 
+def parse_args(argv=None):
+    ap = argparse.ArgumentParser(
+        prog="surface-dial-hypr",
+        description="Surface Dial and Surface Pen control daemon for Hyprland/Omarchy.",
+        epilog=f"Config: {CONFIG_PATH}. Docs: plugin/dial.radial/README.md",
+    )
+    ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    return ap.parse_args(argv)
+
+
+if __name__ == "__main__":
+    parse_args()  # --help/--version exit here, before any side effects
+
 write_tool_manifest()
 TOOLS = load_tools()
 IDLE_TOOL = 0
+_tools_state = {"mtime": None}
+try:
+    _tools_state["mtime"] = os.stat(CONFIG_PATH).st_mtime_ns
+except OSError:
+    pass
 
 
 class Dial:
@@ -2100,7 +2121,29 @@ class Dial:
             return
         self.pending_click = now + DOUBLE_S
 
+    def maybe_reload_tools(self, now):
+        """Apply an edited tool list without a restart, only while idle."""
+        if self.menu or self.down_at is not None or self.double_down:
+            return
+        if self.pending_click is not None or self.pending_double is not None:
+            return
+        try:
+            mtime = os.stat(CONFIG_PATH).st_mtime_ns
+        except OSError:
+            mtime = None
+        if mtime == _tools_state["mtime"]:
+            return
+        _tools_state["mtime"] = mtime
+        new = load_tools()
+        if [t["name"] for t in new] == [t["name"] for t in TOOLS]:
+            return
+        self._arm(IDLE_TOOL, now)  # release any held modifier before the swap
+        TOOLS[:] = new
+        self.tool = IDLE_TOOL
+        log(f"tool list reloaded: {', '.join(t['name'] for t in TOOLS)}")
+
     def tick(self, now):
+        self.maybe_reload_tools(now)
         timeout = None
 
         if self.down_at is not None and not self.menu:

@@ -169,9 +169,9 @@ The tool set is data, not code, and lives in the daemon's `TOOL_LIBRARY`
 
 Window Size and Brightness are per-machine in practice: list them in `active_tools`
 where they make sense (Brightness needs a backlight; with none it logs once and does
-nothing). The tool set is read once at daemon start, because the running state
-machine holds a tool index — changing which tools are active needs a daemon restart,
-and the log says what it loaded.
+nothing). Changing which tools are active applies live: the daemon reloads the
+list the next time the dial is idle (never mid-gesture, because the state machine holds a
+tool index) and re-arms the default tool. The log says what it loaded.
 
 Two ways to choose tools in `config.json`, checked in this order:
 
@@ -186,7 +186,7 @@ Pick and reorder from the built-in library by name — this is what the
 isn't the bar on machines running Quickshell Rise anyway (it hides the stock bar). So the
 button is a Rise widget instead -- group `G19`, off by default, switched on under the
 control panel's WIDGETS grid. Left-click opens this tool-settings window (same as the
-hotkey); right-click restarts the dial daemon, which is what applies a changed tool list.
+hotkey); right-click restarts the dial daemon.
 It is installed by `surface-dial-rise-widget` (the kit installer and `surface-dial-setup`
 both run it), which patches Rise's V2 files with exact-match edits and refuses to write
 anything if they don't match. Its status line comes from `surface-dial-bar`.

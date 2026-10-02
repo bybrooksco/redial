@@ -444,5 +444,42 @@ class MenuPositionAlignment(unittest.TestCase):
                 )
 
 
+class LiveToolReload(Base):
+    def setUp(self):
+        super().setUp()
+        self.saved = list(m.TOOLS)
+        m._tools_state["mtime"] = None
+        self.addCleanup(lambda: (m.TOOLS.__setitem__(slice(None), self.saved)))
+
+    def write_active(self, names):
+        time.sleep(0.005)  # distinct mtime
+        with open(self.cfg, "w") as f:
+            json.dump({"active_tools": names}, f)
+
+    def test_idle_dial_picks_up_new_tool_list(self):
+        self.write_active(["Volume", "Zoom"])
+        d = m.Dial()
+        d.tool = 1
+        d.tick(0.0)
+        self.assertEqual([t["name"] for t in m.TOOLS], ["Volume", "Zoom"])
+        self.assertEqual(d.tool, m.IDLE_TOOL)
+
+    def test_no_swap_while_a_gesture_is_in_flight(self):
+        self.write_active(["Volume", "Zoom"])
+        before = [t["name"] for t in m.TOOLS]
+        d = m.Dial()
+        d.on_press(0.0)  # finger down, menu not open yet
+        d.maybe_reload_tools(0.01)
+        self.assertEqual([t["name"] for t in m.TOOLS], before)
+        d.on_release(0.05)
+
+    def test_unchanged_tool_list_does_not_disturb_the_armed_tool(self):
+        self.write_active([t["name"] for t in m.TOOLS])
+        d = m.Dial()
+        d.tool = 2
+        d.tick(0.0)
+        self.assertEqual(d.tool, 2)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

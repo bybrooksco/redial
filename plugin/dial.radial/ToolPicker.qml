@@ -26,10 +26,8 @@ import qs.Ui
 //                  colours, dial/deck geometry -- is read whole and written
 //                  back untouched.
 //
-// The daemon reads tools once at startup (see load_tools() there), so an
-// active_tools change here needs the dial daemon restarted to take effect --
-// deliberately scoped out for now, see the session note where this was
-// built: a manual restart-to-test step was called a fine place to leave it.
+// An active_tools change here is picked up live by the daemon the next time
+// the dial is idle (see Dial.maybe_reload_tools there) -- no restart.
 // anchor has no such lag: DialMenu.qml's Settings watches config.json live
 // (see Settings.qml), so an anchor click here is written and takes effect
 // immediately, with no Save step and no restart -- it isn't state the

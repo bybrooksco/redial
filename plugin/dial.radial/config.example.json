@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy to ~/.config/dial-radial/config.json. Every key is optional; anything omitted uses the default shown here. Appearance keys are watched and apply live; 'tools' and 'pen' are read once at daemon start.",
+  "_comment": "Copy to ~/.config/dial-radial/config.json. Every key is optional; anything omitted uses the default shown here. Appearance keys are watched and apply live; 'active_tools', 'tools' and the pen settings apply live too, with no restart.",
   "_layout": "dial | deck | carousel | toast. dial is the circular instrument (see 'face' below for which one); deck and carousel are both horizontal card rows (deck: dense, original; carousel: fewer details, selected card simply larger); toast is a single pill plus a dot strip, the smallest footprint. All four are pickable live from the settings window's Appearance section.",
   "layout": "dial",
   "anchor": "bottom",
@@ -37,7 +37,7 @@
     "gap": 14
   },
   "pen": {
-    "_comment": "Surface Pen support shares this daemon. Harmless with no pen attached; set false for a dial-only install. tail_clicks and barrel apply live -- no daemon restart needed, unlike active_tools above.",
+    "_comment": "Surface Pen support shares this daemon. Harmless with no pen attached; set false for a dial-only install. tail_clicks and barrel apply live -- no daemon restart needed.",
     "enabled": true,
     "tail_clicks": {
       "_comment": "single | double | hold -- the tail button's firmware only reports these three events, so there's no real triple-click to configure. Action names come from pen_clicks.json (published by the daemon), same idea as the dial's 'clicks' above. Defaults shown.",
