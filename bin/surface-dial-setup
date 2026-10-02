@@ -52,7 +52,7 @@ if [[ -f "$UDEV_RULE_PATH" ]] && grep -q "045E:091B" "$UDEV_RULE_PATH"; then
 else
     bad "udev rule missing or doesn't match ($UDEV_RULE_PATH)"
     if confirm "Install it now (needs sudo)?"; then
-        sudo tee "$UDEV_RULE_PATH" >/dev/null <<'EOF'
+        if sudo tee "$UDEV_RULE_PATH" >/dev/null <<'EOF'
 # Surface Dial (045e:091b)
 #
 # The dial arrives over Bluetooth LE, so it is a virtual `uhid` device with no
@@ -68,7 +68,7 @@ KERNEL=="hidraw*", KERNELS=="0005:045E:091B.*", MODE="0660", GROUP="input"
 # follows the cursor and reaches terminal scrollback, unlike arrow keys).
 KERNEL=="uinput", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"
 EOF
-        if [[ $? -eq 0 ]]; then
+        then
             sudo udevadm control --reload-rules && sudo udevadm trigger
             ok "udev rule installed and reloaded"
         else

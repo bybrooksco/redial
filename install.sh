@@ -45,17 +45,21 @@ else
     echo "         sudo pacman -S --needed playerctl"
     confirm "Run that now?" && sudo pacman -S --needed playerctl
 fi
+# have CMD OK-TEXT WARN-TEXT -- report whether an optional tool is installed.
+have() {
+    if command -v "$1" >/dev/null; then ok "$2"; else warn "$3"; fi
+}
 for b in wtype wpctl hyprctl bluetoothctl notify-send omarchy-shell; do
-    command -v "$b" >/dev/null && ok "$b" || warn "$b not found -- the daemon needs it"
+    have "$b" "$b" "$b not found -- the daemon needs it"
 done
-command -v dbus-monitor >/dev/null && ok "dbus-monitor (Bluetooth auto-recovery on resume)" \
-    || warn "dbus-monitor not found -- the dial won't auto-reconnect after suspend/resume (everything else works)"
-command -v voxtype >/dev/null && ok "voxtype (double-click dictation)" \
-    || warn "voxtype not found -- double-click dictation will do nothing"
-command -v brightnessctl >/dev/null && ok "brightnessctl (Brightness tool)" \
-    || warn "brightnessctl not found -- the Brightness tool will do nothing"
-command -v jq >/dev/null && ok "jq (bar button status line)" \
-    || warn "jq not found -- the bar button loses its click summary (everything else works)"
+have dbus-monitor "dbus-monitor (Bluetooth auto-recovery on resume)" \
+    "dbus-monitor not found -- the dial won't auto-reconnect after suspend/resume (everything else works)"
+have voxtype "voxtype (double-click dictation)" \
+    "voxtype not found -- double-click dictation will do nothing"
+have brightnessctl "brightnessctl (Brightness tool)" \
+    "brightnessctl not found -- the Brightness tool will do nothing"
+have jq "jq (bar button status line)" \
+    "jq not found -- the bar button loses its click summary (everything else works)"
 
 echo
 echo "-- 2. Daemon + setup script -> ~/.local/bin --"
@@ -136,7 +140,11 @@ if [[ -f "$HOME/.config/quickshell/bar/variants/V2/BarSlot.qml" ]]; then
     if "$RISE_TOOL" --check; then
         skip "widget already in the Rise bar"
     elif confirm "Add the Surface Dial widget to the Rise bar (patches its V2 files, restarts the bar for a few seconds; switch it on afterwards in the control panel -> WIDGETS)?"; then
-        "$RISE_TOOL" --install && ok "widget installed" || warn "widget install failed -- nothing was left half-applied; see the message above"
+        if "$RISE_TOOL" --install; then
+            ok "widget installed"
+        else
+            warn "widget install failed -- nothing was left half-applied; see the message above"
+        fi
     fi
 else
     skip "no Quickshell Rise bar here -- tool settings stay on SUPER+SHIFT+CTRL+D"

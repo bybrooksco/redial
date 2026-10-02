@@ -7,7 +7,7 @@ timeout 50 bluetoothctl --timeout 45 scan on >/dev/null 2>&1 &
 SCAN_PID=$!
 
 MAC=""
-for i in $(seq 1 45); do
+for _ in $(seq 1 45); do
   MAC=$(bluetoothctl devices 2>/dev/null | grep -i "Surface Dial" | awk '{print $2}' | head -1)
   [ -n "$MAC" ] && break
   sleep 1
