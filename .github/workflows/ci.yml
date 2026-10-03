@@ -14,9 +14,9 @@ jobs:
       - run: pacman -Syu --noconfirm --needed git python ruff shellcheck qt6-declarative
       - uses: actions/checkout@v4
       - name: Python lint
-        run: ruff check bin/surface-dial-hypr bin/surface-dial-rise-widget tests
+        run: ruff check bin/surface-dial-hypr bin/surface-dial-rise-widget scripts/add-menu-entry.py tests
       - name: Python format
-        run: ruff format --check bin/surface-dial-hypr bin/surface-dial-rise-widget tests
+        run: ruff format --check bin/surface-dial-hypr bin/surface-dial-rise-widget scripts/add-menu-entry.py tests
       - name: Shell lint
         run: shellcheck install.sh bin/surface-dial-setup bin/surface-dial-bar scripts/pair-dial.sh
       - name: Tests

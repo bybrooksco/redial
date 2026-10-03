@@ -13,6 +13,10 @@ versions follow [Semantic Versioning](https://semver.org/).
 - `SECURITY.md`, `CONTRIBUTING.md`, issue templates, `.editorconfig`.
 
 ### Changed
+- Installs with `omarchy plugin add <git-url>`: a root `manifest.json` makes the repo a plugin Omarchy accepts, without moving any files.
+- `install.sh` shows its plan and asks once (about two prompts where it used to ask eight in the same environment), uses `omarchy-pkg-add`, and recognises the `omarchy plugin add` layout.
+- Settings open from the Omarchy menu (Setup > Surface Dial) instead of a `SUPER+SHIFT+CTRL+D` chord. Bind `omarchy-shell dialtools toggle` yourself if you want a key.
+- On-screen messages use `omarchy-notification-send` where available (`notify-send` stays as a fallback).
 - The dial's input loop no longer blocks on subprocesses: tool actions run on an ordered worker, and focused-window lookups use Hyprland's socket instead of spawning `hyprctl` (3.6 ms to 0.03 ms per lookup).
 - Rotation speed uses the kernel's event timestamps, so a stall can't be mistaken for a fast spin.
 - A failing tool action is logged instead of crashing the daemon.

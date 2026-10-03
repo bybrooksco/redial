@@ -6,8 +6,13 @@
 # session's env for `omarchy-shell`, and it asks for sudo itself -- nothing
 # here is ever run with sudo on your behalf).
 #
-# Safe to re-run. Every change is behind its own y/N prompt (or pass -y for
-# all), and anything it would overwrite is copied to
+# The shortest path on Omarchy:
+#     omarchy plugin add https://github.com/<you>/surface-dial.git --enable
+#     ~/.config/omarchy/plugins/dial.radial/install.sh
+#
+# Safe to re-run. It shows what it will do and asks once; the steps that restart the
+# shell, use sudo, or touch another project's files are asked about separately. Pass -y to
+# accept everything. Anything it would overwrite is copied to
 # ~/.local/share/dial-kit-backups/<timestamp>/ first.
 set -uo pipefail
 
@@ -37,21 +42,49 @@ echo "== Surface Dial install ($(hostname), $STAMP) =="
 echo "   repo: $R"
 echo
 
+# Installed with `omarchy plugin add`? Then this checkout already IS the plugin folder.
+PLUGIN_HOME="$HOME/.config/omarchy/plugins/dial.radial"
+IN_PLUGIN_DIR=0
+[[ -d "$PLUGIN_HOME" && "$(realpath "$R")" == "$(realpath "$PLUGIN_HOME")" ]] && IN_PLUGIN_DIR=1
+
+cat <<PLAN
+For your user only, no sudo:
+  * the daemon and helper scripts      -> ~/.local/bin
+  * the dial.radial plugin             -> ~/.config/omarchy/plugins (already there if you used 'omarchy plugin add')
+  * start the daemon at login          -> one line in ~/.config/hypr/autostart.lua
+  * a "Surface Dial" menu entry        -> Omarchy menu > Setup
+Asked about separately: enabling the plugin (restarts the shell for a few seconds), the udev
+rule and 'input' group (sudo), and the Rise bar widget if you use that bar.
+Anything overwritten is copied to $BACKUP first.
+
+PLAN
+confirm "Go ahead?" || { echo "Nothing changed."; exit 0; }
+echo
+
 echo "-- 1. Dependencies --"
 if command -v playerctl >/dev/null; then
     ok "playerctl present (Media tool)"
 else
     warn "playerctl missing -- the Media tool needs it (everything else works without)"
-    echo "         sudo pacman -S --needed playerctl"
-    confirm "Run that now?" && sudo pacman -S --needed playerctl
+    if command -v omarchy-pkg-add >/dev/null; then
+        confirm "Install it now (omarchy-pkg-add playerctl)?" && omarchy-pkg-add playerctl
+    else
+        confirm "Install it now (sudo pacman -S --needed playerctl)?" && sudo pacman -S --needed playerctl
+    fi
 fi
 # have CMD OK-TEXT WARN-TEXT -- report whether an optional tool is installed.
 have() {
     if command -v "$1" >/dev/null; then ok "$2"; else warn "$3"; fi
 }
-for b in wtype wpctl hyprctl bluetoothctl notify-send omarchy-shell; do
+for b in wtype wpctl hyprctl bluetoothctl omarchy-shell; do
     have "$b" "$b" "$b not found -- the daemon needs it"
 done
+if command -v omarchy-notification-send >/dev/null; then
+    ok "omarchy-notification-send (on-screen messages)"
+else
+    have notify-send "notify-send (on-screen messages)" \
+        "no notifier found -- the dial's on-screen messages won't show (everything else works)"
+fi
 have dbus-monitor "dbus-monitor (Bluetooth auto-recovery on resume)" \
     "dbus-monitor not found -- the dial won't auto-reconnect after suspend/resume (everything else works)"
 have voxtype "voxtype (double-click dictation)" \
@@ -67,7 +100,7 @@ mkdir -p "$HOME/.local/bin"
 for f in surface-dial-hypr surface-dial-setup surface-dial-bar surface-dial-rise-widget; do
     if cmp -s "$R/bin/$f" "$HOME/.local/bin/$f"; then
         skip "$f already identical"
-    elif confirm "Install $f?"; then
+    else
         backup "$HOME/.local/bin/$f"
         install -m 755 "$R/bin/$f" "$HOME/.local/bin/$f" && ok "$f installed"
     fi
@@ -75,10 +108,12 @@ done
 
 echo
 echo "-- 3. dial.radial plugin -> ~/.config/omarchy/plugins --"
-DEST="$HOME/.config/omarchy/plugins/dial.radial"
-if [[ -d "$DEST" ]] && diff -rq "$R/plugin/dial.radial" "$DEST" >/dev/null 2>&1; then
+DEST="$PLUGIN_HOME"
+if (( IN_PLUGIN_DIR )); then
+    skip "this checkout is the plugin folder (added with 'omarchy plugin add'); update it with: omarchy plugin update dial.radial"
+elif [[ -d "$DEST" ]] && diff -rq "$R/plugin/dial.radial" "$DEST" >/dev/null 2>&1; then
     skip "plugin already identical"
-elif confirm "Install plugin?"; then
+else
     backup "$DEST"
     mkdir -p "$(dirname "$DEST")"
     cp -a "$R/plugin/dial.radial" "$DEST" && ok "plugin installed"
@@ -95,20 +130,24 @@ else
 fi
 
 echo
-echo "-- 5. Hyprland autostart + tool-picker keybinding --"
+echo "-- 5. Start at login + Omarchy menu entry --"
 AUTOSTART="$HOME/.config/hypr/autostart.lua"
-BINDINGS="$HOME/.config/hypr/bindings.lua"
 if grep -q 'launch_on_start("surface-dial-hypr")' "$AUTOSTART" 2>/dev/null; then
     skip "autostart entry already present"
-elif confirm "Append daemon autostart to $AUTOSTART?"; then
+else
     backup_copy="$BACKUP$AUTOSTART"; mkdir -p "$(dirname "$backup_copy")"; cp -a "$AUTOSTART" "$backup_copy" 2>/dev/null
     cat "$R/config/autostart.snippet.lua" >> "$AUTOSTART" && ok "autostart added"
 fi
-if grep -q 'dialtools toggle' "$BINDINGS" 2>/dev/null; then
-    skip "picker keybinding already present"
-elif confirm "Append SUPER+SHIFT+CTRL+D picker binding to $BINDINGS?"; then
-    backup_copy="$BACKUP$BINDINGS"; mkdir -p "$(dirname "$backup_copy")"; cp -a "$BINDINGS" "$backup_copy" 2>/dev/null
-    cat "$R/config/bindings.snippet.lua" >> "$BINDINGS" && ok "binding added"
+MENU_EXT="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
+if grep -q '"setup.surface-dial"' "$MENU_EXT" 2>/dev/null; then
+    skip "menu entry already present"
+else
+    backup_copy="$BACKUP$MENU_EXT"; mkdir -p "$(dirname "$backup_copy")"; cp -a "$MENU_EXT" "$backup_copy" 2>/dev/null
+    if python3 "$R/scripts/add-menu-entry.py" "$MENU_EXT"; then
+        ok "added Setup > Surface Dial to the Omarchy menu"
+    else
+        warn "could not edit $MENU_EXT -- your file was left untouched; open settings with: omarchy-shell dialtools toggle"
+    fi
 fi
 
 echo
@@ -147,7 +186,7 @@ if [[ -f "$HOME/.config/quickshell/bar/variants/V2/BarSlot.qml" ]]; then
         fi
     fi
 else
-    skip "no Quickshell Rise bar here -- tool settings stay on SUPER+SHIFT+CTRL+D"
+    skip "no Quickshell Rise bar here -- open settings from the Omarchy menu: Setup > Surface Dial"
 fi
 
 echo
@@ -174,7 +213,8 @@ echo "-- 8. Doctor report --"
 
 cat <<EOF
 
-== Done. Remaining by hand ==
+== Done. Open the settings: Omarchy menu (SUPER+SPACE) > Setup > Surface Dial ==
+Remaining by hand:
   * If the 'input' group was just added: log out/in (or reboot) FIRST.
   * Pair the dial: hold its button ~5-7s (LED flashes), then run
         bash $R/scripts/pair-dial.sh

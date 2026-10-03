@@ -636,5 +636,172 @@ class EventClock(unittest.TestCase):
         self.assertEqual(m.event_time(10, 0, 100.0), 100.0)
 
 
+class Notify(unittest.TestCase):
+    """notify() prefers Omarchy's notifier, replaces in place, and falls back to notify-send."""
+
+    def setUp(self):
+        self.calls = []
+        self.real_sub, self.real_shutil, self.real_run = m.subprocess, m.shutil, m.run
+        self.addCleanup(self.restore)
+        m._notify_id = None
+        m.run = lambda cmd: self.calls.append(("run", cmd))
+
+    def restore(self):
+        m.subprocess, m.shutil, m.run, m._notify_id = (
+            self.real_sub,
+            self.real_shutil,
+            self.real_run,
+            None,
+        )
+
+    def stub(self, have_omarchy, reply="45\n"):
+        def fake(cmd, **kw):
+            self.calls.append(("sub", cmd))
+            return types.SimpleNamespace(stdout=reply, stderr="", returncode=0)
+
+        m.subprocess = types.SimpleNamespace(run=fake)
+        m.shutil = types.SimpleNamespace(which=lambda n: "/x" if have_omarchy else None)
+
+    def test_uses_omarchys_notifier(self):
+        self.stub(True)
+        m._notify_sync("Title", "Body")
+        kind, cmd = self.calls[0]
+        self.assertEqual((kind, cmd[0]), ("sub", "omarchy-notification-send"))
+        self.assertEqual(cmd[-2:], ["Title", "Body"])
+        self.assertNotIn("-r", cmd)
+
+    def test_second_message_replaces_the_first(self):
+        self.stub(True)
+        m._notify_sync("One")
+        m._notify_sync("Two")
+        first, second = self.calls[0][1], self.calls[1][1]
+        self.assertNotIn("-r", first)
+        self.assertEqual(second[second.index("-r") + 1], "45")
+
+    def test_falls_back_to_notify_send(self):
+        self.stub(False)
+        m._notify_sync("Title", "Body")
+        kind, cmd = self.calls[0]
+        self.assertEqual((kind, cmd[0]), ("run", "notify-send"))
+
+    def test_a_non_numeric_reply_is_not_kept_as_an_id(self):
+        self.stub(True, reply="oops\n")
+        m._notify_sync("One")
+        m._notify_sync("Two")
+        self.assertNotIn("-r", self.calls[1][1])
+
+
+class MenuEntry(unittest.TestCase):
+    """scripts/add-menu-entry.py edits the user's JSONC menu file without breaking it."""
+
+    @classmethod
+    def setUpClass(cls):
+        loader = importlib.machinery.SourceFileLoader(
+            "addmenu", os.path.join(HERE, "..", "scripts", "add-menu-entry.py")
+        )
+        cls.am = importlib.util.module_from_spec(importlib.util.spec_from_loader("addmenu", loader))
+        loader.exec_module(cls.am)
+
+    def inserted(self, text):
+        new = self.am.add_row(text)
+        self.assertIsNotNone(new)
+        return new, self.am.parse_jsonc(new)
+
+    def test_comment_only_file_like_the_stock_extension(self):
+        text = '{\n  // Extend the menu.\n  // "personal": {"icon":"x"},\n}\n'
+        new, doc = self.inserted(text)
+        self.assertEqual(list(doc), [self.am.ID])
+        self.assertIn("// Extend the menu.", new)  # the user's comments survive
+
+    def test_empty_object(self):
+        _, doc = self.inserted("{}")
+        self.assertIn(self.am.ID, doc)
+
+    def test_existing_entries_without_a_trailing_comma(self):
+        _, doc = self.inserted('{\n  "a": {"label":"A"}\n}\n')
+        self.assertEqual(sorted(doc), sorted(["a", self.am.ID]))
+
+    def test_existing_entries_with_a_trailing_comma(self):
+        _, doc = self.inserted('{\n  "a": {"label":"A"},\n}\n')
+        self.assertEqual(sorted(doc), sorted(["a", self.am.ID]))
+
+    def test_comma_goes_after_the_value_not_after_a_trailing_comment(self):
+        new, doc = self.inserted('{\n  "a": {"label":"A"} // keep me\n}\n')
+        self.assertEqual(sorted(doc), sorted(["a", self.am.ID]))
+        self.assertIn("// keep me", new)
+
+    def test_slashes_and_braces_inside_strings_are_not_comments_or_structure(self):
+        text = '{\n  "a": {"action":"open https://example.com/x } // not a comment"}\n}\n'
+        _, doc = self.inserted(text)
+        self.assertEqual(doc["a"]["action"], "open https://example.com/x } // not a comment")
+
+    def test_block_comment_before_the_closing_brace(self):
+        _, doc = self.inserted('{\n  "a": {"label":"A"}\n  /* later */\n}\n')
+        self.assertEqual(sorted(doc), sorted(["a", self.am.ID]))
+
+    def test_second_run_changes_nothing(self):
+        new, _ = self.inserted("{}")
+        self.assertIsNone(self.am.add_row(new))
+
+    def test_main_leaves_an_unparseable_file_untouched(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "menu.jsonc")
+        open(path, "w").write("[1, 2, 3]")
+        self.assertEqual(self.am.main(["x", path]), 1)
+        self.assertEqual(open(path).read(), "[1, 2, 3]")
+
+    def test_main_writes_a_valid_file_and_is_idempotent(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "ext", "menu.jsonc")  # parent dir does not exist yet
+        self.assertEqual(self.am.main(["x", path]), 0)
+        first = open(path).read()
+        self.assertIn(self.am.ID, self.am.parse_jsonc(first))
+        self.assertEqual(self.am.main(["x", path]), 0)
+        self.assertEqual(open(path).read(), first)
+
+
+class PluginManifest(unittest.TestCase):
+    """`omarchy plugin add <git-url>` needs a valid manifest.json at the repo root.
+
+    Mirrors the checks in Omarchy's own `omarchy-plugin-validate`, which CI can't run.
+    """
+
+    ROOT = os.path.abspath(os.path.join(HERE, ".."))
+
+    def manifest(self, *parts):
+        with open(os.path.join(self.ROOT, *parts, "manifest.json")) as fh:
+            return json.load(fh)
+
+    def test_root_manifest_satisfies_the_validator_rules(self):
+        mf = self.manifest()
+        self.assertEqual(mf["schemaVersion"], 1)
+        for field in ("id", "name", "version", "kinds", "entryPoints"):
+            self.assertIn(field, mf)
+        self.assertRegex(mf["id"], r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+        self.assertFalse(mf["id"].startswith("omarchy."))
+        self.assertTrue(mf["kinds"])
+        self.assertIn("panel", mf["entryPoints"])  # a "panel" kind needs a panel entry point
+        for ep in mf["entryPoints"].values():
+            self.assertFalse(ep.startswith("/") or ".." in ep, ep)
+            self.assertTrue(os.path.isfile(os.path.join(self.ROOT, ep)), f"missing {ep}")
+
+    def test_no_symlinks_anywhere_a_plugin_folder_would_have_them(self):
+        links = []
+        for base, dirs, files in os.walk(self.ROOT):
+            dirs[:] = [d for d in dirs if d != ".git"]
+            links += [f for f in dirs + files if os.path.islink(os.path.join(base, f))]
+        self.assertEqual(links, [])
+
+    def test_both_manifests_and_the_daemon_agree_on_identity_and_version(self):
+        root, nested = self.manifest(), self.manifest("plugin", "dial.radial")
+        self.assertEqual(root["id"], nested["id"])
+        self.assertEqual(root["version"], nested["version"])
+        self.assertEqual(root["version"], m.__version__)
+        self.assertTrue(
+            root["entryPoints"]["panel"].endswith(nested["entryPoints"]["panel"]),
+            "root entry point should point at the same QML file as the nested manifest",
+        )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

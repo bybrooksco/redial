@@ -51,7 +51,7 @@
       "action": "right_click"
     }
   },
-  "_active_tools": "Picks and orders a subset of the built-in tool library by name -- the normal way to configure which tools you get, and what the ToolPicker UI (SUPER+SHIFT+CTRL+D) writes. Example: [\"Volume\", \"Scroll\", \"Windows\", \"Workspaces\", \"Word Nav\", \"Zoom\", \"Media\"]. The full built-in library, for reference: Volume, Windows, Workspaces, Scroll, Undo, Zoom, Media, Word Nav, Arrow Keys, Window Size, Brightness.",
+  "_active_tools": "Picks and orders a subset of the built-in tool library by name -- the normal way to configure which tools you get, and what the ToolPicker UI (Omarchy menu > Setup > Surface Dial) writes. Example: [\"Volume\", \"Scroll\", \"Windows\", \"Workspaces\", \"Word Nav\", \"Zoom\", \"Media\"]. The full built-in library, for reference: Volume, Windows, Workspaces, Scroll, Undo, Zoom, Media, Word Nav, Arrow Keys, Window Size, Brightness.",
   "tools": [
     {
       "_comment": "The full override, for defining a custom tool the library can't express (or reordering/dropping tools by hand instead of via active_tools). Omitting 'tools' entirely uses active_tools if set, else the built-in set, which is what this list reproduces. detent = dial counts per step (3600 counts = one revolution). magnitude = let rotation speed scale the step size. 'tools' wins if both 'tools' and 'active_tools' are present.",
@@ -157,7 +157,7 @@
   "_anchor": "center | top | bottom | left | right | top-left | top-right | bottom-left | bottom-right. Honoured by both layouts.",
   "face": "classic",
   "size": "large",
-  "_size": "large | medium | small. Overall size of the dial menu: large is the original full size, medium is 0.75x, small is 0.55x. It shrinks toward the edge or corner 'anchor' pins it to. Also set from the settings window (SUPER+SHIFT+CTRL+D). Dial layout only.",
+  "_size": "large | medium | small. Overall size of the dial menu: large is the original full size, medium is 0.75x, small is 0.55x. It shrinks toward the edge or corner 'anchor' pins it to. Also set from the settings window (Omarchy menu > Setup > Surface Dial). Dial layout only.",
   "clicks": { "single": "tool", "double": "dictation", "triple": "enter" },
   "_clicks": "What single / double / triple click do. Options: tool (single only: the armed tool's own click), dictation, enter, escape, backspace, space, tab, mute, play_pause, next_track, prev_track, maximize, none. Read live -- no daemon restart. A double click waits 0.25 s for a possible third press unless triple is 'none'.",
   "_face": "classic | capsule | pie | gauge. Only read when layout is 'dial'. classic is the original instrument in a rectangular window: horizontal labels, concentric rings, and a callout column beside the dial. capsule puts the tools on radial pills around a round backing. pie is full-bleed game-menu-style wedges, no rings or callout. gauge lays tools across a 180-degree speedometer-style dome with a needle. The backing follows the face unless you set 'plate' yourself."

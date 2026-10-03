@@ -8,11 +8,14 @@ No build step. Clone, then:
 
 ```
 python3 tests/test_dial.py        # no dial or display needed
-ruff check . && ruff format --check .
+ruff check bin/surface-dial-hypr bin/surface-dial-rise-widget scripts/add-menu-entry.py tests
+ruff format --check bin/surface-dial-hypr bin/surface-dial-rise-widget scripts/add-menu-entry.py tests
 shellcheck install.sh bin/surface-dial-setup bin/surface-dial-bar scripts/pair-dial.sh
 ```
 
-Install `ruff` and `shellcheck` from your package manager or `pip`.
+These are exactly what CI runs. (`ruff check .` alone would skip the daemon: ruff only
+walks `.py` files, and `bin/surface-dial-hypr` has no extension.) Install `ruff` and
+`shellcheck` from your package manager or `pip`.
 
 ## Debugging
 

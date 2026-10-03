@@ -164,7 +164,7 @@ Item {
   }
 
   // Settings tab of the same shared window (bar widget left-click,
-  // SUPER+SHIFT+CTRL+D). Moved here from ToolPicker.qml when the two windows
+  // Omarchy menu > Setup > Surface Dial). Moved here from ToolPicker.qml when the two windows
   // merged (see docs/DESIGN.md#overlay-window).
   IpcHandler {
     target: "dialtools"

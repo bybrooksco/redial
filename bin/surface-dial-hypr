@@ -41,6 +41,7 @@ import queue
 import re
 from collections import deque
 import select
+import shutil
 import signal
 import socket
 import struct
@@ -623,7 +624,31 @@ MENU_UI = MenuUI()
 MENU_STREAM = MenuStream()
 
 
-def notify(title, body=""):
+_notify_id = None  # id of our last notification, so the next one replaces it in place
+
+
+def _notify_sync(title, body=""):
+    """Show a short on-screen message.
+
+    Uses Omarchy's own notifier (45 of its scripts do; `notify-send` is not in its base
+    packages), replacing the previous message so quick toggles don't stack. Falls back to
+    notify-send where Omarchy's isn't installed.
+    """
+    global _notify_id
+    if shutil.which("omarchy-notification-send"):
+        cmd = ["omarchy-notification-send", "--app-name", "Surface Dial", "-t", "1100", "-p"]
+        if _notify_id:
+            cmd += ["-r", _notify_id]
+        cmd += [title, body] if body else [title]
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        except Exception as exc:
+            log(f"omarchy-notification-send raised {exc}")
+            return
+        lines = p.stdout.strip().splitlines()
+        if p.returncode == 0 and lines and lines[-1].isdigit():
+            _notify_id = lines[-1]
+        return
     run(
         [
             "notify-send",
@@ -637,6 +662,10 @@ def notify(title, body=""):
             body,
         ]
     )
+
+
+def notify(title, body=""):
+    ACTIONS.submit(_notify_sync, title, body)
 
 
 # --------------------------------------------------------------------------

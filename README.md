@@ -28,19 +28,37 @@ This is an independent implementation and shares no code with it.
 - `tests/test_dial.py` — daemon regression suite. `python3 tests/test_dial.py`
   tests the copy in this repo; `DIAL_DAEMON=~/.local/bin/surface-dial-hypr
   python3 tests/test_dial.py` tests a live install.
-- `install.sh` — installs all of the above. Idempotent, confirms every step
-  (or pass `-y`), backs up anything it would overwrite.
+- `manifest.json` — makes this repo a plugin `omarchy plugin add` accepts.
+- `scripts/add-menu-entry.py` — adds Setup > Surface Dial to the Omarchy menu.
+- `install.sh` — installs all of the above. Idempotent, shows its plan and asks once
+  (plus separately for the shell restart, sudo steps and the Rise widget), and backs up
+  anything it would overwrite.
 
 ## Install
 
+On Omarchy, two commands (replace the URL with this repo's):
+
 ```
-bash install.sh
+omarchy plugin add https://github.com/<you>/surface-dial.git --enable
+~/.config/omarchy/plugins/dial.radial/install.sh
 ```
+
+The first is Omarchy's own plugin installer and puts the overlay in place. The second
+installs the daemon, starts it at login, adds **Setup > Surface Dial** to the Omarchy menu,
+and handles the permissions the dial needs. Update later with
+`omarchy plugin update dial.radial`.
+
+Or clone it anywhere and run `bash install.sh`, which does the same without
+`omarchy plugin add`.
 
 Run it inside your own Hyprland session — it needs that environment for
 `omarchy-shell`, and it asks for sudo itself only where it's actually needed
 (the udev rule, adding yourself to the `input` group). Nothing is ever run
-with sudo on your behalf silently.
+with sudo on your behalf silently. See `SECURITY.md` for what those permissions mean.
+
+Open the settings from the Omarchy menu (`SUPER+SPACE` > Setup > Surface Dial). To open
+them with a key instead, bind `omarchy-shell dialtools toggle` in
+`~/.config/hypr/bindings.lua`.
 
 Once it's running, see `plugin/dial.radial/README.md` for configuration —
 tool selection, click gestures (dial and pen), position/size, colors.

@@ -183,8 +183,9 @@ Two ways to choose tools in `config.json`, checked in this order:
     { "active_tools": ["Volume", "Zoom", "Scroll", "Undo"] }
 
 Pick and reorder from the built-in library by name — this is what the
-**tool picker** panel writes. Open it with `SUPER+SHIFT+CTRL+D`, or
-`omarchy-shell dialtools toggle` directly.
+**tool picker** panel writes. Open it from the Omarchy menu
+(`SUPER+SPACE` > Setup > Surface Dial), or bind `omarchy-shell dialtools toggle` to any key
+you like in `~/.config/hypr/bindings.lua`.
 
 **Bar button.** A `bar-widget` entry point on this (local) plugin failed to load with a
 `File name case mismatch` QML warning (backed out 2026-09-16), and Omarchy's stock bar

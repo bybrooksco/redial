@@ -15,6 +15,7 @@ decision live here. Dates are when a decision was made or measured.
 - [Tool history](#tool-history)
 - [Click gestures](#click-gestures)
 - [Input loop and threads](#input-loop-and-threads)
+- [Fit with Omarchy](#fit-with-omarchy)
 - [Overlay window](#overlay-window)
 - [Config bindings](#config-bindings)
 - [Faces and layouts](#faces-and-layouts)
@@ -245,6 +246,58 @@ the input thread. Moving the overlay's open/highlight/close onto the worker is
 possible, but they would all have to move together or a close could overtake an
 open and leave the overlay stuck up.
 
+## Fit with Omarchy
+
+A review against Omarchy's own conventions (2026-10-03), checked against the shipped
+scripts on 4.0.4, not recalled from memory.
+
+Changed because of it:
+
+- **Installs like any other Omarchy plugin.** `omarchy plugin add <git-url>` clones the
+  whole repo into `~/.config/omarchy/plugins/<id>/` and requires `manifest.json` at the
+  repo root; this repo had it one folder down, so that command would have failed. A root
+  `manifest.json` now points its `panel` entry point at `plugin/dial.radial/DialMenu.qml`,
+  so nothing moved. Checked with Omarchy's `omarchy-plugin-validate`, with a real
+  `omarchy plugin add` in a scratch `HOME`, and by loading the nested layout in the
+  running shell (overlay, Gauge face and settings window all rendered). The older layout
+  (a copy of `plugin/dial.radial` alone) still validates and is what `install.sh` makes
+  when run from a plain clone. The validator forbids symlinks inside the plugin folder,
+  and a test keeps it that way. `omarchy plugin update` is a `git pull`, so updating the
+  plugin is one command too.
+- **Settings live in the Omarchy menu, not on a chord.** Omarchy has a menu-extension
+  file for exactly this. Its own default bindings use at most two modifiers plus ALT or
+  CTRL; the old `SUPER+SHIFT+CTRL+D` came from a personal hub mapping. `install.sh` now
+  adds Setup > Surface Dial through `scripts/add-menu-entry.py`, which edits the user's
+  JSONC file without disturbing it, checks that the result still parses, and leaves the
+  file untouched if not. A key is one line in `bindings.lua`, documented in the README.
+- **Notifications go through `omarchy-notification-send`**, which 45 of Omarchy's own
+  scripts use. `notify-send` is not in its base packages (it was only here as a
+  dependency of other apps), so on a stock install the daemon's messages could have
+  silently not appeared. The old call stays as a fallback. Replacing the previous
+  message in place is kept via the notifier's `-r` id.
+- **One consent, not ten.** `install.sh` shows its plan and asks once. The shell
+  restart, the sudo steps and the Rise widget (which patches another project's files)
+  are still asked about separately. Packages go through `omarchy-pkg-add`.
+- **No PKGBUILD.** The plan was an AUR package, but Omarchy's convention is git-based
+  plugins, and a system package can't write to `~/.config` anyway.
+
+Already matching: autostart uses `launch_on_start` (the same `uwsm-app` launch Omarchy
+uses at login); dictation calls `voxtype record toggle`, which is what Omarchy's own
+binding calls; all runtime dependencies except `playerctl`, `voxtype` and a notifier are
+in Omarchy's base package list.
+
+Left for the maintainer, because they are taste or need a decision:
+
+- **Names.** `surface-dial-hypr` leaks an implementation detail; Omarchy's own commands
+  read `omarchy-<noun>-<verb>`. Renaming breaks every existing install and autostart line.
+- **The Rise installer** patches another project's files by exact-match anchors. It works,
+  but it is the most fragile code here and serves a third-party bar. It belongs in
+  `contrib/`, and the stock bar should get a supported bar button instead (the
+  `bar-widget` kind failed to load in 2026-09; worth retesting on 4.0.x).
+- **Options.** Seven appearances and 160 lines of config are a lot to ship as a default.
+  Pick one default that looks native (the `omarchy` layout is the candidate) and let the
+  rest be discoverable.
+
 ## Overlay window
 
 `DialMenu.qml` owns one shared `PanelWindow` with a `mode` of `live` or
@@ -253,7 +306,7 @@ tool-rail/radial overlay, driven by the daemon while the dial turns, and must be
 fully click-through: the dial is the input device, so it can never eat a click
 meant for the window underneath. `settings` is `ToolPicker`'s content, with real
 mouse and keyboard input (IPC target `dialtools`, bar widget,
-`SUPER+SHIFT+CTRL+D`). `mode` picks the content and the mask/focus policy.
+Omarchy menu entry). `mode` picks the content and the mask/focus policy.
 
 The inactivity watchdog is scoped to the "popped up because you're using the
 dial" case. A manual peek at the Live tab from Settings should sit there until
