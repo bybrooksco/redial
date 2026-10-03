@@ -22,6 +22,9 @@ BACKUP="$HOME/.local/share/dial-kit-backups/$STAMP"
 ASSUME_YES=0
 [[ "${1:-}" == "-y" ]] && ASSUME_YES=1
 
+CHANGED_DAEMON=0   # a new daemon file was installed: the running process still has the old one
+CHANGED_PLUGIN=0   # new plugin files were copied: the shell keeps the old QML until restarted
+SHELL_RESTARTED=0
 ok()   { printf '  [OK]   %s\n' "$1"; }
 skip() { printf '  [SKIP] %s\n' "$1"; }
 warn() { printf '  [WARN] %s\n' "$1"; }
@@ -103,6 +106,7 @@ for f in surface-dial-hypr surface-dial-setup surface-dial-bar surface-dial-rise
     else
         backup "$HOME/.local/bin/$f"
         install -m 755 "$R/bin/$f" "$HOME/.local/bin/$f" && ok "$f installed"
+        [[ "$f" == surface-dial-hypr ]] && CHANGED_DAEMON=1
     fi
 done
 
@@ -116,7 +120,7 @@ elif [[ -d "$DEST" ]] && diff -rq "$R/plugin/dial.radial" "$DEST" >/dev/null 2>&
 else
     backup "$DEST"
     mkdir -p "$(dirname "$DEST")"
-    cp -a "$R/plugin/dial.radial" "$DEST" && ok "plugin installed"
+    cp -a "$R/plugin/dial.radial" "$DEST" && ok "plugin installed" && CHANGED_PLUGIN=1
 fi
 
 echo
@@ -158,6 +162,7 @@ if command -v omarchy-shell >/dev/null; then
     elif confirm "Enable dial.radial and restart the shell?"; then
         omarchy-shell shell setPluginEnabled dial.radial true
         omarchy-restart-shell 2>/dev/null || warn "omarchy-restart-shell failed -- run it by hand"
+        SHELL_RESTARTED=1
         # A freshly copied plugin is only discovered once the restarted shell is up,
         # and an enable sent before that is silently dropped. So keep asking until
         # the plugin actually answers.
@@ -205,6 +210,48 @@ elif getent group input | grep -qw "$USER"; then
 elif confirm "Add $USER to 'input' (sudo usermod -aG -- append, never bare -G)?"; then
     sudo usermod -aG input "$USER" \
         && warn "added. It only takes effect after you LOG OUT/IN or reboot -- do that before testing"
+fi
+
+echo
+echo "-- 7b. Load the new version --"
+# Replacing files does not change what is already running. The daemon is a long-lived process,
+# and the shell ignores a changed DialMenu.qml until it restarts (its own "reloading" message
+# notwithstanding), so an update would otherwise look installed but still run the old code.
+DAEMON_RE='^python3 .*surface-dial-hypr'
+start_daemon() {
+    # Start it the way Omarchy's autostart does (through Hyprland, with the session's real
+    # environment), not from this shell.
+    if command -v hyprctl >/dev/null; then
+        hyprctl dispatch "hl.dsp.exec_cmd(\"uwsm-app -- $HOME/.local/bin/surface-dial-hypr\")" >/dev/null
+    else
+        "$HOME/.local/bin/surface-dial-bar" restart
+    fi
+}
+if pgrep -f "$DAEMON_RE" >/dev/null; then
+    if (( CHANGED_DAEMON )); then
+        if confirm "The daemon changed. Restart it now (the dial is unresponsive for a second or two)?"; then
+            pkill -TERM -f "$DAEMON_RE"
+            for _ in $(seq 1 15); do pgrep -f "$DAEMON_RE" >/dev/null || break; sleep 0.2; done
+            start_daemon && ok "daemon restarted on the new version"
+        else
+            warn "daemon not restarted -- it is still running the old version until you do"
+        fi
+    else
+        skip "daemon already on this version"
+    fi
+elif confirm "The daemon is not running. Start it now (it also starts at login)?"; then
+    start_daemon && ok "daemon started"
+fi
+if (( CHANGED_PLUGIN && ! SHELL_RESTARTED )) && [[ "$(omarchy-shell dialmenu ping 2>/dev/null)" == "ok" ]]; then
+    if confirm "The plugin changed. Restart the shell (a few seconds) to load it?"; then
+        if omarchy-restart-shell 2>/dev/null; then
+            ok "shell restarted"
+        else
+            warn "omarchy-restart-shell failed -- run it by hand"
+        fi
+    else
+        warn "shell not restarted -- the overlay keeps the old version until you run: omarchy-restart-shell"
+    fi
 fi
 
 echo
