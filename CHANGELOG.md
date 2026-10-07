@@ -6,6 +6,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Status line** in the settings window: Connected (with battery %), asleep ("click it to wake it"), or "dial service is not running". The daemon writes `~/.config/dial-radial/status.json` every few seconds (state, battery from Bluetooth, version, heartbeat); a stale file means the daemon is down.
 - **Ignore small turns** (`deadzone`, Feel page): a tremor and bump filter. After a pause the dial must turn a set distance before anything registers; back-and-forth shake cancels out and never gets through, and a real turn is released whole. Off by default.
 - **Tap menu** (`menu_latch`, Feel page > Tool menu): the tool menu can be opened by holding until it appears and then letting go; turn to choose and click to select, with no need to hold while turning. An untouched tap menu closes by itself without changing the tool (`menu_timeout_ms`, 3 to 12 s). The default is unchanged (hold, turn, release).
 - Six optional tools, off by default so the ring is unchanged: **Focus** (Tab / Shift+Tab, click = Enter, so any dialog can be driven by the dial alone), **Tabs**, **Select**, **Pages**, **Tile Focus** and **Move Window**.

@@ -1272,6 +1272,63 @@ class DeadZone(Base):
         self.assertEqual(m.deadzone(), 0)
 
 
+class Status(Base):
+    """status.json: what the settings window shows about the dial."""
+
+    def test_parses_connected_and_battery(self):
+        text = "Device AA (public)\n\tConnected: yes\n\tBattery Percentage: 0x60 (96)\n"
+        self.assertEqual(m.parse_bluetooth_info(text), (True, 96))
+
+    def test_parses_disconnected_without_battery(self):
+        self.assertEqual(m.parse_bluetooth_info("\tConnected: no\n"), (False, None))
+
+    def test_unknown_when_the_output_is_empty(self):
+        self.assertEqual(m.parse_bluetooth_info(""), (None, None))
+
+    def test_battery_is_clamped(self):
+        self.assertEqual(m.parse_bluetooth_info("Battery Percentage: 0xff (255)")[1], 100)
+
+    def test_state_is_ready_when_attached(self):
+        self.assertEqual(m.build_status(True, False, None)["state"], "ready")
+
+    def test_state_is_asleep_when_bluetooth_says_disconnected(self):
+        self.assertEqual(m.build_status(False, False, None)["state"], "asleep")
+
+    def test_state_is_waiting_when_the_reason_is_unknown(self):
+        self.assertEqual(m.build_status(False, None, None)["state"], "waiting")
+        self.assertEqual(m.build_status(False, True, 50)["state"], "waiting")
+
+    def test_status_carries_version_pid_and_time(self):
+        doc = m.build_status(True, True, 80, now=1234.56)
+        self.assertEqual(doc["version"], m.__version__)
+        self.assertEqual(doc["pid"], os.getpid())
+        self.assertEqual(doc["updated"], 1234.6)
+        self.assertEqual(doc["battery"], 80)
+
+    def test_write_is_atomic_and_readable(self):
+        old = m.STATUS_PATH
+        m.STATUS_PATH = os.path.join(self.tmp, "sub", "status.json")
+        try:
+            m.write_status(m.build_status(True, True, 70))
+            with open(m.STATUS_PATH) as f:
+                self.assertEqual(json.load(f)["battery"], 70)
+            self.assertEqual(os.listdir(os.path.dirname(m.STATUS_PATH)), ["status.json"])
+        finally:
+            m.STATUS_PATH = old
+
+    def test_a_missing_bluetooth_tool_gives_unknown_not_a_crash(self):
+        real = m.subprocess.run
+
+        def boom(*a, **k):
+            raise FileNotFoundError("bluetoothctl")
+
+        m.subprocess.run = boom
+        try:
+            self.assertEqual(m.dial_bluetooth(), (None, None))
+        finally:
+            m.subprocess.run = real
+
+
 class NewControls(Base):
     """The tools and click actions added for driving a whole session from the dial."""
 

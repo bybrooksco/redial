@@ -12,6 +12,8 @@ import qs.Ui
 // ~/.config/dial-radial/:
 //   tools.json   - written by the daemon at startup: [{name, icon}] for every tool it can
 //                  build, so a tool added to TOOL_LIBRARY just shows up here.
+//   status.json  - written by the daemon every few seconds ({state, battery, updated, ...});
+//                  shown as the status line under the title.
 //   config.json  - the shared config. Keys this panel doesn't own are read whole and
 //                  written back untouched.
 //
@@ -419,6 +421,39 @@ Item {
     onFileChanged: reload()
   }
 
+  // Dial status, written by the daemon every few seconds (status.json). A file that is missing or
+  // has not been refreshed lately means the daemon itself is not running.
+  property var status: ({})
+  property real nowSec: Date.now() / 1000
+  readonly property string statusPath: dir + "/status.json"
+  readonly property bool statusFresh: status.updated !== undefined && nowSec - status.updated < 45
+  readonly property string statusText: {
+    if (!statusFresh) return "Dial service is not running. Run surface-dial-setup in a terminal."
+    var batt = (typeof status.battery === "number") ? "  ·  battery " + status.battery + "%" : ""
+    if (status.state === "ready") return "Connected" + batt
+    if (status.state === "asleep") return "Dial is asleep. Click it to wake it." + batt
+    return "Looking for the dial…"
+  }
+  readonly property bool statusGood: statusFresh && status.state === "ready"
+  Timer {
+    interval: 10000
+    repeat: true
+    running: root.visible
+    onTriggered: root.nowSec = Date.now() / 1000
+  }
+  FileView {
+    id: statusFile
+    path: root.statusPath
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      try { root.status = JSON.parse(text()) } catch (e) { root.status = ({}) }
+      root.nowSec = Date.now() / 1000
+    }
+    onLoadFailed: root.status = ({})
+    onFileChanged: reload()
+  }
+
   FileView {
     id: clicksFile
     path: root.clicksPath
@@ -542,6 +577,14 @@ Item {
               onClicked: root.liveRequested()
             }
           }
+        }
+        Text {
+          width: parent.width
+          text: root.statusText
+          wrapMode: Text.WordWrap
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          color: root.statusGood ? Util.alpha(root.cfg.lineColor, 0.7) : root.cfg.accentColor
         }
         Row {
           spacing: Style.space(18)

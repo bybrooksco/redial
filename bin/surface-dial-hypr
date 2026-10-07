@@ -2521,6 +2521,98 @@ def use_monotonic_event_clock(fd):
         return False
 
 
+STATUS_PATH = os.path.join(os.path.dirname(CONFIG_PATH), "status.json")
+STATUS_BEAT_S = 15  # rewrite at least this often; the settings window treats older as "not running"
+_status = {"attached": False}
+
+
+def parse_bluetooth_info(text):
+    """(connected, battery percent) from `bluetoothctl info` output; None where unknown."""
+    connected = None
+    battery = None
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("Connected:"):
+            connected = line.split(":", 1)[1].strip() == "yes"
+        elif line.startswith("Battery Percentage:"):
+            m = re.search(r"\((\d+)\)", line)
+            if m:
+                battery = max(0, min(100, int(m.group(1))))
+    return connected, battery
+
+
+def dial_bluetooth():
+    """(connected, battery) for the paired Surface Dial, or (None, None) if unavailable."""
+    try:
+        devs = subprocess.run(
+            ["bluetoothctl", "devices"], capture_output=True, text=True, timeout=3
+        ).stdout
+        addr = next(
+            (
+                ln.split()[1]
+                for ln in devs.splitlines()
+                if "Surface Dial" in ln and len(ln.split()) > 1
+            ),
+            None,
+        )
+        if not addr:
+            return None, None
+        info = subprocess.run(
+            ["bluetoothctl", "info", addr], capture_output=True, text=True, timeout=3
+        ).stdout
+        return parse_bluetooth_info(info)
+    except (OSError, subprocess.SubprocessError):
+        return None, None
+
+
+def build_status(attached, connected, battery, now=None):
+    """What the settings window shows about the dial.
+
+    `state` is "ready" (reading events), "asleep" (Bluetooth reports it disconnected) or
+    "waiting" (not reading events, reason unknown, for example no Bluetooth tool installed).
+    """
+    if attached:
+        state = "ready"
+    elif connected is False:
+        state = "asleep"
+    else:
+        state = "waiting"
+    return {
+        "version": __version__,
+        "pid": os.getpid(),
+        "updated": round(time.time() if now is None else now, 1),
+        "state": state,
+        "attached": bool(attached),
+        "bluetooth_connected": connected,
+        "battery": battery,
+    }
+
+
+def write_status(doc):
+    """Atomically write the status file. Best-effort: the dial works without it."""
+    tmp = f"{STATUS_PATH}.{os.getpid()}.tmp"
+    try:
+        os.makedirs(os.path.dirname(STATUS_PATH), exist_ok=True)
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(doc, f)
+        os.replace(tmp, STATUS_PATH)
+    except OSError as exc:
+        log(f"could not write status ({exc})")
+
+
+def status_loop(interval=5):
+    """Keep status.json current: on any change, and as a heartbeat otherwise."""
+    last_doc, last_at = None, 0.0
+    while True:
+        connected, battery = dial_bluetooth()
+        doc = build_status(_status["attached"], connected, battery)
+        key = {k: v for k, v in doc.items() if k != "updated"}
+        if key != last_doc or time.monotonic() - last_at >= STATUS_BEAT_S:
+            write_status(doc)
+            last_doc, last_at = key, time.monotonic()
+        time.sleep(interval)
+
+
 def pump(fh, dial):
     fd = fh.fileno()
     os.set_blocking(fd, False)
@@ -2563,6 +2655,7 @@ def main():
         threading.Thread(target=pen_button_watcher, daemon=True).start()
     else:
         log("pen support disabled by config")
+    threading.Thread(target=status_loop, daemon=True).start()
     dial = Dial()
     waiting = False
     while True:
@@ -2575,6 +2668,7 @@ def main():
             continue
         waiting = False
         log(f"attached to {path}")
+        _status["attached"] = True
         dial.reset_gestures()
         dial._arm(IDLE_TOOL, time.monotonic())
         dial.last_action = time.monotonic()
@@ -2583,6 +2677,7 @@ def main():
             pump(fh, dial)
         except OSError as exc:
             log(f"detached ({exc})")
+        _status["attached"] = False
         dial.reset_gestures()
         time.sleep(1)
 

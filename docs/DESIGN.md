@@ -418,6 +418,11 @@ because that is a binding off `configDoc`.
   startup, so the window never hardcodes a tool or action list. A tool added to
   the daemon's library just shows up. Keys the window doesn't own are read whole
   and written back untouched.
+- `status.json` is the one file written continuously: state, Bluetooth battery, version and a
+  timestamp, rewritten on any change and at least every 15 s. The window treats a file older than
+  45 s (or missing) as "the daemon is not running", so a dead daemon is visible without the
+  daemon having to say so. Battery comes from `bluetoothctl info`; where that tool is missing
+  the fields are null and the window simply omits them.
 - **Appearance** is one picker across all seven overlay options, though four are a
   `face` (still layout `dial`) and three are their own `layout`. It writes both
   keys together so a layout-only choice never leaves a stale `face` and vice
