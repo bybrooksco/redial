@@ -18,6 +18,7 @@ import importlib.util
 import json
 import os
 import re
+import struct
 import subprocess
 import tempfile
 import threading
@@ -1761,6 +1762,383 @@ class RestartScript(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("install.sh", r.stderr)
         self.assertEqual(calls, [])
+
+
+def ev_bytes(etype, code, value):
+    return struct.pack(m.EV_FORMAT, 0, 0, etype, code, value)
+
+
+class StopLoop(Exception):
+    """Raised from a stubbed sleep to end one of the daemon's endless reconnect loops."""
+
+
+class Fixture:
+    """Temporarily replace attributes on a module and put them back."""
+
+    def __init__(self, test):
+        self.test, self.saved = test, []
+
+    def set(self, obj, name, value):
+        self.saved.append((obj, name, getattr(obj, name)))
+        setattr(obj, name, value)
+        self.test.addCleanup(setattr, obj, name, self.saved[-1][2])
+
+
+def pipe_with(*events):
+    """A read-side file object holding the given events, then end-of-file."""
+    r, w = os.pipe()
+    for e in events:
+        os.write(w, ev_bytes(*e))
+    os.close(w)
+    return os.fdopen(r, "rb", buffering=0)
+
+
+class Pump(Base):
+    """pump: kernel events in, Dial calls out; returns at end of file and closes the device."""
+
+    class Rec:
+        def __init__(self):
+            self.calls = []
+
+        def tick(self, now):
+            return None
+
+        def on_rotate(self, v, now):
+            self.calls.append(("rot", v))
+
+        def on_press(self, now):
+            self.calls.append("down")
+
+        def on_release(self, now):
+            self.calls.append("up")
+
+    def test_events_become_dial_calls_in_order(self):
+        rec = self.Rec()
+        fh = pipe_with(
+            (m.EV_REL, m.REL_DIAL, 12),
+            (m.EV_KEY, m.BTN_0, 1),
+            (m.EV_KEY, m.BTN_0, 0),
+            (m.EV_REL, m.REL_DIAL, -3),
+        )
+        m.pump(fh, rec)
+        self.assertEqual(rec.calls, [("rot", 12), "down", "up", ("rot", -3)])
+        self.assertTrue(fh.closed)
+
+    def test_unrelated_events_are_ignored(self):
+        rec = self.Rec()
+        fh = pipe_with((m.EV_REL, 0x09, 5), (m.EV_KEY, 0x999, 1), (m.EV_KEY, m.BTN_0, 2))
+        m.pump(fh, rec)
+        self.assertEqual(rec.calls, [])
+
+    def test_a_short_read_ends_the_pump(self):
+        r, w = os.pipe()
+        os.write(w, b"abc")
+        os.close(w)
+        fh = os.fdopen(r, "rb", buffering=0)
+        m.pump(fh, self.Rec())
+        self.assertTrue(fh.closed)
+
+
+class DeviceDiscovery(Base):
+    DEVICES = (
+        "I: Bus=0003 Vendor=045e Product=091b Version=0108\n"
+        'N: Name="Surface Dial System Multi Axis"\n'
+        "H: Handlers=event7 \n\n"
+        "I: Bus=0003 Vendor=045e Product=0001 Version=0001\n"
+        'N: Name="Surface Pen Keyboard"\n'
+        "H: Handlers=sysrq kbd event9 leds \n\n"
+    )
+
+    def patch_devices(self, text):
+        import builtins
+        from unittest import mock
+
+        real = builtins.open
+
+        def fake(path, *a, **k):
+            if path == "/proc/bus/input/devices":
+                if text is None:
+                    raise OSError("gone")
+                import io
+
+                return io.StringIO(text)
+            return real(path, *a, **k)
+
+        p = mock.patch.object(builtins, "open", fake)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_finds_each_device_by_its_own_block(self):
+        self.patch_devices(self.DEVICES)
+        self.assertEqual(m.find_input("Surface Dial System Multi Axis"), "/dev/input/event7")
+        self.assertEqual(m.find_input("Surface Pen Keyboard"), "/dev/input/event9")
+
+    def test_unknown_name_and_unreadable_file_give_none(self):
+        self.patch_devices(self.DEVICES)
+        self.assertIsNone(m.find_input("Nope"))
+        self.patch_devices(None)
+        self.assertIsNone(m.find_input("Surface Dial System Multi Axis"))
+
+    def test_a_block_with_no_event_handler_is_skipped(self):
+        self.patch_devices('I: Bus=1\nN: Name="X"\nH: Handlers=sysrq kbd\n')
+        self.assertIsNone(m.find_input("X"))
+
+    def test_open_input_refuses_a_device_that_names_itself_differently(self):
+        fx = Fixture(self)
+        r, w = os.pipe()
+        os.close(w)
+        path = f"/proc/self/fd/{r}"
+        fx.set(m, "find_input", lambda name: path)
+        fx.set(m, "device_name", lambda fd: "Something Else")
+        self.assertEqual(m.open_input("Surface Dial System Multi Axis"), (None, None))
+        os.close(r)
+
+    def test_open_input_returns_the_device_when_the_name_matches(self):
+        fx = Fixture(self)
+        r, w = os.pipe()
+        os.close(w)
+        fx.set(m, "find_input", lambda name: f"/proc/self/fd/{r}")
+        fx.set(m, "device_name", lambda fd: "Surface Dial System Multi Axis")
+        fh, path = m.open_input("Surface Dial System Multi Axis")
+        self.assertIsNotNone(fh)
+        fh.close()
+        os.close(r)
+
+    def test_open_input_with_no_device_or_an_unopenable_path(self):
+        fx = Fixture(self)
+        fx.set(m, "find_input", lambda name: None)
+        self.assertEqual(m.open_input("x"), (None, None))
+        fx.set(m, "find_input", lambda name: "/nonexistent/event0")
+        self.assertEqual(m.open_input("x"), (None, None))
+
+    def test_device_name_of_a_non_device_is_empty(self):
+        r, w = os.pipe()
+        self.addCleanup(os.close, r)
+        self.addCleanup(os.close, w)
+        self.assertEqual(m.device_name(r), "")
+
+
+class PenWatchers(Base):
+    """pen_button_watcher and eraser_watcher: read loops that survive a device going away."""
+
+    def one_pass(self, fx, fh, watcher):
+        calls = []
+
+        def sleep(secs):
+            calls.append(secs)
+            raise StopLoop
+
+        fx.set(m, "open_input", lambda name: (fh, "/dev/test"))
+        fx.set(m.time, "sleep", sleep)
+        with self.assertRaises(StopLoop):
+            watcher()
+        return calls
+
+    def test_tail_button_press_fires_the_configured_action_once(self):
+        fx = Fixture(self)
+        fired = []
+        fx.set(m, "pen_tail_fn", lambda slot: lambda mag: fired.append(slot))
+        code, (label, slot) = next(iter(m.PEN_BUTTON.items()))
+        fh = pipe_with((m.EV_KEY, code, 1), (m.EV_KEY, code, 0))
+        self.one_pass(fx, fh, m.pen_button_watcher)
+        self.assertEqual(fired, [slot])  # release does nothing
+
+    def test_an_unbound_tail_slot_fires_nothing(self):
+        fx = Fixture(self)
+        fx.set(m, "pen_tail_fn", lambda slot: None)
+        code = next(iter(m.PEN_BUTTON))
+        fh = pipe_with((m.EV_KEY, code, 1))
+        self.one_pass(fx, fh, m.pen_button_watcher)  # must not raise
+
+    def test_unknown_keys_on_the_pen_keyboard_are_ignored(self):
+        fx = Fixture(self)
+        fired = []
+        fx.set(m, "pen_tail_fn", lambda slot: lambda mag: fired.append(slot))
+        fh = pipe_with((m.EV_KEY, 0x7FF, 1), (m.EV_REL, 0, 1))
+        self.one_pass(fx, fh, m.pen_button_watcher)
+        self.assertEqual(fired, [])
+
+    def test_no_pen_device_waits_and_retries(self):
+        fx = Fixture(self)
+        calls = []
+
+        def sleep(secs):
+            calls.append(secs)
+            raise StopLoop
+
+        fx.set(m, "open_input", lambda name: (None, None))
+        fx.set(m.time, "sleep", sleep)
+        with self.assertRaises(StopLoop):
+            m.pen_button_watcher()
+        with self.assertRaises(StopLoop):
+            m.eraser_watcher()
+        self.assertEqual(calls, [5, 5])
+
+    def test_eraser_watcher_feeds_events_to_the_state_machine(self):
+        fx = Fixture(self)
+        with open(self.cfg, "w") as f:
+            json.dump({}, f)
+        fx.set(m, "focused_class", lambda: "firefox")
+        fh = pipe_with(
+            (m.EV_KEY, m.BTN_TOOL_RUBBER, 1),
+            (m.EV_KEY, m.BTN_TOUCH, 1),
+            (m.EV_KEY, m.BTN_TOUCH, 0),
+        )
+        self.one_pass(fx, fh, m.eraser_watcher)
+        self.assertEqual(EVENTS, ["KEY:Escape"])
+
+
+class VirtualPointerWrites(Base):
+    """VirtualPointer emits the right uinput events (on a pipe instead of /dev/uinput)."""
+
+    def setUp(self):
+        super().setUp()
+        self.r, w = os.pipe()
+        self.vp = m.VirtualPointer()
+        self.vp.fd = w
+        self.addCleanup(os.close, self.r)
+
+    def events(self):
+        os.set_blocking(self.r, False)
+        out = []
+        while True:
+            try:
+                data = os.read(self.r, m.EV_SIZE)
+            except BlockingIOError:
+                break
+            if not data:
+                break
+            _, _, t, c, v = struct.unpack(m.EV_FORMAT, data)
+            out.append((t, c, v))
+        return out
+
+    def test_click_is_a_key_event_then_a_sync(self):
+        self.vp.click(m.VirtualPointer.BTN_LEFT, True)
+        self.assertEqual(
+            self.events(),
+            [(m.VirtualPointer.EV_KEY, m.VirtualPointer.BTN_LEFT, 1), (0, 0, 0)],
+        )
+
+    def test_scroll_emits_hi_res_and_a_coarse_notch_per_120_units(self):
+        self.vp.scroll(60)
+        first = self.events()
+        self.assertEqual(first[0], (2, m.VirtualPointer.REL_WHEEL_HI_RES, 60))
+        self.assertNotIn(m.VirtualPointer.REL_WHEEL, [c for _, c, _ in first])
+        self.vp.scroll(70)  # residual now 130 -> one coarse notch, 10 left over
+        second = self.events()
+        self.assertIn((2, m.VirtualPointer.REL_WHEEL, 1), second)
+        self.assertAlmostEqual(self.vp.residual, 10)
+
+    def test_negative_scroll_counts_notches_backwards(self):
+        self.vp.scroll(-250)
+        self.assertIn((2, m.VirtualPointer.REL_WHEEL, -2), self.events())
+
+    def test_a_failed_write_drops_the_device_so_it_is_recreated(self):
+        os.close(self.vp.fd)
+        self.vp.scroll(10)
+        self.assertIsNone(self.vp.fd)
+        self.vp.fd = os.open(os.devnull, os.O_RDONLY)  # restore something closable
+        self.addCleanup(os.close, self.vp.fd)
+
+    def test_no_uinput_means_scroll_is_disabled_quietly_and_warned_once(self):
+        fx = Fixture(self)
+        vp = m.VirtualPointer()
+
+        def deny(*a, **k):
+            raise PermissionError("no uinput")
+
+        fx.set(m.os, "open", deny)
+        vp.scroll(10)
+        vp.scroll(10)
+        self.assertTrue(vp.warned)
+        self.assertIsNone(vp.fd)
+
+
+class MainLoop(Base):
+    """main: attach, pump, detach, retry; with the pen and status threads switched off."""
+
+    def run_main(self, fx, opens):
+        seq = iter(opens)
+
+        def open_input(name):
+            nxt = next(seq)
+            return nxt if nxt is not None else (None, None)
+
+        def sleep(secs):
+            raise StopLoop
+
+        class NoThread:
+            def __init__(self, *a, **k):
+                pass
+
+            def start(self):
+                pass
+
+        with open(self.cfg, "w") as f:
+            json.dump({"pen": {"enabled": False}}, f)
+        fx.set(m, "open_input", open_input)
+        fx.set(m.time, "sleep", sleep)
+        fx.set(m.threading, "Thread", NoThread)
+        with self.assertRaises(StopLoop):
+            m.main()
+
+    def test_waiting_for_the_device_sets_nothing_attached(self):
+        fx = Fixture(self)
+        m._status["attached"] = False
+        self.run_main(fx, [None])
+        self.assertFalse(m._status["attached"])  # never claimed to be attached
+
+    def test_attach_pump_detach_marks_the_status_both_ways(self):
+        fx = Fixture(self)
+        seen = []
+        real_pump = m.pump
+
+        def pump(fh, dial):
+            seen.append(m._status["attached"])
+            real_pump(fh, dial)
+
+        fx.set(m, "pump", pump)
+        fh = pipe_with()
+        m._status["attached"] = False
+        self.run_main(fx, [(fh, "/dev/event7")])
+        self.assertEqual(seen, [True])  # attached while pumping
+        self.assertFalse(m._status["attached"])  # and cleared after
+
+
+class StatusLoop(Base):
+    def test_writes_on_first_pass_and_not_again_while_unchanged(self):
+        fx = Fixture(self)
+        writes, sleeps = [], []
+        fx.set(m, "dial_bluetooth", lambda: (True, 80))
+        fx.set(m, "write_status", lambda doc: writes.append(doc))
+
+        def sleep(secs):
+            sleeps.append(secs)
+            if len(sleeps) >= 3:
+                raise StopLoop
+
+        fx.set(m.time, "sleep", sleep)
+        with self.assertRaises(StopLoop):
+            m.status_loop(interval=0)
+        self.assertEqual(len(writes), 1)
+        self.assertEqual(writes[0]["battery"], 80)
+
+    def test_a_change_is_written_straight_away(self):
+        fx = Fixture(self)
+        writes, answers = [], iter([(True, 80), (True, 79), (True, 79)])
+        fx.set(m, "dial_bluetooth", lambda: next(answers))
+        fx.set(m, "write_status", lambda doc: writes.append(doc["battery"]))
+        n = []
+
+        def sleep(secs):
+            n.append(1)
+            if len(n) >= 3:
+                raise StopLoop
+
+        fx.set(m.time, "sleep", sleep)
+        with self.assertRaises(StopLoop):
+            m.status_loop(interval=0)
+        self.assertEqual(writes, [80, 79])
 
 
 class NewControls(Base):

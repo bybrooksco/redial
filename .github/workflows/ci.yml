@@ -22,7 +22,7 @@ jobs:
       - name: Tests (with a coverage floor)
         run: |
           coverage run --include=bin/surface-dial-hypr tests/test_dial.py
-          coverage report --fail-under=60
+          coverage report --fail-under=75
       - name: QML component tests
         run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml
       - name: QML lint (informational)

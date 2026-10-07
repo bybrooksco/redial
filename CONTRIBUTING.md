@@ -8,7 +8,7 @@ No build step. Clone, then:
 
 ```
 python3 tests/test_dial.py        # no dial or display needed
-coverage run --include=bin/surface-dial-hypr tests/test_dial.py && coverage report --fail-under=60   # CI's floor (currently 67%)
+coverage run --include=bin/surface-dial-hypr tests/test_dial.py && coverage report --fail-under=75   # CI's floor (currently 81%)
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml   # keyboard/accessibility of Pressable; headless (note: /usr/bin/qmltestrunner is the Qt 5 one)
 ruff check bin/surface-dial-hypr bin/surface-dial-rise-widget scripts/add-menu-entry.py tests
 ruff format --check bin/surface-dial-hypr bin/surface-dial-rise-widget scripts/add-menu-entry.py tests
