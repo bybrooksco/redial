@@ -107,7 +107,7 @@ Item {
     { title: "Coming back", body: "A tool you picked drops back to Volume after a few seconds without turning, so nothing stays armed by accident. Change how long on the Feel page." },
     { title: "Too jumpy or too slow", body: "Sensitivity changes how far you turn for each step. Ignore small turns filters out a bump or a tremor. Hold and double-click speed can both be relaxed." },
     { title: "Keyboard", body: "Tab moves between controls, Enter or Space presses one, Shift+Enter goes back through a list of choices, Escape closes this window." },
-    { title: "Something wrong?", body: "The line under the title says whether the dial is connected. If the dial service is not running, run surface-dial-setup in a terminal; it checks everything and says what to fix." }
+    { title: "Something wrong?", body: "The line under the title says whether the dial is connected. If it says the service is not running, press Restart dial service. If that does not help, run surface-dial-setup in a terminal; it checks everything and says what to fix." }
   ]
 
   // One labelled row of choice chips. `current` is the stored value; if it matches none of the
@@ -447,13 +447,19 @@ Item {
   readonly property string statusPath: dir + "/status.json"
   readonly property bool statusFresh: status.updated !== undefined && nowSec - status.updated < 45
   readonly property string statusText: {
-    if (!statusFresh) return "Dial service is not running. Run surface-dial-setup in a terminal."
+    if (!statusFresh) return "Dial service is not running. Press the button below to restart it."
     var batt = (typeof status.battery === "number") ? "  ·  battery " + status.battery + "%" : ""
     if (status.state === "ready") return "Connected" + batt
     if (status.state === "asleep") return "Dial is asleep. Click it to wake it." + batt
     return "Looking for the dial…"
   }
   readonly property bool statusGood: statusFresh && status.state === "ready"
+  // "Restart dial service": runs bin/surface-dial-restart (installed beside the daemon).
+  Process {
+    id: restartProc
+    command: [Quickshell.env("HOME") + "/.local/bin/surface-dial-restart"]
+  }
+  property bool introSeen: cfgValue("intro_seen", false) === true
   Timer {
     interval: 10000
     repeat: true
@@ -633,6 +639,92 @@ Item {
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           color: root.statusGood ? Util.alpha(root.cfg.lineColor, 0.7) : root.cfg.accentColor
+        }
+        Pressable {
+          visible: !root.statusFresh
+          label: "Restart the dial service"
+          ringColor: root.cfg.accentColor
+          ringWidth: Math.max(2, Style.space(2))
+          onActivated: restartProc.running = true
+          width: restartText.implicitWidth + Style.space(24)
+          height: Style.space(32)
+          radius: Style.space(6)
+          color: Util.alpha(root.cfg.lineColor, restartProc.running ? 0.04 : 0.1)
+          border.width: Math.max(1, Style.space(1.5))
+          border.color: root.cfg.accentColor
+          Text {
+            id: restartText
+            anchors.centerIn: parent
+            text: restartProc.running ? "Restarting…" : "Restart dial service"
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            color: root.cfg.lineColor
+          }
+        }
+
+        // First run: three lines on how the dial works, shown once on the Look page.
+        Rectangle {
+          visible: root.everLoadedConfig && !root.introSeen && root.page === "look"
+          width: parent.width
+          height: introCol.implicitHeight + Style.space(20)
+          radius: Style.space(8)
+          color: Util.alpha(root.cfg.accentColor, 0.12)
+          border.width: Math.max(1, Style.space(1.5))
+          border.color: root.cfg.accentColor
+          Column {
+            id: introCol
+            anchors.fill: parent
+            anchors.margins: Style.space(10)
+            spacing: Style.space(6)
+            Text {
+              width: parent.width
+              text: "Welcome. Turn the dial to change the volume. Hold its button to open the tool menu, turn to pick a tool, let go to choose it. Click, double-click and triple-click each do something you can change on the Feel page."
+              wrapMode: Text.WordWrap
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              color: root.cfg.lineColor
+            }
+            Row {
+              spacing: Style.space(8)
+              Pressable {
+                label: "Got it, hide this welcome"
+                ringColor: root.cfg.accentColor
+                ringWidth: Math.max(2, Style.space(2))
+                onActivated: root.setConfigKey("intro_seen", true)
+                width: gotItText.implicitWidth + Style.space(24)
+                height: Style.space(32)
+                radius: Style.space(6)
+                color: root.cfg.accentColor
+                Text {
+                  id: gotItText
+                  anchors.centerIn: parent
+                  text: "Got it"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  color: root.cfg.backgroundColor
+                }
+              }
+              Pressable {
+                label: "Show the Help page"
+                ringColor: root.cfg.accentColor
+                ringWidth: Math.max(2, Style.space(2))
+                onActivated: { root.setConfigKey("intro_seen", true); root.page = "help" }
+                width: helpText.implicitWidth + Style.space(24)
+                height: Style.space(32)
+                radius: Style.space(6)
+                color: Util.alpha(root.cfg.lineColor, 0.1)
+                Text {
+                  id: helpText
+                  anchors.centerIn: parent
+                  text: "More help"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  color: root.cfg.lineColor
+                }
+              }
+            }
+          }
         }
         Row {
           spacing: Style.space(18)

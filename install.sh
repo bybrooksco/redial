@@ -100,7 +100,7 @@ have jq "jq (bar button status line)" \
 echo
 echo "-- 2. Daemon + setup script -> ~/.local/bin --"
 mkdir -p "$HOME/.local/bin"
-for f in surface-dial-hypr surface-dial-setup surface-dial-bar surface-dial-rise-widget; do
+for f in surface-dial-hypr surface-dial-setup surface-dial-restart surface-dial-bar surface-dial-rise-widget; do
     if cmp -s "$R/bin/$f" "$HOME/.local/bin/$f"; then
         skip "$f already identical"
     else

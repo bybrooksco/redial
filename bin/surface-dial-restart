@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# surface-dial-restart -- restart the Surface Dial daemon.
+#
+# Stops a running surface-dial-hypr (if any) and starts it again the way Omarchy does at
+# login, through Hyprland, so it gets the session's real environment. The settings window's
+# "Restart dial service" button runs this. The dial is unresponsive for a second or two.
+set -u
+
+RE='^python3 .*surface-dial-hypr'
+DAEMON="$HOME/.local/bin/surface-dial-hypr"
+
+if [[ ! -x "$DAEMON" ]]; then
+    echo "surface-dial-restart: $DAEMON not found; run install.sh first" >&2
+    exit 1
+fi
+
+if pgrep -f "$RE" >/dev/null; then
+    pkill -TERM -f "$RE"
+    for _ in $(seq 1 15); do
+        pgrep -f "$RE" >/dev/null || break
+        sleep 0.2
+    done
+fi
+
+if command -v hyprctl >/dev/null; then
+    hyprctl dispatch "hl.dsp.exec_cmd(\"uwsm-app -- $DAEMON\")" >/dev/null
+elif command -v surface-dial-bar >/dev/null; then
+    surface-dial-bar restart
+else
+    echo "surface-dial-restart: neither hyprctl nor surface-dial-bar found" >&2
+    exit 1
+fi
+echo "surface-dial-restart: daemon restart requested"

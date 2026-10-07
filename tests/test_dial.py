@@ -1705,6 +1705,64 @@ class AxisToggle(Base):
         self.assertFalse(d.arrow_horizontal)
 
 
+class RestartScript(unittest.TestCase):
+    """bin/surface-dial-restart: stop the old daemon, start a new one through Hyprland."""
+
+    SCRIPT = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "bin", "surface-dial-restart"
+    )
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp()
+        self.stubs = tempfile.mkdtemp()
+        self.log = os.path.join(self.stubs, "calls.log")
+        os.makedirs(os.path.join(self.home, ".local", "bin"))
+
+    def stub(self, name, body=""):
+        path = os.path.join(self.stubs, name)
+        with open(path, "w") as f:
+            f.write(f'#!/bin/sh\necho "{name} $*" >> "{self.log}"\n{body}\n')
+        os.chmod(path, 0o755)
+
+    def run_script(self, daemon=True, running=True):
+        if daemon:
+            d = os.path.join(self.home, ".local", "bin", "surface-dial-hypr")
+            open(d, "w").write("#!/bin/sh\n")
+            os.chmod(d, 0o755)
+        self.stub("pgrep", "exit 0" if running else "exit 1")
+        self.stub("pkill")
+        self.stub("hyprctl")
+        self.stub("sleep")
+        env = {"HOME": self.home, "PATH": self.stubs + ":/usr/bin:/bin"}
+        r = subprocess.run(["bash", self.SCRIPT], env=env, capture_output=True, text=True)
+        calls = open(self.log).read().splitlines() if os.path.exists(self.log) else []
+        return r, calls
+
+    def test_stops_the_old_daemon_then_starts_through_hyprland(self):
+        r, calls = self.run_script(running=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(any(c.startswith("pkill -TERM") for c in calls), calls)
+        start = [c for c in calls if c.startswith("hyprctl dispatch")]
+        self.assertEqual(len(start), 1, calls)
+        self.assertIn("uwsm-app -- " + self.home + "/.local/bin/surface-dial-hypr", start[0])
+        self.assertLess(
+            next(i for i, c in enumerate(calls) if c.startswith("pkill")),
+            next(i for i, c in enumerate(calls) if c.startswith("hyprctl")),
+        )
+
+    def test_when_nothing_is_running_it_just_starts_one(self):
+        r, calls = self.run_script(running=False)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(any(c.startswith("pkill") for c in calls), calls)
+        self.assertTrue(any(c.startswith("hyprctl dispatch") for c in calls), calls)
+
+    def test_without_an_installed_daemon_it_says_so_and_fails(self):
+        r, calls = self.run_script(daemon=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("install.sh", r.stderr)
+        self.assertEqual(calls, [])
+
+
 class NewControls(Base):
     """The tools and click actions added for driving a whole session from the dial."""
 

@@ -6,6 +6,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Restart dial service** button: when the settings window finds the daemon is not running it offers a button that runs the new `surface-dial-restart` (also usable from a terminal).
+- **First-run welcome card** on the Look page: three sentences on turn, click and hold, with Got it / More help. Shown once (`intro_seen` in the config).
 - **Help page** in the settings window (third tab): what turn, click, hold and the menu do, and where to look when something is wrong.
 - **Speak the tool name** (`announce_tool`, Feel page): says the tool aloud as you arm it or move through the menu, using `spd-say` or `espeak-ng` if installed. Off by default. Tested with stubs only; not yet heard on real hardware.
 - **Reduce motion** (Feel page, `reduce_motion`): the dial display stops sliding, scaling and fading. Every animation now uses one of three speeds (120, 160, 260 ms) instead of nine different ones from 100 to 260.
