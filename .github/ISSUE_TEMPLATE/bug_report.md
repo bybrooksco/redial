@@ -12,4 +12,4 @@ about: Something doesn't work
 
 **Output of `surface-dial-setup`**
 
-**Daemon log** (last lines)
+**Daemon log**: the last lines of `~/.local/state/surface-dial/daemon.log`

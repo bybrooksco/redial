@@ -17,6 +17,7 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import tempfile
 import threading
@@ -26,6 +27,7 @@ import unittest
 
 # Importing the daemon writes manifests into its config dir; keep that off the real one.
 os.environ["DIAL_CONFIG_DIR"] = tempfile.mkdtemp()
+os.environ["DIAL_LOG_PATH"] = os.path.join(tempfile.mkdtemp(), "daemon.log")  # likewise for its log
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DAEMON = os.environ.get("DIAL_DAEMON") or os.path.join(HERE, "..", "bin", "surface-dial-hypr")
@@ -1047,6 +1049,64 @@ class FeelSettings(Base):
             d.tool = tool_index("Scroll")
             d.disarm(1.0)
             self.assertEqual(buzzed, want, on)
+
+
+class DaemonLog(unittest.TestCase):
+    """log() also writes a small rotating file; stderr is /dev/null when started the Omarchy way."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.path = os.path.join(self.dir, "sub", "daemon.log")  # parent does not exist yet
+        self.real = (m.LOG_PATH, m.LOG_MAX_BYTES)
+        m.LOG_PATH = self.path
+        self.addCleanup(
+            lambda: (
+                setattr(m, "LOG_PATH", self.real[0]),
+                setattr(m, "LOG_MAX_BYTES", self.real[1]),
+            )
+        )
+        self.quiet = types.SimpleNamespace(write=lambda s: None, flush=lambda: None)
+        real_stderr = sys.stderr
+        sys.stderr = self.quiet
+        self.addCleanup(lambda: setattr(sys, "stderr", real_stderr))
+
+    def lines(self, path=None):
+        with open(path or self.path) as fh:
+            return fh.read().splitlines()
+
+    def test_a_line_is_written_with_a_timestamp(self):
+        m.log("attached to /dev/input/event9")
+        (line,) = self.lines()
+        self.assertRegex(line, r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d attached to /dev/input/event9$")
+
+    def test_lines_accumulate(self):
+        for i in range(3):
+            m.log(f"line {i}")
+        self.assertEqual([x.split(" ", 2)[2] for x in self.lines()], ["line 0", "line 1", "line 2"])
+
+    def test_it_rotates_once_it_grows_past_the_cap(self):
+        m.LOG_MAX_BYTES = 200
+        for i in range(30):
+            m.log(f"a reasonably long log line number {i}")
+        self.assertTrue(os.path.exists(self.path + ".1"), "no rotation happened")
+        self.assertLess(os.path.getsize(self.path), 200 + 100)
+        self.assertEqual(self.lines()[-1].split(" ", 2)[2], "a reasonably long log line number 29")
+
+    def test_an_unwritable_location_never_raises(self):
+        m.LOG_PATH = "/proc/this/cannot/be/created/daemon.log"
+        m.log("must not raise")
+
+    def test_concurrent_writers_never_split_a_line(self):
+        def spam(tag):
+            for i in range(40):
+                m.log(f"{tag} message {i}")
+
+        threads = [threading.Thread(target=spam, args=(f"T{n}",)) for n in range(4)]
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+        lines = self.lines()
+        self.assertEqual(len(lines), 160)
+        self.assertTrue(all(re.search(r" T\d message \d+$", x) for x in lines))
 
 
 if __name__ == "__main__":

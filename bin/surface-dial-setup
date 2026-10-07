@@ -164,6 +164,13 @@ else
     warn "daemon process not running"
 fi
 
+DAEMON_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/surface-dial/daemon.log"
+if [[ -f "$DAEMON_LOG" ]]; then
+    ok "daemon log: $DAEMON_LOG (last line: $(tail -n 1 "$DAEMON_LOG" | cut -c1-70))"
+else
+    warn "no daemon log yet ($DAEMON_LOG) -- it appears once the daemon (re)starts on this version"
+fi
+
 echo
 echo "== $pass ok, $fail failed =="
 [[ "$fail" -eq 0 ]]
