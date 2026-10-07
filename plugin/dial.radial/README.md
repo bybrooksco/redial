@@ -177,6 +177,8 @@ The tool set is data, not code, and lives in the daemon's `TOOL_LIBRARY`
 | *Pages* | Page Down / Page Up | — |
 | *Tile Focus* | move focus to the left/right tile, or up/down once toggled | flip axis |
 | *Move Window* | carry the focused window to the next/previous workspace | — |
+| *H Scroll* | scroll sideways (clockwise is right); speed scales it | — |
+| *Pointer* | move the mouse pointer; slow turns are fine steps, fast spins cross the screen | flip left-right / up-down |
 
 The italic tools are **not in the default set**, so the ring is the size it always was; add them in
 the settings window (**Look** page, the chips under the ring) or list them in `active_tools`. They exist so
@@ -303,11 +305,36 @@ Single, double and triple click each run an action you choose, in `config.json`:
 Those are the defaults. Options: `tool` (single only — the armed tool's own click),
 `dictation`, `enter`, `escape`, `backspace`, `space`, `tab`, `mute`, `play_pause`,
 `next_track`, `prev_track`, `maximize`, `launcher` (opens the Omarchy menu), `screenshot`, `copy`,
-`paste`, `cut`, `select_all`, `redo`, `tab_next`, `tab_prev`, `fullscreen`, `float`, `none`.
+`paste`, `cut`, `select_all`, `redo`, `tab_next`, `tab_prev`, `fullscreen`, `float`, `mouse_left`, `mouse_right`,
+`mouse_middle`, `terminal`, `browser`, `files`, `assistant`, any `launch_<name>` you define, and `none`.
 **`copy` and `paste` are terminal-aware:** in a terminal Ctrl+C means "interrupt" and would kill the
 running program, so they send Ctrl+Insert and Shift+Insert there (the same as Omarchy's own
 universal copy and paste); `select_all` and `redo` do nothing in a terminal. A terminal is any window
-Omarchy tags `terminal`. Closing a window is deliberately not offered as a click action. The list comes from the daemon
+Omarchy tags `terminal`. Closing a window is deliberately not offered as a click action.
+
+**Pointer with no mouse:** arm *Pointer*, then set a click gesture to **Left click** (the Feel page's double-click
+is a good choice) and the dial can move and press.
+
+### Quick assistant, and your own launchers
+
+The **Quick assistant** click action opens whatever AI or chat *you* use: it runs the command in `assistant.cmd`
+and takes effect immediately. Nothing is assumed, so a local model works as well as a hosted one:
+
+```json
+"assistant": { "label": "Local model", "cmd": ["omarchy-launch-or-focus-tui", "ollama", "run", "llama3"] }
+```
+
+`omarchy-launch-or-focus-tui` opens the command in a terminal, or jumps to it if it is already open;
+`omarchy-launch-or-focus-webapp <window-pattern> <url>` does the same for a web chat. Pair it with the
+dictation click action and you can speak the question. With no command set it says how to set one.
+
+`launchers` adds your own click actions (up to 12, each named `launch_<name>`; needs a daemon restart):
+
+```json
+"launchers": [ { "name": "Notes", "label": "Open notes", "cmd": ["obsidian"] } ]
+```
+
+`cmd` is always a list, never a shell string. The list comes from the daemon
 (`~/.config/dial-radial/clicks.json`, written at every start), so the settings window
 never hardcodes it. Pick them in the settings window's **Clicks** section — click a chip
 to cycle, right-click to go back.

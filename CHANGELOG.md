@@ -6,6 +6,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Pointer** tool (move the mouse with the dial, accelerating with speed; click flips the axis) and **H Scroll** (sideways scrolling). Both off by default. The virtual pointer now supports relative motion and the horizontal wheel.
+- Click actions: **Left / Right / Middle click** (so the dial can press what Pointer points at), **Open a terminal / browser / files**, and **Quick assistant**, which runs the command you set in `assistant.cmd` (any AI or chat, local or hosted; no vendor assumed; changes apply without a restart).
+- **`launchers`** in the config: your own click actions that run a command (up to 12).
 - **Legible on every theme.** The settings window's text colours are now computed from the active theme and adjusted only as far as needed to reach 4.5:1 contrast (WCAG AA), including text on the accent colour. Before, 19 of the 22 shipped Omarchy themes fell short somewhere (catppuccin-latte and rose-pine as low as 2:1). Tested against all 22 palettes.
 - **Restart dial service** button: when the settings window finds the daemon is not running it offers a button that runs the new `surface-dial-restart` (also usable from a terminal).
 - **First-run welcome card** on the Look page: three sentences on turn, click and hold, with Got it / More help. Shown once (`intro_seen` in the config).

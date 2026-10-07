@@ -1360,10 +1360,13 @@ class Status(Base):
 
 class FakePointer:
     def __init__(self):
-        self.scrolls, self.clicks = [], []
+        self.scrolls, self.clicks, self.moves, self.h_scrolls = [], [], [], []
 
-    def scroll(self, v):
-        self.scrolls.append(v)
+    def scroll(self, v, horizontal=False):
+        (self.h_scrolls if horizontal else self.scrolls).append(v)
+
+    def move(self, dx, dy):
+        self.moves.append((dx, dy))
 
     def click(self, btn, down):
         self.clicks.append((btn, down))
@@ -2220,6 +2223,272 @@ class NarrowedErrors(Base):
         fx.set(m.subprocess, "run", gone)
         self.assertIsNone(m.read_brightness("intel_backlight"))
         self.assertIsNone(m.MenuUI._volume())
+
+
+class PointerTools(Base):
+    """Pointer, H Scroll, the mouse and launcher click actions, and user launchers."""
+
+    def setUp(self):
+        super().setUp()
+        self.ptr = FakePointer()
+        m.POINTER = self.ptr
+        m.TOOLS = m.build_tools(m.TOOL_LIBRARY)
+        with open(self.cfg, "w") as f:
+            json.dump({}, f)
+
+    def armed(self, name):
+        d = m.Dial()
+        d._arm(tool_index(name), 0.0)
+        return d
+
+    # --- H Scroll
+    def test_h_scroll_sends_horizontal_wheel_not_vertical(self):
+        d = self.armed("H Scroll")
+        d.on_rotate(40, 0.0)
+        self.assertEqual(self.ptr.scrolls, [])
+        self.assertEqual(len(self.ptr.h_scrolls), 1)
+
+    def test_h_scroll_clockwise_is_right_and_counter_is_left(self):
+        d = self.armed("H Scroll")
+        d.on_rotate(40, 0.0)
+        d.on_rotate(-40, 1.0)
+        right, left = self.ptr.h_scrolls
+        self.assertGreater(right, 0)
+        self.assertLess(left, 0)
+
+    def test_plain_scroll_is_still_vertical_and_unchanged(self):
+        d = self.armed("Scroll")
+        d.on_rotate(40, 0.0)
+        self.assertEqual(len(self.ptr.scrolls), 1)
+        self.assertEqual(self.ptr.h_scrolls, [])
+        self.assertLess(self.ptr.scrolls[0], 0)  # cw scrolls down, as before
+
+    def test_new_tools_are_not_in_the_default_ring(self):
+        names = [t["name"] for t in m.build_tools(m.DEFAULT_TOOLS)]
+        self.assertNotIn("Pointer", names)
+        self.assertNotIn("H Scroll", names)
+
+    # --- Pointer
+    def test_pointer_moves_sideways_until_flipped_then_up_and_down(self):
+        d = self.armed("Pointer")
+        d.on_rotate(40, 0.0)
+        dx, dy = self.ptr.moves[-1]
+        self.assertGreater(dx, 0)
+        self.assertEqual(dy, 0)
+        d.arrow_horizontal = True  # what a click does
+        d.on_rotate(40, 5.0)
+        dx, dy = self.ptr.moves[-1]
+        self.assertEqual(dx, 0)
+        self.assertGreater(dy, 0)
+
+    def test_pointer_counter_clockwise_goes_the_other_way(self):
+        d = self.armed("Pointer")
+        d.on_rotate(-40, 0.0)
+        self.assertLess(self.ptr.moves[-1][0], 0)
+
+    def test_pointer_speeds_up_when_the_dial_spins_fast(self):
+        slow = self.armed("Pointer")
+        slow.on_rotate(5, 0.0)
+        fast = self.armed("Pointer")
+        for i in range(30):
+            fast.on_rotate(40, 0.001 * i)
+        self.assertGreater(self.ptr.moves[-1][0] / 40, self.ptr.moves[0][0] / 5)
+
+    def test_pointer_acceleration_is_capped(self):
+        d = self.armed("Pointer")
+        for i in range(400):
+            d.on_rotate(200, 0.0005 * i)
+        per_count = self.ptr.moves[-1][0] / 200
+        self.assertLessEqual(per_count, m.POINTER_GAIN * (1 + m.POINTER_ACCEL_MAX) + 1e-9)
+
+    def test_pointer_respects_sensitivity(self):
+        d = self.armed("Pointer")
+        d.on_rotate(10, 0.0)
+        base = self.ptr.moves[-1][0]
+        time.sleep(0.005)
+        with open(self.cfg, "w") as f:
+            json.dump({"sensitivity": 2.0}, f)
+        d2 = self.armed("Pointer")
+        d2.on_rotate(10, 9.0)
+        self.assertAlmostEqual(self.ptr.moves[-1][0], base * 2, places=6)
+
+    def test_pointer_counts_as_activity_so_it_returns_to_volume_later(self):
+        d = self.armed("Pointer")
+        d.on_rotate(10, 3.0)
+        self.assertEqual(d.last_action, 3.0)
+
+    def test_pointer_click_flips_the_axis(self):
+        d = self.armed("Pointer")
+        m.click_choice = lambda kind: "tool"
+        d.on_press(1.0)
+        d.on_release(1.05)
+        d.tick(3.0)
+        self.assertTrue(d.arrow_horizontal)
+
+    # --- virtual pointer output
+    def test_virtual_pointer_move_emits_x_and_y_and_keeps_the_fraction(self):
+        r, w = os.pipe()
+        self.addCleanup(os.close, r)
+        vp = m.VirtualPointer()
+        vp.fd = w
+        vp.move(0.6, 0)
+        os.set_blocking(r, False)
+        with self.assertRaises(BlockingIOError):
+            os.read(r, 1)  # 0.6 px is not yet a whole pixel: nothing sent
+        vp.move(0.6, -2.0)  # 1.2 -> 1 px right, 2 px up, 0.2 carried
+        got = []
+        while True:
+            try:
+                got.append(struct.unpack(m.EV_FORMAT, os.read(r, m.EV_SIZE))[2:])
+            except BlockingIOError:
+                break
+        self.assertIn((2, m.VirtualPointer.REL_X, 1), got)
+        self.assertIn((2, m.VirtualPointer.REL_Y, -2), got)
+        self.assertAlmostEqual(vp.move_x, 0.2)
+
+    def test_virtual_pointer_horizontal_wheel_uses_its_own_codes_and_residual(self):
+        r, w = os.pipe()
+        self.addCleanup(os.close, r)
+        vp = m.VirtualPointer()
+        vp.fd = w
+        vp.scroll(130, horizontal=True)
+        os.set_blocking(r, False)
+        got = []
+        while True:
+            try:
+                got.append(struct.unpack(m.EV_FORMAT, os.read(r, m.EV_SIZE))[2:])
+            except BlockingIOError:
+                break
+        self.assertIn((2, m.VirtualPointer.REL_HWHEEL_HI_RES, 130), got)
+        self.assertIn((2, m.VirtualPointer.REL_HWHEEL, 1), got)
+        self.assertAlmostEqual(vp.residual_h, 10)
+        self.assertEqual(vp.residual, 0.0)
+
+    # --- click actions
+    def test_mouse_click_actions_press_and_release_that_button(self):
+        for name, btn in (
+            ("mouse_left", m.VirtualPointer.BTN_LEFT),
+            ("mouse_right", m.VirtualPointer.BTN_RIGHT),
+            ("mouse_middle", m.VirtualPointer.BTN_MIDDLE),
+        ):
+            self.ptr.clicks.clear()
+            m.click_fn(name)(1)
+            self.assertEqual(self.ptr.clicks, [(btn, True), (btn, False)], name)
+
+    def test_launch_actions_run_the_omarchy_launchers(self):
+        for name, first in (
+            ("terminal", "omarchy-launch-terminal"),
+            ("browser", "omarchy-launch-browser"),
+            ("files", "omarchy-launch-nautilus"),
+        ):
+            EVENTS.clear()
+            m.click_fn(name)(1)
+            self.assertTrue(EVENTS and EVENTS[0].startswith("EXEC:" + first), (name, EVENTS))
+
+    def test_the_shipped_example_config_is_valid_json_and_launchers_are_empty(self):
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..",
+            "plugin",
+            "dial.radial",
+            "config.example.json",
+        )
+        with open(path) as f:
+            doc = json.load(f)
+        self.assertEqual(doc["launchers"], [])
+        self.assertEqual(doc["assistant"]["cmd"], [])
+
+    def test_the_assistant_action_is_vendor_neutral(self):
+        text = " ".join(a[0] + a[1] + a[2] for a in m.CLICK_ACTIONS).lower()
+        self.assertIn("assistant", text)
+        for brand in ("claude", "openai", "chatgpt", "gemini", "ollama"):
+            self.assertNotIn(brand, text)
+
+    def test_assistant_runs_the_configured_command(self):
+        for cmd in (["omarchy-launch-or-focus-tui", "ollama", "run", "llama3"], ["firefox", "x"]):
+            time.sleep(0.005)
+            with open(self.cfg, "w") as f:
+                json.dump({"assistant": {"cmd": cmd, "label": "mine"}}, f)
+            EVENTS.clear()
+            m.click_fn("assistant")(1)
+            self.assertEqual(EVENTS, ["EXEC:" + " ".join(cmd[:2])])
+
+    def test_assistant_without_a_command_says_how_to_set_one_and_runs_nothing(self):
+        notes = []
+        m.notify = lambda *a, **k: notes.append(a)
+        for conf in (
+            {},
+            {"assistant": "claude"},
+            {"assistant": {"cmd": []}},
+            {"assistant": {"cmd": "x"}},
+        ):
+            time.sleep(0.005)
+            with open(self.cfg, "w") as f:
+                json.dump(conf, f)
+            EVENTS.clear()
+            notes.clear()
+            m.click_fn("assistant")(1)
+            self.assertEqual(EVENTS, [], conf)
+            self.assertEqual(len(notes), 1, conf)
+            self.assertIn("assistant", notes[0][1])
+
+    def test_assistant_command_changes_apply_without_a_restart(self):
+        time.sleep(0.005)
+        with open(self.cfg, "w") as f:
+            json.dump({"assistant": {"cmd": ["one"]}}, f)
+        fn = m.click_fn("assistant")
+        EVENTS.clear()
+        fn(1)
+        time.sleep(0.005)
+        with open(self.cfg, "w") as f:
+            json.dump({"assistant": {"cmd": ["two"]}}, f)
+        fn(1)
+        self.assertEqual(EVENTS, ["EXEC:one", "EXEC:two"])
+
+    def test_the_pen_barrel_list_has_no_duplicate_mouse_buttons(self):
+        names = [a[0] for a in m.PEN_BARREL_ACTIONS]
+        self.assertEqual(len(names), len(set(names)))
+        self.assertFalse(any(n.startswith("mouse_") for n in names))
+
+    def test_every_click_action_name_is_unique_and_none_is_last(self):
+        names = [a[0] for a in m.CLICK_ACTIONS]
+        self.assertEqual(len(names), len(set(names)))
+        self.assertEqual(names[-1], "none")
+
+    # --- user launchers
+    def test_a_launcher_becomes_a_click_action(self):
+        out = m.custom_launcher_actions(
+            {"launchers": [{"name": "Notes App", "label": "Open notes", "cmd": ["obsidian"]}]}
+        )
+        self.assertEqual(len(out), 1)
+        key, label, desc, spec = out[0]
+        self.assertEqual(key, "launch_notes_app")
+        self.assertEqual(label, "Open notes")
+        self.assertEqual(spec, {"do": "exec", "cmd": ["obsidian"]})
+
+    def test_bad_launchers_are_skipped_and_good_ones_kept(self):
+        out = m.custom_launcher_actions(
+            {
+                "launchers": [
+                    {"name": "a", "cmd": "obsidian"},  # string, not a list
+                    {"name": "b", "cmd": []},
+                    {"name": "", "cmd": ["x"]},
+                    "nonsense",
+                    {"name": "ok", "cmd": ["true"]},
+                    {"name": "ok", "cmd": ["false"]},  # duplicate name
+                    {"name": "terminal", "cmd": ["x"]},  # would not clash: prefixed launch_
+                ]
+            }
+        )
+        self.assertEqual([a[0] for a in out], ["launch_ok", "launch_terminal"])
+
+    def test_launchers_that_are_not_a_list_are_ignored(self):
+        self.assertEqual(m.custom_launcher_actions({"launchers": "obsidian"}), [])
+        self.assertEqual(m.custom_launcher_actions({}), [])
+
+    def test_the_number_of_launchers_is_capped(self):
+        many = [{"name": f"n{i}", "cmd": ["x"]} for i in range(m.MAX_LAUNCHERS + 5)]
+        self.assertEqual(len(m.custom_launcher_actions({"launchers": many})), m.MAX_LAUNCHERS)
 
 
 class NewControls(Base):

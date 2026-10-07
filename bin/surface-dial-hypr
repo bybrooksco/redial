@@ -251,6 +251,10 @@ PAT_DICTATION = (6, 0)  # heaviest event on the device
 # rotation for smooth movement, while haptic ticks fire on their own coarser
 # interval. A tick every 6 deg felt chunky against how little the page moved.
 SCROLL_GAIN = 4.0  # hi-res wheel units per dial count (120 = one notch)
+POINTER_GAIN = 0.35  # pixels per dial count at a slow turn
+POINTER_ACCEL_COUNTS = 800  # dial counts/s at which pointer speed has doubled
+POINTER_ACCEL_MAX = 3.0  # extra speed factor at a fast spin (so at most 4x)
+MAX_LAUNCHERS = 12
 SCROLL_TICK = 60  # dial counts between haptic ticks while scrolling --
 # same 6 deg detent as every other tool, so the whole
 # device has one rhythm. Below ~45 counts the motor
@@ -845,11 +849,15 @@ class VirtualPointer:
     UI_DEV_CREATE, UI_DEV_DESTROY = 0x5501, 0x5502
     EV_SYN, EV_KEY, EV_REL = 0x00, 0x01, 0x02
     REL_X, REL_Y, REL_WHEEL, REL_WHEEL_HI_RES = 0x00, 0x01, 0x08, 0x0B
+    REL_HWHEEL, REL_HWHEEL_HI_RES = 0x06, 0x0C
     BTN_LEFT, BTN_RIGHT, BTN_MIDDLE = 0x110, 0x111, 0x112
 
     def __init__(self):
         self.fd = None
         self.residual = 0.0
+        self.residual_h = 0.0
+        self.move_x = 0.0
+        self.move_y = 0.0
         self.warned = False
 
     def _ensure(self):
@@ -867,7 +875,14 @@ class VirtualPointer:
                 fcntl.ioctl(fd, self.UI_SET_EVBIT, ev)
             for btn in (self.BTN_LEFT, self.BTN_RIGHT, self.BTN_MIDDLE):
                 fcntl.ioctl(fd, self.UI_SET_KEYBIT, btn)
-            for r in (self.REL_X, self.REL_Y, self.REL_WHEEL, self.REL_WHEEL_HI_RES):
+            for r in (
+                self.REL_X,
+                self.REL_Y,
+                self.REL_WHEEL,
+                self.REL_WHEEL_HI_RES,
+                self.REL_HWHEEL,
+                self.REL_HWHEEL_HI_RES,
+            ):
                 fcntl.ioctl(fd, self.UI_SET_RELBIT, r)
             name = b"Surface Dial Virtual Pointer".ljust(80, b"\0")
             dev = (
@@ -899,21 +914,52 @@ class VirtualPointer:
             log(f"pointer click failed ({exc})")
             self.fd = None
 
-    def scroll(self, hi_res):
-        """hi_res: signed, 120 == one traditional wheel notch."""
+    def scroll(self, hi_res, horizontal=False):
+        """hi_res: signed, 120 == one traditional wheel notch. horizontal: right is positive."""
         if not self._ensure():
             return
+        fine, coarse = (
+            (self.REL_HWHEEL_HI_RES, self.REL_HWHEEL)
+            if horizontal
+            else (self.REL_WHEEL_HI_RES, self.REL_WHEEL)
+        )
         try:
-            self._emit(self.EV_REL, self.REL_WHEEL_HI_RES, int(hi_res))
-            # coarse REL_WHEEL for anything not handling hi-res
-            self.residual += hi_res
-            notches = int(self.residual / 120)
-            if notches:
+            self._emit(self.EV_REL, fine, int(hi_res))
+            # coarse notches for anything not handling hi-res
+            if horizontal:
+                self.residual_h += hi_res
+                notches = int(self.residual_h / 120)
+                self.residual_h -= notches * 120
+            else:
+                self.residual += hi_res
+                notches = int(self.residual / 120)
                 self.residual -= notches * 120
-                self._emit(self.EV_REL, self.REL_WHEEL, notches)
+            if notches:
+                self._emit(self.EV_REL, coarse, notches)
             self._emit(self.EV_SYN, 0, 0)
         except OSError as exc:
             log(f"pointer write failed ({exc})")
+            self.fd = None
+
+    def move(self, dx, dy):
+        """Move the cursor by (dx, dy) pixels; fractions carry over to the next call."""
+        if not self._ensure():
+            return
+        self.move_x += dx
+        self.move_y += dy
+        ix, iy = int(self.move_x), int(self.move_y)
+        if not ix and not iy:
+            return
+        self.move_x -= ix
+        self.move_y -= iy
+        try:
+            if ix:
+                self._emit(self.EV_REL, self.REL_X, ix)
+            if iy:
+                self._emit(self.EV_REL, self.REL_Y, iy)
+            self._emit(self.EV_SYN, 0, 0)
+        except OSError as exc:
+            log(f"pointer move failed ({exc})")
             self.fd = None
 
 
@@ -1449,6 +1495,25 @@ def _compile_mouse(spec):
     return _click
 
 
+def _compile_assistant(spec):
+    """Run the user's own assistant command, read from the config each time it is used.
+
+    Which assistant is entirely theirs (a local model in a terminal, a chat app, a web page):
+    config.json "assistant": {"cmd": ["..."], "label": "..."}. With none set it says how to set
+    one instead of guessing.
+    """
+
+    def launch(mag):
+        conf = live_config().get("assistant")
+        cmd = conf.get("cmd") if isinstance(conf, dict) else None
+        if not cmd or not _is_string_list(cmd):
+            notify("Quick assistant", 'Not set up: add an "assistant" command to config.json')
+            return
+        run(list(cmd))
+
+    return launch
+
+
 def _compile_wheel(spec):
     # The continuous path owns the pointer; this only marks the tool.
     return lambda mag: None
@@ -1464,6 +1529,7 @@ _ACTION_VERBS = {
     "volume": _compile_volume,
     "dictation": _compile_dictation,
     "mouse": _compile_mouse,
+    "assistant": _compile_assistant,
     "wheel": _compile_wheel,
 }
 
@@ -1632,6 +1698,41 @@ TOOL_LIBRARY = [
         "cw": {"do": "brightness", "direction": "up"},
         "ccw": {"do": "brightness", "direction": "down"},
         "click": None,
+    },
+    # --- tools for pointing and sideways scrolling, off by default like the ones below.
+    {
+        "name": "H Scroll",
+        "icon": "\uf07e",
+        "detent": 60,
+        "magnitude": True,
+        "continuous": True,
+        "horizontal": True,
+        "default": False,
+        "cw": {"do": "wheel"},
+        "ccw": {"do": "wheel"},
+        "click": None,
+    },
+    {
+        # Moves the mouse pointer. Click flips left/right and up/down; the double-click action
+        # (set it to Left click on the Feel page) presses the button. Slow turns are fine
+        # steps, fast spins cross the screen.
+        "name": "Pointer",
+        "icon": "\uf245",
+        "detent": 60,
+        "continuous": True,
+        "pointer": True,
+        "default": False,
+        "gain": POINTER_GAIN,
+        "axis_toggle": True,
+        "alt": {
+            "base_title": "\u2194  Pointer",
+            "base_subtitle": "left / right",
+            "title": "\u2195  Pointer",
+            "subtitle": "up / down",
+        },
+        "cw": {"do": "wheel"},
+        "ccw": {"do": "wheel"},
+        "click": {"do": "none", "label": "flip left-right/up-down"},
     },
     # --- tools added for people who need to drive a whole session from the dial. Not in the
     # default set (the ring stays the size it was); add them in the settings window.
@@ -1814,8 +1915,79 @@ CLICK_ACTIONS = [
         "Toggle the focused window between floating and tiled.",
         {"do": "hypr", "lua": 'hl.dsp.window.float({ action = "toggle" })'},
     ),
+    ("mouse_left", "Left click", "Press the left mouse button.", {"do": "mouse", "button": "left"}),
+    (
+        "mouse_right",
+        "Right click",
+        "Press the right mouse button.",
+        {"do": "mouse", "button": "right"},
+    ),
+    (
+        "mouse_middle",
+        "Middle click",
+        "Press the middle mouse button.",
+        {"do": "mouse", "button": "middle"},
+    ),
+    (
+        "terminal",
+        "Open a terminal",
+        "Open a new terminal window.",
+        {"do": "exec", "cmd": ["omarchy-launch-terminal"]},
+    ),
+    (
+        "browser",
+        "Open the browser",
+        "Open the web browser.",
+        {"do": "exec", "cmd": ["omarchy-launch-browser"]},
+    ),
+    (
+        "files",
+        "Open files",
+        "Open the file manager.",
+        {"do": "exec", "cmd": ["omarchy-launch-nautilus"]},
+    ),
+    (
+        "assistant",
+        "Quick assistant",
+        "Open your chat or AI assistant (set the command in config.json).",
+        {"do": "assistant"},
+    ),
     ("none", "Nothing", "Do nothing.", None),
 ]
+
+
+def custom_launcher_actions(doc):
+    """Click actions for the user's own "launchers": [{"name", "label", "cmd": [...]}].
+
+    Each becomes a click action named launch_<name> that runs `cmd` (a list, never a shell
+    string). Read once at startup, so adding one needs a daemon restart. Bad entries are
+    skipped with a log line rather than aborting the rest.
+    """
+    raw = doc.get("launchers")
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        log("launchers must be a list; ignored")
+        return []
+    out, taken = [], {a[0] for a in CLICK_ACTIONS}
+    for i, item in enumerate(raw[:MAX_LAUNCHERS]):
+        cmd = item.get("cmd") if isinstance(item, dict) else None
+        if not cmd or not _is_string_list(cmd):
+            log(f"launchers[{i}] needs a non-empty list of strings for cmd; skipped")
+            continue
+        title = str(item.get("name") or item.get("label") or "").strip()
+        slug = re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")
+        key = f"launch_{slug}"
+        if not slug or key in taken:
+            log(f"launchers[{i}] needs a unique name ({title!r}); skipped")
+            continue
+        taken.add(key)
+        label = str(item.get("label") or title)
+        out.append((key, label, f"Run {cmd[0]}.", {"do": "exec", "cmd": list(cmd)}))
+    return out
+
+
+CLICK_ACTIONS[-1:-1] = custom_launcher_actions(load_config())
 CLICK_DEFAULTS = {"single": "tool", "double": "dictation", "triple": "enter"}
 _CLICK_BY_NAME = {a[0]: a for a in CLICK_ACTIONS}
 _click_cache = {}
@@ -1962,7 +2134,8 @@ def click_hint(tool):
 # --- pen button gestures ---
 # Like the dial's clicks: configurable, live, published to pen_clicks.json. Reuses
 # CLICK_ACTIONS minus the dial-specific "tool".
-_PEN_SHARED_ACTIONS = [a for a in CLICK_ACTIONS if a[0] != "tool"]
+# The pen's barrel list already has its own mouse buttons, so the dial's are left out of it.
+_PEN_SHARED_ACTIONS = [a for a in CLICK_ACTIONS if a[0] != "tool" and not a[0].startswith("mouse_")]
 
 # Tail button: firmware only ever reports single / double / press-and-hold --
 # there is no raw click counter, so there is no real "triple click" to detect,
@@ -2103,6 +2276,8 @@ def build_tools(specs):
                 "mag": bool(t.get("magnitude", False)),
                 "continuous": bool(t.get("continuous", False)),
                 "terminal_aware": bool(t.get("terminal_aware", False)),
+                "horizontal": bool(t.get("horizontal", False)),
+                "pointer": bool(t.get("pointer", False)),
                 "axis_toggle": bool(t.get("axis_toggle", False)),
                 "alt": build_alt(t.get("alt")),
                 "gain": gain,
@@ -2410,18 +2585,40 @@ class Dial:
         # flip together. See docs/DESIGN.md#menu-highlight-alignment.
         MENU_STREAM.pos(self.menu_pick + self.menu_accum / (2 * step), now)
 
-    def _rotate_continuous(self, value, now):
+    def _rotate_pointer(self, value, now):
+        """Move the mouse pointer along the current axis, faster the faster the dial turns."""
         t = TOOLS[self.tool]
-        gain = t.get("gain", SCROLL_GAIN) * sensitivity()
-        sign = 1 if t.get("invert") else -1
-        if t.get("terminal_aware") and scroll_mode() == "suppress":
-            return
-        POINTER.scroll(sign * value * gain)  # default: cw = scroll down
+        accel = 1 + min(self.speed / POINTER_ACCEL_COUNTS, POINTER_ACCEL_MAX)
+        step = value * t.get("gain", POINTER_GAIN) * sensitivity() * accel
+        if self.arrow_horizontal:  # flipped by a click: the vertical axis
+            POINTER.move(0, step)
+        else:
+            POINTER.move(step, 0)
+        self._tick_feedback(value)
+        self.last_action = now
+
+    def _tick_feedback(self, value):
+        """A haptic tick every SCROLL_TICK counts of continuous turning."""
         self.scroll_accum += value
         while abs(self.scroll_accum) >= SCROLL_TICK:
             d = 1 if self.scroll_accum > 0 else -1
             self.scroll_accum -= d * SCROLL_TICK
             HAPTIC.fire(PAT_TICK)
+
+    def _rotate_continuous(self, value, now):
+        t = TOOLS[self.tool]
+        if t.get("pointer"):
+            self._rotate_pointer(value, now)
+            return
+        gain = t.get("gain", SCROLL_GAIN) * sensitivity()
+        sign = 1 if t.get("invert") else -1
+        if t.get("terminal_aware") and scroll_mode() == "suppress":
+            return
+        if t.get("horizontal"):
+            POINTER.scroll(-sign * value * gain, horizontal=True)  # cw = scroll right
+        else:
+            POINTER.scroll(sign * value * gain)  # default: cw = scroll down
+        self._tick_feedback(value)
         self.last_action = now
 
     def _rotate_discrete(self, value, now):
