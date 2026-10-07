@@ -796,6 +796,17 @@ Item {
         ChoiceRow {
           visible: root.page === "feel"
           cfg: root.cfg
+          title: "Ignore small turns"
+          unit: " counts"
+          help: "Ignores a bump or a tremor: after a pause, the dial has to turn this far before anything happens. Higher ignores more."
+          options: [ { key: 0, label: "Off" }, { key: 12, label: "Light" },
+                     { key: 30, label: "Medium" }, { key: 60, label: "Strong" } ]
+          current: root.cfgValue("deadzone", 0)
+          onPicked: key => root.setConfigKey("deadzone", key)
+        }
+        ChoiceRow {
+          visible: root.page === "feel"
+          cfg: root.cfg
           title: "Tool menu"
           help: "Hold: hold the button, turn, let go to choose. Tap: hold until it opens, let go, then turn and click to choose, with no need to hold while turning."
           options: [ { key: false, label: "Hold" }, { key: true, label: "Tap" } ]

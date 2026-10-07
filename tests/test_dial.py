@@ -1197,6 +1197,81 @@ class LatchedMenu(Base):
         self.assertFalse(d.menu_latched)
 
 
+class DeadZone(Base):
+    """deadzone: small turns after a pause are held back; a real turn passes whole."""
+
+    def write(self, **kv):
+        time.sleep(0.005)
+        with open(self.cfg, "w") as f:
+            json.dump(kv, f)
+
+    def test_off_by_default_nothing_is_held_back(self):
+        self.write()
+        d = m.Dial()
+        self.assertEqual(d.through_deadzone(1, 0.0), 1)
+
+    def test_a_twitch_inside_the_zone_is_ignored(self):
+        self.write(deadzone=20)
+        d = m.Dial()
+        self.assertEqual(d.through_deadzone(5, 0.0), 0)
+        self.assertEqual(d.through_deadzone(-4, 0.01), 0)
+        self.assertEqual(d.dz_accum, 1)
+
+    def test_back_and_forth_tremor_never_gets_through(self):
+        self.write(deadzone=20)
+        d = m.Dial()
+        out = [d.through_deadzone(v, 0.01 * i) for i, v in enumerate([6, -6] * 30)]
+        self.assertEqual(sum(abs(v) for v in out), 0)
+
+    def test_a_real_turn_is_released_whole_then_unfiltered(self):
+        self.write(deadzone=20)
+        d = m.Dial()
+        got = [d.through_deadzone(8, 0.01 * i) for i in range(5)]
+        self.assertEqual(got, [0, 0, 24, 8, 8])  # nothing is lost: 8+8+8 released together
+
+    def test_a_pause_brings_the_zone_back(self):
+        self.write(deadzone=20)
+        d = m.Dial()
+        for i in range(4):
+            d.through_deadzone(8, 0.01 * i)
+        self.assertEqual(d.through_deadzone(8, 1.0), 0)  # after a pause: filtered again
+
+    def test_a_slow_deliberate_turn_still_gets_through(self):
+        # Events 50 ms apart (slower than the rest gap check would punish if it used the
+        # last *passed* event): 1 count each, 25 events -> crosses 20.
+        self.write(deadzone=20)
+        d = m.Dial()
+        out = [d.through_deadzone(1, 0.05 * i) for i in range(25)]
+        self.assertEqual(sum(out), 25)
+
+    def test_filtered_turns_do_not_keep_the_tool_armed_or_reach_the_tool(self):
+        self.write(deadzone=50)
+        d = m.Dial()
+        d.last_action = 0.0
+        EVENTS.clear()
+        d.on_rotate(10, 1.0)
+        self.assertEqual(d.last_rot, 0.0)
+        self.assertEqual(d.last_action, 0.0)
+        self.assertFalse(EVENTS)
+
+    def test_it_also_filters_the_tool_menu(self):
+        self.write(deadzone=50)
+        d = m.Dial()
+        d.menu, d.menu_pick, d.menu_accum = True, 0, 0.0
+        d.on_rotate(m.MENU_STEP, 0.0)  # 60 >= 50: crosses the zone, moves one step
+        self.assertEqual(d.menu_pick, 1)
+        d2 = m.Dial()
+        d2.menu, d2.menu_pick, d2.menu_accum = True, 0, 0.0
+        d2.on_rotate(m.MENU_STEP // 2, 0.0)
+        self.assertEqual(d2.menu_pick, 0)
+
+    def test_range_is_clamped(self):
+        self.write(deadzone=10**6)
+        self.assertEqual(m.deadzone(), 100)
+        self.write(deadzone=-5)
+        self.assertEqual(m.deadzone(), 0)
+
+
 class NewControls(Base):
     """The tools and click actions added for driving a whole session from the dial."""
 

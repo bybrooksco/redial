@@ -1779,6 +1779,14 @@ def return_buzz():
     return live_bool("return_buzz", True)
 
 
+def deadzone():
+    """Counts the dial must turn after a pause before turning registers (config "deadzone")."""
+    return live_num("deadzone", 0, 0, 100)
+
+
+DEADZONE_REST_S = 0.4  # this long without turning and the dead zone applies again
+
+
 def menu_latch():
     """Whether a quick press-and-release leaves the tool menu open (config "menu_latch").
 
@@ -2142,6 +2150,9 @@ class Dial:
         self.menu = False
         self.menu_accum = 0.0
         self.menu_pick = IDLE_TOOL
+        self.dz_accum = 0.0  # turning since the last pause, while inside the dead zone
+        self.dz_last = -1e9  # time of the previous raw turn event
+        self.dz_open = False  # the dead zone has been crossed for this burst of turning
         self.menu_latched = False  # menu stayed open after the opening press was released
         self.menu_moved = False  # the highlight left the starting tool since the menu opened
         self.menu_last = 0.0
@@ -2219,7 +2230,33 @@ class Dial:
             HAPTIC.fire(PAT_IDLE, rate_limit=False)
         self.show_tool("idle")
 
+    def through_deadzone(self, value, now):
+        """The turn to act on, or 0 while it is still inside the dead zone.
+
+        After a pause the first few counts are held back (a bump or a tremor is rarely more than
+        a few); once they add up past the threshold they are released together and turning is
+        unfiltered until the next pause. A deliberate turn costs only that initial lead-in.
+        """
+        zone = deadzone()
+        if not zone:
+            return value
+        rested = now - self.dz_last > DEADZONE_REST_S
+        self.dz_last = now
+        if rested:
+            self.dz_accum, self.dz_open = 0.0, False
+        if self.dz_open:
+            return value
+        self.dz_accum += value
+        if abs(self.dz_accum) < zone:
+            return 0
+        self.dz_open = True
+        value, self.dz_accum = self.dz_accum, 0.0
+        return value
+
     def on_rotate(self, value, now):
+        value = self.through_deadzone(value, now)
+        if not value:
+            return  # inside the dead zone: not activity, so a twitch cannot hold a tool armed
         self.rot_events += 1
         if now - self.last_rot_log > 2.0:
             self.last_rot_log = now

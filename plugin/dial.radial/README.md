@@ -280,6 +280,7 @@ and every number is clamped to a safe range (text or true/false means the defaul
 | `return_buzz` | Whether the dial buzzes when a tool drops back to Volume. | `true` | true / false |
 | `double_click_ms` | How long a second (or third) press can take and still count as a double (or triple) click. | `250` | 150 to 600 |
 | `hold_ms` | How long to hold the button to open the tool menu. | `400` | 200 to 1500 |
+| `deadzone` | Ignore small turns: after a pause the dial must turn this many counts before anything happens, so a bump or a tremor does nothing. A deliberate turn loses only that lead-in (the counts are released together, not dropped). `0` is off. | `0` | 0 to 100 |
 | `menu_latch` | Tap menu: hold until the menu opens, let go, then turn and click to choose. Turning while still holding works as before. For anyone who cannot hold and turn at once. | `false` | true / false |
 | `menu_timeout_ms` | How long an untouched tap menu waits before closing without changing anything. | `8000` | 3000 to 12000 |
 
