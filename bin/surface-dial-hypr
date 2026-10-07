@@ -700,6 +700,42 @@ def notify(title, body=""):
     ACTIONS.submit(_notify_sync, title, body)
 
 
+_speech = {"proc": None, "warned": False}
+
+
+def speech_command():
+    """The first available text-to-speech command as a list, or None."""
+    for exe in ("spd-say", "espeak-ng", "espeak"):
+        path = shutil.which(exe)
+        if path:
+            return [path]
+    return None
+
+
+def _speak_sync(text):
+    prev = _speech["proc"]
+    if prev is not None and prev.poll() is None:
+        prev.terminate()  # a new announcement replaces the old one rather than queueing behind it
+    cmd = speech_command()
+    if cmd is None:
+        if not _speech["warned"]:
+            _speech["warned"] = True
+            log("announce_tool is on but no speech tool was found (speech-dispatcher or espeak-ng)")
+        return
+    try:
+        _speech["proc"] = subprocess.Popen(
+            [*cmd, text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+    except OSError as exc:
+        log(f"speech failed ({exc})")
+
+
+def speak(text):
+    """Say `text` aloud if the "announce_tool" setting is on (off by default)."""
+    if live_bool("announce_tool", False):
+        ACTIONS.submit(_speak_sync, text)
+
+
 # --------------------------------------------------------------------------
 class Haptics:
     """Fire motor clicks without blocking the input loop."""
@@ -2233,10 +2269,12 @@ class Dial:
 
     def show_tool(self, prefix=""):
         t = TOOLS[self.tool]
+        speak(t["name"])
         notify(f"{t['icon']}  {t['name']}", prefix or f"click: {t['click_label']}")
 
     def show_menu(self):
         MENU_UI.highlight(self.menu_pick)
+        speak(TOOLS[self.menu_pick]["name"])
 
     def reset_gestures(self):
         """Forget any half-finished click or hold.

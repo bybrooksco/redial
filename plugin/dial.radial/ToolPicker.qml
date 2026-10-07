@@ -100,6 +100,16 @@ Item {
     configDoc = out
   }
 
+  readonly property var helpTopics: [
+    { title: "Turn", body: "Turning the dial does what the armed tool does. Volume is armed when nothing else is." },
+    { title: "Click", body: "One click does the armed tool's click (mute, for Volume). A double click and a triple click do the actions chosen on the Feel page." },
+    { title: "Hold", body: "Hold the button until the menu appears. Turn to pick a tool and let go to choose it. With Tap menu on the Feel page, let go as soon as it opens, then turn and click to choose; leave it alone and it closes by itself." },
+    { title: "Coming back", body: "A tool you picked drops back to Volume after a few seconds without turning, so nothing stays armed by accident. Change how long on the Feel page." },
+    { title: "Too jumpy or too slow", body: "Sensitivity changes how far you turn for each step. Ignore small turns filters out a bump or a tremor. Hold and double-click speed can both be relaxed." },
+    { title: "Keyboard", body: "Tab moves between controls, Enter or Space presses one, Shift+Enter goes back through a list of choices, Escape closes this window." },
+    { title: "Something wrong?", body: "The line under the title says whether the dial is connected. If the dial service is not running, run surface-dial-setup in a terminal; it checks everything and says what to fix." }
+  ]
+
   // One labelled row of choice chips. `current` is the stored value; if it matches none of the
   // chips (a value written by hand) a note says so. The daemon clamps every value to a safe range.
   component ChoiceRow: Column {
@@ -627,7 +637,7 @@ Item {
         Row {
           spacing: Style.space(18)
           Repeater {
-            model: [ { key: "look", label: "Look" }, { key: "feel", label: "Feel" } ]
+            model: [ { key: "look", label: "Look" }, { key: "feel", label: "Feel" }, { key: "help", label: "Help" } ]
             delegate: Pressable {
               id: tabLabel
               required property var modelData
@@ -658,8 +668,10 @@ Item {
         Text {
           width: parent.width
           text: root.page === "look"
-                ? "Drag the ring to reorder. Click \u2715 to remove a tool, or a chip below to add one. Tool changes apply when you press Save; everything else applies immediately."
-                : "How the dial feels to use. Everything on this page applies immediately."
+                ? "Drag the ring to reorder, or focus a tool and press Left or Right. Click \u2715 (or press Delete) to remove a tool, or a chip below to add one. Tool changes apply when you press Save; everything else applies immediately."
+                : root.page === "feel"
+                  ? "How the dial feels to use. Everything on this page applies immediately."
+                  : "How to use the dial. Nothing here changes any setting."
           wrapMode: Text.WordWrap
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
@@ -833,6 +845,37 @@ Item {
           }
         }
 
+        // Help: what the gestures do, in the words the settings use.
+        Column {
+          visible: root.page === "help"
+          width: parent.width
+          spacing: Style.space(10)
+
+          Repeater {
+            model: root.helpTopics
+            delegate: Column {
+              required property var modelData
+              width: parent.width
+              spacing: Style.space(2)
+              Text {
+                text: modelData.title
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                color: root.cfg.accentColor
+              }
+              Text {
+                width: parent.width
+                text: modelData.body
+                wrapMode: Text.WordWrap
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                color: Util.alpha(root.cfg.lineColor, 0.85)
+              }
+            }
+          }
+        }
+
         // Feel: how far you turn, how long things take, and the return-to-Volume behaviour.
         ChoiceRow {
           visible: root.page === "feel"
@@ -885,6 +928,15 @@ Item {
                      { key: 700, label: "Relaxed" }, { key: 1000, label: "Slow" } ]
           current: root.cfgValue("hold_ms", 400)
           onPicked: key => root.setConfigKey("hold_ms", key)
+        }
+        ChoiceRow {
+          visible: root.page === "feel"
+          cfg: root.cfg
+          title: "Speak the tool name"
+          help: "Says the tool aloud as you arm it or move through the menu. Needs speech-dispatcher (spd-say) or espeak-ng installed."
+          options: [ { key: false, label: "Off" }, { key: true, label: "On" } ]
+          current: root.cfgValue("announce_tool", false)
+          onPicked: key => root.setConfigKey("announce_tool", key)
         }
         ChoiceRow {
           visible: root.page === "feel"

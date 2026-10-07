@@ -1517,6 +1517,63 @@ class Eraser(Base):
         self.assertEqual(self.ptr.clicks, [])
 
 
+class Announce(Base):
+    """announce_tool: the armed or highlighted tool is spoken, only when asked for."""
+
+    def setUp(self):
+        super().setUp()
+        self.spoken = []
+        self._saved = (m.speech_command, m.subprocess.Popen)
+        m.speech_command = lambda: ["say"]
+
+        class P:
+            def __init__(p, cmd, **k):
+                self.spoken.append(cmd[-1])
+
+            def poll(p):
+                return 0
+
+        m.subprocess.Popen = P
+        m._live.update(mtime=object())
+
+    def tearDown(self):
+        m.speech_command, m.subprocess.Popen = self._saved
+
+    def write(self, **kv):
+        time.sleep(0.005)
+        with open(self.cfg, "w") as f:
+            json.dump(kv, f)
+
+    def test_silent_by_default(self):
+        self.write()
+        d = m.Dial()
+        d.show_tool("armed")
+        self.assertEqual(self.spoken, [])
+
+    def test_speaks_the_tool_name_when_armed(self):
+        self.write(announce_tool=True)
+        d = m.Dial()
+        d._arm(tool_index("Scroll"), 0.0)
+        d.show_tool("armed")
+        self.assertEqual(self.spoken, ["Scroll"])
+
+    def test_speaks_each_highlighted_tool_in_the_menu(self):
+        self.write(announce_tool=True)
+        d = m.Dial()
+        d.menu, d.menu_pick, d.menu_accum = True, 0, 0.0
+        d.on_rotate(m.MENU_STEP, 0.0)
+        self.assertEqual(self.spoken, [m.TOOLS[1]["name"]])
+
+    def test_missing_speech_tool_is_logged_once_not_raised(self):
+        self.write(announce_tool=True)
+        m.speech_command = lambda: None
+        m._speech["warned"] = False
+        m.speak("a")
+        m.speak("b")
+        self.assertTrue(m._speech["warned"])
+        self.assertEqual(self.spoken, [])
+
+
 class NewControls(Base):
     """The tools and click actions added for driving a whole session from the dial."""
 

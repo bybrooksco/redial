@@ -280,6 +280,7 @@ and every number is clamped to a safe range (text or true/false means the defaul
 | `return_buzz` | Whether the dial buzzes when a tool drops back to Volume. | `true` | true / false |
 | `double_click_ms` | How long a second (or third) press can take and still count as a double (or triple) click. | `250` | 150 to 600 |
 | `hold_ms` | How long to hold the button to open the tool menu. | `400` | 200 to 1500 |
+| `announce_tool` | Speak the tool name aloud when it is armed or highlighted in the menu. Needs `spd-say` (speech-dispatcher) or `espeak-ng`. | `false` | true / false |
 | `reduce_motion` | Turn off sliding, scaling and fading on the dial display; everything changes instantly. | `false` | true / false |
 | `deadzone` | Ignore small turns: after a pause the dial must turn this many counts before anything happens, so a bump or a tremor does nothing. A deliberate turn loses only that lead-in (the counts are released together, not dropped). `0` is off. | `0` | 0 to 100 |
 | `menu_latch` | Tap menu: hold until the menu opens, let go, then turn and click to choose. Turning while still holding works as before. For anyone who cannot hold and turn at once. | `false` | true / false |

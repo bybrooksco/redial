@@ -6,6 +6,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Help page** in the settings window (third tab): what turn, click, hold and the menu do, and where to look when something is wrong.
+- **Speak the tool name** (`announce_tool`, Feel page): says the tool aloud as you arm it or move through the menu, using `spd-say` or `espeak-ng` if installed. Off by default. Tested with stubs only; not yet heard on real hardware.
 - **Reduce motion** (Feel page, `reduce_motion`): the dial display stops sliding, scaling and fading. Every animation now uses one of three speeds (120, 160, 260 ms) instead of nine different ones from 100 to 260.
 - **Settings window is operable from the keyboard.** Every control is now a shared `Pressable`: Tab and Shift+Tab move between them, Enter or Space press, Shift+Enter or right-click go the other way (the click-action pickers also take Left/Right), and a focus ring shows where you are. Escape closes the window, and it takes keyboard focus when it opens. Tool-ring items can be moved with Left/Right and removed with Delete. Controls tell screen readers their role, name and state. No target is smaller than 32 px (the pen toggles were 22), and the ring's faint "click" label is now readable. If the content is taller than the screen it scrolls. Tested headlessly (`tests/qml`); **not yet tried with a real screen reader**.
 - **Status line** in the settings window: Connected (with battery %), asleep ("click it to wake it"), or "dial service is not running". The daemon writes `~/.config/dial-radial/status.json` every few seconds (state, battery from Bluetooth, version, heartbeat); a stale file means the daemon is down.
