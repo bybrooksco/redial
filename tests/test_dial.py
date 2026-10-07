@@ -45,6 +45,31 @@ def load_daemon():
 
 
 m = load_daemon()
+# What the daemon module looked like before any test touched it. Base restores every attribute a
+# test changed, so one test's stub can never leak into the next (one did: read_brightness).
+PRISTINE = dict(vars(m))
+
+
+def restore_pristine():
+    for name, value in PRISTINE.items():
+        if vars(m).get(name) is not value:
+            setattr(m, name, value)
+
+
+_run_test = unittest.TestCase.run
+
+
+def _run_isolated(self, result=None):
+    """Every test, whatever its base class, leaves the daemon module as it found it."""
+    try:
+        return _run_test(self, result)
+    finally:
+        restore_pristine()
+
+
+unittest.TestCase.run = _run_isolated
+
+
 EVENTS = []
 POSITIONS = []
 
@@ -571,7 +596,9 @@ class HyprIpc(unittest.TestCase):
             calls.append(cmd)
             return types.SimpleNamespace(stdout='{"class": "via-hyprctl"}', stderr="", returncode=0)
 
+        real = m.subprocess
         m.subprocess = types.SimpleNamespace(run=fake)
+        self.addCleanup(lambda: setattr(m, "subprocess", real))
         self.assertEqual(m.focused_class(), "via-hyprctl")
         self.assertEqual(calls, [["hyprctl", "activewindow", "-j"]])
 
@@ -2139,6 +2166,60 @@ class StatusLoop(Base):
         with self.assertRaises(StopLoop):
             m.status_loop(interval=0)
         self.assertEqual(writes, [80, 79])
+
+
+class NarrowedErrors(Base):
+    """The failures that used to be swallowed by a bare `except Exception` still degrade quietly,
+    and the ones that are bugs are no longer hidden."""
+
+    def test_focus_queries_degrade_on_every_expected_failure(self):
+        fx = Fixture(self)
+        for raised in (OSError("sock"), ValueError("json"), subprocess.TimeoutExpired("x", 1)):
+
+            def boom(what, _e=raised):
+                raise _e
+
+            fx.set(m, "hypr_json", boom)
+            self.assertEqual(m.focused_class(), "")
+            self.assertFalse(m.focused_is_terminal())
+
+    def test_focus_queries_cope_with_a_reply_that_is_not_an_object(self):
+        fx = Fixture(self)
+        fx.set(m, "hypr_json", lambda what: [1, 2, 3])
+        self.assertEqual(m.focused_class(), "")
+        self.assertFalse(m.focused_is_terminal())
+
+    def test_a_real_bug_in_the_query_is_not_swallowed(self):
+        fx = Fixture(self)
+
+        def bug(what):
+            raise KeyError("a genuine programming error")
+
+        fx.set(m, "hypr_json", bug)
+        with self.assertRaises(KeyError):
+            m.focused_class()
+
+    def test_numbers_that_cannot_be_cast_fall_back(self):
+        for bad in (float("inf"), "x", None, [1], {"a": 1}):
+            self.assertEqual(m._spec_number({"n": bad}, "n", 7, int), 7, bad)
+        self.assertEqual(m._spec_number({"n": "5"}, "n", 7, int), 5)
+
+    def test_tool_with_unusable_detent_or_gain_uses_the_defaults(self):
+        tools = m.build_tools(
+            [{"name": "T", "detent": "fast", "gain": [], "cw": None, "ccw": None, "click": None}]
+        )
+        self.assertEqual(tools[0]["detent"], 60)
+        self.assertEqual(tools[0]["gain"], m.SCROLL_GAIN)
+
+    def test_missing_wpctl_and_brightnessctl_give_none(self):
+        fx = Fixture(self)
+
+        def gone(*a, **k):
+            raise FileNotFoundError("no such tool")
+
+        fx.set(m.subprocess, "run", gone)
+        self.assertIsNone(m.read_brightness("intel_backlight"))
+        self.assertIsNone(m.MenuUI._volume())
 
 
 class NewControls(Base):

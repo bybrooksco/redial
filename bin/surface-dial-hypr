@@ -443,8 +443,8 @@ def _seek_player_args():
         )
         if pick:
             args = ["-p", pick]
-    except Exception:
-        pass
+    except (OSError, subprocess.SubprocessError):
+        pass  # no playerctl, or it hung: scrub whichever player it picks by default
     _seek_cache.update(at=now, args=args)
     return args
 
@@ -501,8 +501,8 @@ def release_mod():
         try:
             _mod_proc.terminate()
             _mod_proc.wait(timeout=1)
-        except Exception:
-            pass
+        except (OSError, subprocess.SubprocessError):
+            pass  # already gone, or slow to exit; either way we drop the handle
         _mod_proc = None
 
 
@@ -547,7 +547,7 @@ class MenuUI:
                 return None
             pct = int(round(float(m.group(1)) * 100))
             return (0 if "MUTED" in out else pct), ("muted" if "MUTED" in out else f"{pct}%")
-        except Exception:
+        except (OSError, subprocess.SubprocessError, ValueError):
             return None
 
     def _payload(self, index):
@@ -647,7 +647,7 @@ class MenuStream:
         if self.sock is not None:
             try:
                 self.sock.close()
-            except Exception:
+            except OSError:
                 pass
             self.sock = None
 
@@ -778,7 +778,7 @@ class Haptics:
         if self.fd is not None:  # same path, new device: reopen
             try:
                 self.fd.close()
-            except Exception:
+            except OSError:
                 pass
             self.fd = None
         try:
@@ -807,7 +807,7 @@ class Haptics:
             log(f"haptic write failed ({exc})")
             try:
                 self.fd.close()
-            except Exception:
+            except OSError:
                 pass
             self.fd = None
 
@@ -952,7 +952,7 @@ def read_brightness(device=None):
             ["brightnessctl", "-m", "-d", dev, "info"], capture_output=True, text=True, timeout=2
         ).stdout
         return int(out.strip().split(",")[3].rstrip("%"))
-    except Exception:
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
         return None
 
 
@@ -978,6 +978,11 @@ def set_brightness(mag, up, step=BRIGHT_STEP, device=None):
 def repeat_key(mag, *combo):
     for _ in range(mag):
         key(*combo)
+
+
+# What hypr_json() and its callers can raise: no socket or hyprctl (OSError), a hung hyprctl
+# (SubprocessError), unparseable output (ValueError), or a reply that is not an object.
+HYPR_ERRORS = (OSError, subprocess.SubprocessError, ValueError, AttributeError)
 
 
 def hypr_json(what):
@@ -1012,7 +1017,7 @@ def focused_is_terminal():
     """
     try:
         tags = (hypr_json("activewindow") or {}).get("tags") or []
-    except Exception:
+    except HYPR_ERRORS:
         return False
     return any(isinstance(t, str) and t.rstrip("*") == "terminal" for t in tags)
 
@@ -1020,7 +1025,7 @@ def focused_is_terminal():
 def focused_class():
     try:
         return (hypr_json("activewindow") or {}).get("class", "")
-    except Exception:
+    except HYPR_ERRORS:
         return ""
 
 
@@ -1335,11 +1340,14 @@ def mouse_button(spec):
     }.get(str(spec.get("button", "right")).lower())
 
 
+CAST_ERRORS = (TypeError, ValueError, OverflowError)  # int()/float() on something unusable
+
+
 def _spec_number(spec, key, default, cast):
     """spec[key] converted with `cast` (int or float), or `default` if absent or unusable."""
     try:
         return cast(spec.get(key, default))
-    except Exception:
+    except CAST_ERRORS:
         return default
 
 
@@ -2076,7 +2084,7 @@ def build_tools(specs):
         name = str(t.get("name") or f"Tool {i + 1}")
         try:
             detent = int(t.get("detent", 60))
-        except Exception:
+        except CAST_ERRORS:
             detent = 60
         click_spec = t.get("click")
         label = ""
@@ -2084,7 +2092,7 @@ def build_tools(specs):
             label = str(click_spec.get("label", "") or "")
         try:
             gain = float(t.get("gain", SCROLL_GAIN))
-        except Exception:
+        except CAST_ERRORS:
             gain = SCROLL_GAIN
         hold_mod = t.get("hold_mod")
         out.append(
