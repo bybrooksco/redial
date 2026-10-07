@@ -28,6 +28,12 @@ volume: harmless, reversible and audible. Other tools are armed deliberately
 and disarm themselves after a few seconds of stillness, so nothing stays armed.
 Volume is index 0 and is the idle home.
 
+How long "a few seconds" is is `auto_return_s` (default 6 s, which is what the project has used since the
+first version; range 3-300 s, read live). It is also the first setting added specifically because the
+default can be too short for someone using the dial with limited reach or effort. Tools that hold a
+modifier (Zoom's Ctrl) are capped at 10 s whatever the setting says: while one is armed, every key typed
+in another app carries that modifier, so "never" and "a long time" are deliberately not offered.
+
 A continuous, scroll-wheel-driven Zoom was tried and removed in early
 development; it earned nothing and made the dial feel loose.
 

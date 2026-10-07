@@ -255,6 +255,20 @@ parsed as Lua and fails, and `hyprctl` still exits 0, so the failure is only
 visible in its output. Use `hl.dsp.window.cycle_next()`. Reference:
 `/usr/share/omarchy/default/hypr/bindings/`.
 
+## Return to Volume
+
+The dial rests in Volume. A tool you arm (Scroll, Zoom, Media, ...) stays armed while you use it
+and drops back to Volume after you stop, so nothing stays armed by accident. How long that takes is
+`auto_return_s` in `config.json`, or the **Return to Volume after** row in the settings window.
+It applies immediately, no restart.
+
+- Default **6 seconds**, which is what the project has always used. The settings window offers 6, 15,
+  30 and 60 s; in the file any number from **3 to 300** works (outside that range it is clamped; text or
+  true/false means the default).
+- **Zoom is always capped at 10 seconds.** It holds Ctrl while armed, so every key you type in another
+  app would carry Ctrl. A long setting never leaves Ctrl held.
+- This is the dial's own idle timer, not the Bluetooth link: the daemon never touches the connection.
+
 ## Click gestures
 
 Single, double and triple click each run an action you choose, in `config.json`:

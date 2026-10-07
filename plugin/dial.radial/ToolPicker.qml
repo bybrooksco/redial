@@ -72,6 +72,33 @@ Item {
     configDoc = out
   }
 
+  // How long an armed tool stays armed once you stop turning (the daemon's "auto_return_s",
+  // re-read live). The daemon clamps it to 3-300 s and caps Zoom at 10 s, because Zoom holds
+  // Ctrl while armed.
+  readonly property var autoReturnOptions: [
+    { key: 6,  label: "6 s" },
+    { key: 15, label: "15 s" },
+    { key: 30, label: "30 s" },
+    { key: 60, label: "60 s" }
+  ]
+  property real autoReturnChoice: {
+    var v = configDoc ? configDoc.auto_return_s : undefined
+    return (typeof v === "number" && isFinite(v)) ? v : 6
+  }
+  // A value written by hand that none of the chips match.
+  readonly property bool autoReturnCustom: {
+    for (var i = 0; i < autoReturnOptions.length; i++)
+      if (autoReturnOptions[i].key === autoReturnChoice) return false
+    return true
+  }
+  function setAutoReturn(secs) {
+    var out = ({})
+    for (var k in configDoc) out[k] = configDoc[k]
+    out.auto_return_s = secs
+    configFile.setText(JSON.stringify(out, null, 2))
+    configDoc = out
+  }
+
   // One picker across all seven overlay options, though four are a "face" and three a "layout".
   // Writes both keys together so neither is left stale.
   readonly property var appearanceOptions: [
@@ -618,6 +645,61 @@ Item {
 
           Text {
             text: "Applies immediately."
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            color: Util.alpha(root.cfg.lineColor, 0.5)
+          }
+        }
+
+        // How long a tool stays armed after you stop turning, before it drops back to Volume.
+        Column {
+          width: parent.width
+          spacing: Style.space(6)
+
+          Text {
+            text: "Return to Volume after"
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            color: Util.alpha(root.cfg.lineColor, 0.6)
+          }
+
+          Row {
+            spacing: Style.space(4)
+            Repeater {
+              model: root.autoReturnOptions
+              delegate: Rectangle {
+                id: returnBtn
+                required property var modelData
+                readonly property bool active: root.autoReturnChoice === modelData.key
+                width: Style.space(64); height: Style.space(28)
+                radius: Style.space(6)
+                color: active ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.08)
+                border.width: Math.max(1, Style.space(1.5))
+                border.color: active ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.25)
+
+                Text {
+                  anchors.centerIn: parent
+                  text: returnBtn.modelData.label
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  color: returnBtn.active ? root.cfg.backgroundColor : root.cfg.lineColor
+                }
+
+                MouseArea {
+                  anchors.fill: parent
+                  onClicked: root.setAutoReturn(returnBtn.modelData.key)
+                }
+              }
+            }
+          }
+
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "How long a tool stays armed after you stop turning. Zoom always returns after 10 s, "
+                  + "because it holds Ctrl."
+                  + (root.autoReturnCustom ? " Custom value in config.json: " + root.autoReturnChoice + " s." : "")
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             color: Util.alpha(root.cfg.lineColor, 0.5)

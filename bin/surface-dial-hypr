@@ -46,6 +46,7 @@ import signal
 import socket
 import struct
 import json
+import math
 import subprocess
 import sys
 import threading
@@ -214,7 +215,11 @@ ANCHORS = (
 DOUBLE_S = 0.25  # second click inside this window = double click
 # Click actions are configurable (CLICK_ACTIONS). A double click waits DOUBLE_S for a
 # possible triple unless "triple" is "none".
-DISARM_S = 6.00  # armed tool reverts to idle after this much stillness
+DISARM_S = 6.00  # default: an armed tool reverts to idle after this much stillness
+DISARM_MIN_S, DISARM_MAX_S = 3.0, 300.0  # range of config "auto_return_s"
+# A tool that holds a modifier (Zoom's Ctrl) is capped: while it is armed, every key typed elsewhere
+# carries that modifier, so it must never be left armed for long.
+HOLD_MOD_DISARM_CAP_S = 10.0
 
 # --- stepping ---
 # Detent angle is constant per tool; speed scales step magnitude, measured over a fixed
@@ -1526,6 +1531,30 @@ _click_cache = {"mtime": object(), "choice": dict(CLICK_DEFAULTS)}
 _click_fns = {}
 
 
+_disarm_cache = {"mtime": object(), "s": DISARM_S}
+
+
+def disarm_after(tool):
+    """Seconds of stillness before `tool` falls back to the rest tool.
+
+    From config "auto_return_s", re-read whenever the file changes (no restart). Numbers are clamped
+    to 3-300 s; anything else (text, true/false, NaN) means the default. Tools that hold a
+    modifier are capped at HOLD_MOD_DISARM_CAP_S.
+    """
+    try:
+        mtime = os.stat(CONFIG_PATH).st_mtime_ns
+    except OSError:
+        mtime = None
+    if mtime != _disarm_cache["mtime"]:
+        v = load_config().get("auto_return_s")
+        good = isinstance(v, int | float) and not isinstance(v, bool) and math.isfinite(v)
+        _disarm_cache.update(
+            mtime=mtime, s=min(max(float(v), DISARM_MIN_S), DISARM_MAX_S) if good else DISARM_S
+        )
+    secs = _disarm_cache["s"]
+    return min(secs, HOLD_MOD_DISARM_CAP_S) if tool.get("hold_mod") else secs
+
+
 def click_choice(kind):
     """Configured action name for "single" | "double" | "triple"."""
     try:
@@ -2147,7 +2176,7 @@ class Dial:
 
         # nothing stays armed: fall back to the safe tool when left alone
         if self.tool != IDLE_TOOL and not self.menu and self.down_at is None:
-            remain = (self.last_action + DISARM_S) - now
+            remain = (self.last_action + disarm_after(TOOLS[self.tool])) - now
             if remain <= 0:
                 self.disarm(now)
             else:

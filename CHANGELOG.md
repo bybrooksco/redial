@@ -6,6 +6,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Return to Volume after** setting (`auto_return_s`, 3-300 s, default 6 s): how long an armed tool stays armed before dropping back to Volume. Live, in the settings window and `config.json`. Zoom is capped at 10 s because it holds Ctrl.
 - **Omarchy** layout: a card in the same visual language as Omarchy's own OSD, following the shell theme.
 - `--version` and `--help` on the daemon.
 - Optional systemd user unit (`systemd/surface-dial.service`) that restarts the daemon on failure.

@@ -82,6 +82,7 @@ def install_stubs(cfg_path):
     m.ACTIONS.inline = True  # assert straight after a gesture, not after a worker thread
     m.TOOLS = m.build_tools(m.TOOL_LIBRARY)
     m._click_cache.update(mtime=object())
+    m._disarm_cache.update(mtime=object())
 
 
 def tool_index(name):
@@ -801,6 +802,77 @@ class PluginManifest(unittest.TestCase):
             root["entryPoints"]["panel"].endswith(nested["entryPoints"]["panel"]),
             "root entry point should point at the same QML file as the nested manifest",
         )
+
+
+class AutoReturn(Base):
+    """config "auto_return_s": how long an armed tool stays armed, read live."""
+
+    def write(self, value):
+        time.sleep(0.005)  # distinct mtime
+        with open(self.cfg, "w") as f:
+            json.dump({} if value is None else {"auto_return_s": value}, f)
+
+    def after(self, tool_name):
+        return m.disarm_after(m.TOOLS[tool_index(tool_name)])
+
+    def test_default_is_the_original_six_seconds(self):
+        self.write(None)
+        self.assertEqual(self.after("Scroll"), 6.0)
+
+    def test_a_configured_value_is_used_and_changes_apply_without_a_restart(self):
+        self.write(15)
+        self.assertEqual(self.after("Scroll"), 15.0)
+        self.write(30)
+        self.assertEqual(self.after("Scroll"), 30.0)
+
+    def test_out_of_range_numbers_are_clamped(self):
+        self.write(0.5)
+        self.assertEqual(self.after("Scroll"), m.DISARM_MIN_S)
+        self.write(100000)
+        self.assertEqual(self.after("Scroll"), m.DISARM_MAX_S)
+
+    def test_junk_means_the_default(self):
+        for junk in ("long", True, None, [5], {"s": 5}, float("nan"), float("inf")):
+            self.write(junk)
+            self.assertEqual(self.after("Scroll"), 6.0, repr(junk))
+
+    def test_a_tool_that_holds_a_modifier_is_capped(self):
+        self.write(60)
+        self.assertTrue(m.TOOLS[tool_index("Zoom")].get("hold_mod"))
+        self.assertEqual(self.after("Zoom"), m.HOLD_MOD_DISARM_CAP_S)
+        self.assertEqual(self.after("Scroll"), 60.0)
+
+    def test_the_cap_never_lengthens_a_short_setting(self):
+        self.write(4)
+        self.assertEqual(self.after("Zoom"), 4.0)
+
+    def armed_dial(self, tool_name):
+        d = m.Dial()
+        d.tool = tool_index(tool_name)
+        d.last_action = 0.0
+        return d
+
+    def test_tick_returns_to_the_rest_tool_only_after_the_configured_time(self):
+        self.write(15)
+        d = self.armed_dial("Scroll")
+        d.tick(7.0)  # past the old six seconds: still armed
+        self.assertEqual(d.tool, tool_index("Scroll"))
+        d.tick(16.0)
+        self.assertEqual(d.tool, m.IDLE_TOOL)
+
+    def test_tick_with_no_config_still_returns_after_six_seconds(self):
+        self.write(None)
+        d = self.armed_dial("Scroll")
+        d.tick(5.0)
+        self.assertEqual(d.tool, tool_index("Scroll"))
+        d.tick(7.0)
+        self.assertEqual(d.tool, m.IDLE_TOOL)
+
+    def test_a_long_setting_does_not_keep_zoom_armed(self):
+        self.write(60)
+        d = self.armed_dial("Zoom")
+        d.tick(11.0)
+        self.assertEqual(d.tool, m.IDLE_TOOL)
 
 
 if __name__ == "__main__":
