@@ -82,7 +82,7 @@ def install_stubs(cfg_path):
     m.hypr = lambda lua: EVENTS.append("HYPR:" + lua)
     m.CONFIG_PATH = cfg_path
     m.ACTIONS.inline = True  # assert straight after a gesture, not after a worker thread
-    m.TOOLS = m.build_tools(m.TOOL_LIBRARY)
+    m.TOOLS = m.build_tools(m.DEFAULT_TOOLS)  # what the daemon runs with and no config
     m._click_cache.update(mtime=object())
     m._live.update(mtime=object())
 
@@ -1107,6 +1107,148 @@ class DaemonLog(unittest.TestCase):
         lines = self.lines()
         self.assertEqual(len(lines), 160)
         self.assertTrue(all(re.search(r" T\d message \d+$", x) for x in lines))
+
+
+class NewControls(Base):
+    """The tools and click actions added for driving a whole session from the dial."""
+
+    ORIGINAL_DEFAULTS = [
+        "Volume", "Windows", "Workspaces", "Scroll", "Undo", "Zoom",
+        "Media", "Word Nav", "Arrow Keys", "Window Size", "Brightness",
+    ]  # fmt: skip
+    NEW_TOOLS = ["Focus", "Tabs", "Select", "Pages", "Tile Focus", "Move Window"]
+
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(lambda: setattr(m, "hypr_json", self.real_hypr_json))
+        self.real_hypr_json = m.hypr_json
+        m.TOOLS = m.build_tools(m.TOOL_LIBRARY)  # these tests need the optional tools too
+
+    def window(self, **kw):
+        m.hypr_json = lambda what: kw
+
+    def click_action(self, name):
+        return m.make_action({a[0]: a[3] for a in m.CLICK_ACTIONS}[name])
+
+    # --- terminal detection
+    def test_a_terminal_is_recognised_by_its_tag_like_omarchy_does(self):
+        self.window(tags=["default-opacity*", "terminal*"])
+        self.assertTrue(m.focused_is_terminal())
+        self.window(tags=["terminal"])
+        self.assertTrue(m.focused_is_terminal())
+
+    def test_other_windows_are_not_terminals(self):
+        for w in ({"tags": ["default-opacity*"]}, {"tags": []}, {}, {"tags": ["terminal-like*"]}):
+            self.window(**w)
+            self.assertFalse(m.focused_is_terminal(), w)
+
+    def test_a_failed_lookup_means_not_a_terminal(self):
+        def boom(what):
+            raise OSError("no compositor")
+
+        m.hypr_json = boom
+        self.assertFalse(m.focused_is_terminal())
+
+    # --- keys that differ in a terminal
+    def test_copy_and_paste_use_terminal_safe_keys_in_a_terminal(self):
+        self.window(tags=["terminal*"])
+        EVENTS.clear()
+        self.click_action("copy")(1)
+        self.click_action("paste")(1)
+        self.assertEqual(EVENTS, ["KEY:ctrl+Insert", "KEY:shift+Insert"])  # never Ctrl+C there
+
+    def test_copy_and_paste_use_the_normal_keys_elsewhere(self):
+        self.window(tags=[])
+        EVENTS.clear()
+        self.click_action("copy")(1)
+        self.click_action("paste")(1)
+        self.assertEqual(EVENTS, ["KEY:ctrl+c", "KEY:ctrl+v"])
+
+    def test_select_all_and_redo_do_nothing_in_a_terminal(self):
+        self.window(tags=["terminal*"])
+        EVENTS.clear()
+        self.click_action("select_all")(1)
+        self.click_action("redo")(1)
+        self.assertEqual(EVENTS, [])
+
+    def test_an_action_without_terminal_keys_never_asks_the_compositor(self):
+        calls = []
+        m.hypr_json = lambda what: calls.append(what) or {}
+        self.click_action("cut")(1)
+        self.assertEqual(calls, [])  # no per-press lookup when it isn't needed
+
+    def test_bad_terminal_keys_are_ignored_not_fatal(self):
+        act = m.make_action({"do": "key", "keys": ["a"], "terminal_keys": "nope"})
+        self.window(tags=["terminal*"])
+        EVENTS.clear()
+        act(1)
+        self.assertEqual(EVENTS, ["KEY:a"])
+
+    # --- the click-action table
+    def test_every_click_action_is_well_formed_and_compiles(self):
+        names = [a[0] for a in m.CLICK_ACTIONS]
+        self.assertEqual(len(names), len(set(names)), "duplicate action name")
+        for name, label, desc, spec in m.CLICK_ACTIONS:
+            self.assertTrue(label and desc, name)
+            if name in ("tool", "none"):
+                self.assertIsNone(spec)
+            else:
+                self.assertTrue(callable(m.make_action(spec)), name)
+
+    def test_the_new_click_actions_exist(self):
+        have = {a[0] for a in m.CLICK_ACTIONS}
+        for want in ("launcher", "screenshot", "copy", "paste", "cut", "select_all", "redo",
+                     "tab_next", "tab_prev", "fullscreen", "float"):  # fmt: skip
+            self.assertIn(want, have)
+
+    def test_nothing_destructive_was_added_as_a_click_option(self):
+        have = {a[0] for a in m.CLICK_ACTIONS}
+        self.assertNotIn("close", have)
+        self.assertNotIn("close_window", have)
+
+    # --- the tool library
+    def test_the_default_tool_set_is_exactly_what_it_was(self):
+        self.assertEqual([t["name"] for t in m.DEFAULT_TOOLS], self.ORIGINAL_DEFAULTS)
+        with open(self.cfg, "w") as f:
+            json.dump({}, f)
+        self.assertEqual([t["name"] for t in m.load_tools()], self.ORIGINAL_DEFAULTS)
+
+    def test_the_new_tools_are_in_the_library_and_can_be_chosen(self):
+        names = [t["name"] for t in m.TOOL_LIBRARY]
+        for n in self.NEW_TOOLS:
+            self.assertIn(n, names)
+        with open(self.cfg, "w") as f:
+            json.dump({"active_tools": ["Volume", "Focus", "Tile Focus"]}, f)
+        self.assertEqual([t["name"] for t in m.load_tools()], ["Volume", "Focus", "Tile Focus"])
+
+    def test_every_new_tool_compiles(self):
+        built = {t["name"]: t for t in m.build_tools(m.TOOL_LIBRARY)}
+        for n in self.NEW_TOOLS:
+            self.assertTrue(callable(built[n]["cw"]) and callable(built[n]["ccw"]), n)
+
+    def test_focus_tool_sends_tab_and_shift_tab(self):
+        d = m.Dial()
+        d.tool = tool_index_all("Focus")
+        EVENTS.clear()
+        d.on_rotate(60, 0.0)
+        d.on_rotate(-60, 1.0)
+        self.assertEqual(EVENTS, ["KEY:Tab", "KEY:shift+Tab"])
+
+    def test_tile_focus_flips_between_left_right_and_up_down(self):
+        d = m.Dial()
+        d.tool = tool_index_all("Tile Focus")
+        EVENTS.clear()
+        d.on_rotate(60, 0.0)
+        d.arrow_horizontal = True  # the click toggles this
+        d.on_rotate(60, 1.0)
+        self.assertEqual(
+            EVENTS,
+            ['HYPR:hl.dsp.focus({ direction = "r" })', 'HYPR:hl.dsp.focus({ direction = "d" })'],
+        )
+
+
+def tool_index_all(name):
+    return [t["name"] for t in m.TOOLS].index(name)
 
 
 if __name__ == "__main__":

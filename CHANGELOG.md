@@ -6,6 +6,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Six optional tools, off by default so the ring is unchanged: **Focus** (Tab / Shift+Tab, click = Enter, so any dialog can be driven by the dial alone), **Tabs**, **Select**, **Pages**, **Tile Focus** and **Move Window**.
+- Eleven new click actions for the dial and the pen buttons: `launcher` (Omarchy menu), `screenshot`, `copy`, `paste`, `cut`, `select_all`, `redo`, `tab_next`, `tab_prev`, `fullscreen`, `float`. `copy` and `paste` are terminal-aware (Ctrl+Insert / Shift+Insert, so they never interrupt a program); detection uses the `terminal` tag Omarchy puts on terminal windows.
 - The daemon now keeps its own log at `~/.local/state/surface-dial/daemon.log` (256 KB, one rotation). Started the Omarchy way its stderr is `/dev/null`, so there was no record of connects, disconnects or errors. `surface-dial-setup` shows where it is.
 - **Feel settings**, live and clamped, in `config.json` and a new **Feel** page of the settings window: `sensitivity` (0.5-2), `auto_return_s` (3-300 s, default 6; Zoom capped at 10 s because it holds Ctrl), `return_buzz`, `double_click_ms` (150-600), `hold_ms` (200-1500). Defaults unchanged.
 - The settings window is now two pages, **Look** and **Feel**, so it stays shorter than before (it does not scroll). `omarchy-shell dialtools page look|feel`.

@@ -968,6 +968,19 @@ def hypr_json(what):
     return json.loads(p.stdout or "null")
 
 
+def focused_is_terminal():
+    """Is the focused window a terminal? Omarchy tags terminals `terminal`; so do we.
+
+    In a terminal Ctrl+C is "interrupt" and kills the running program, so copy and paste there use
+    Ctrl+Insert and Shift+Insert, exactly as Omarchy's own universal copy and paste do.
+    """
+    try:
+        tags = (hypr_json("activewindow") or {}).get("tags") or []
+    except Exception:
+        return False
+    return any(isinstance(t, str) and t.rstrip("*") == "terminal" for t in tags)
+
+
 def focused_class():
     try:
         return (hypr_json("activewindow") or {}).get("class", "")
@@ -1219,6 +1232,8 @@ def dictation_toggle():
 #   {"do": "exec",      "cmd": ["wpctl", "set-mute", "..."]}
 #   {"do": "hypr",      "lua": "hl.dsp.window.cycle_next()"}
 #   {"do": "key",       "keys": ["ctrl", "z"], "repeat": false}
+#                        - optional "terminal_keys": [...] replaces keys when a terminal is focused;
+#                          [] means send nothing there
 #   {"do": "volume",    "direction": "up" | "down"}
 #   {"do": "brightness","direction": "up" | "down", "step": 2}
 #                                                - backlight percent per detent x magnitude
@@ -1292,9 +1307,28 @@ def make_action(spec):
             log(f"key needs a non-empty list of key names: {spec!r}")
             return None
         rep = bool(spec.get("repeat", False))
-        if rep:
-            return lambda mag, _k=list(keys): repeat_key(max(1, int(mag)), *_k)
-        return lambda mag, _k=list(keys): key(*_k)
+        tkeys = spec.get("terminal_keys")
+        if tkeys is not None and not (
+            isinstance(tkeys, list) and all(isinstance(k, str) for k in tkeys)
+        ):
+            log(f"key terminal_keys must be a list of key names: {spec!r}")
+            tkeys = None
+
+        plain = list(keys)
+        in_terminal = None if tkeys is None else list(tkeys)
+
+        def press(mag):
+            chosen = plain
+            if in_terminal is not None and focused_is_terminal():
+                if not in_terminal:
+                    return  # nothing sensible to send in a terminal
+                chosen = in_terminal
+            if rep:
+                repeat_key(max(1, int(mag)), *chosen)
+            else:
+                key(*chosen)
+
+        return press
 
     if verb == "brightness":
         up = str(spec.get("direction", "up")).lower() != "down"
@@ -1500,12 +1534,82 @@ TOOL_LIBRARY = [
         "ccw": {"do": "brightness", "direction": "down"},
         "click": None,
     },
+    # --- tools added for people who need to drive a whole session from the dial. Not in the
+    # default set (the ring stays the size it was); add them in the settings window.
+    {
+        # Operate any form, dialog or toolbar with the dial alone: turn to move focus,
+        # click to activate.
+        "name": "Focus",
+        "icon": "\uf11c",
+        "detent": 60,
+        "default": False,
+        "cw": {"do": "key", "keys": ["Tab"]},
+        "ccw": {"do": "key", "keys": ["shift", "Tab"]},
+        "click": {"do": "key", "label": "activate (Enter)", "keys": ["Return"]},
+    },
+    {
+        "name": "Tabs",
+        "icon": "\uf24d",
+        "detent": 60,
+        "default": False,
+        "cw": {"do": "key", "keys": ["ctrl", "Tab"]},
+        "ccw": {"do": "key", "keys": ["ctrl", "shift", "Tab"]},
+        "click": None,
+    },
+    {
+        # Extend a selection a word at a time, the partner of Word Nav (which only moves).
+        "name": "Select",
+        "icon": "\uf246",
+        "detent": 60,
+        "default": False,
+        "cw": {"do": "key", "keys": ["ctrl", "shift", "Right"]},
+        "ccw": {"do": "key", "keys": ["ctrl", "shift", "Left"]},
+        "click": None,
+    },
+    {
+        "name": "Pages",
+        "icon": "\uf15c",
+        "detent": 60,
+        "default": False,
+        "cw": {"do": "key", "keys": ["Page_Down"]},
+        "ccw": {"do": "key", "keys": ["Page_Up"]},
+        "click": None,
+    },
+    {
+        # Move focus to the neighbouring tile. Click flips left/right and up/down, like Arrow Keys.
+        "name": "Tile Focus",
+        "icon": "\uf2d0",
+        "detent": 60,
+        "default": False,
+        "axis_toggle": True,
+        "cw": {"do": "hypr", "lua": 'hl.dsp.focus({ direction = "r" })'},
+        "ccw": {"do": "hypr", "lua": 'hl.dsp.focus({ direction = "l" })'},
+        "alt": {
+            "base_title": "\u2194  Tile Focus",
+            "base_subtitle": "left / right",
+            "title": "\u2195  Tile Focus",
+            "subtitle": "up / down",
+            "cw": {"do": "hypr", "lua": 'hl.dsp.focus({ direction = "d" })'},
+            "ccw": {"do": "hypr", "lua": 'hl.dsp.focus({ direction = "u" })'},
+        },
+        "click": {"do": "none", "label": "toggle left-right/up-down"},
+    },
+    {
+        # Carry the focused window to the next or previous workspace, and follow it.
+        "name": "Move Window",
+        "icon": "\uf064",
+        "detent": 60,
+        "default": False,
+        "cw": {"do": "hypr", "lua": 'hl.dsp.window.move({ workspace = "+1" })'},
+        "ccw": {"do": "hypr", "lua": 'hl.dsp.window.move({ workspace = "-1" })'},
+        "click": None,
+    },
 ]
 
 # Back-compat name: existing call sites and the config docs refer to "the
 # default tool set" -- keep both names pointing at the one list rather than
 # rewriting every reference.
-DEFAULT_TOOLS = TOOL_LIBRARY
+DEFAULT_TOOLS = [t for t in TOOL_LIBRARY if t.get("default", True)]
 
 
 # --- click gestures ---
@@ -1549,6 +1653,67 @@ CLICK_ACTIONS = [
         "Maximize window",
         "Maximize the focused window.",
         {"do": "hypr", "lua": 'hl.dsp.window.fullscreen({ mode = "maximized" })'},
+    ),
+    (
+        "launcher",
+        "Omarchy menu",
+        "Open the Omarchy menu (apps, settings, system).",
+        {"do": "exec", "cmd": ["omarchy-menu", "toggle"]},
+    ),
+    (
+        "screenshot",
+        "Screenshot",
+        "Take a screenshot.",
+        {"do": "exec", "cmd": ["omarchy-capture-screenshot"]},
+    ),
+    (
+        "copy",
+        "Copy",
+        "Copy the selection (Ctrl+Insert in a terminal, so it never interrupts a program).",
+        {"do": "key", "keys": ["ctrl", "c"], "terminal_keys": ["ctrl", "Insert"]},
+    ),
+    (
+        "paste",
+        "Paste",
+        "Paste (Shift+Insert in a terminal).",
+        {"do": "key", "keys": ["ctrl", "v"], "terminal_keys": ["shift", "Insert"]},
+    ),
+    ("cut", "Cut", "Cut the selection.", {"do": "key", "keys": ["ctrl", "x"]}),
+    (
+        "select_all",
+        "Select all",
+        "Select everything (does nothing in a terminal).",
+        {"do": "key", "keys": ["ctrl", "a"], "terminal_keys": []},
+    ),
+    (
+        "redo",
+        "Redo",
+        "Redo (does nothing in a terminal).",
+        {"do": "key", "keys": ["ctrl", "shift", "z"], "terminal_keys": []},
+    ),
+    (
+        "tab_next",
+        "Next tab",
+        "Switch to the next tab.",
+        {"do": "key", "keys": ["ctrl", "Tab"]},
+    ),
+    (
+        "tab_prev",
+        "Previous tab",
+        "Switch to the previous tab.",
+        {"do": "key", "keys": ["ctrl", "shift", "Tab"]},
+    ),
+    (
+        "fullscreen",
+        "Fullscreen",
+        "Toggle fullscreen for the focused window.",
+        {"do": "hypr", "lua": 'hl.dsp.window.fullscreen({ mode = "fullscreen" })'},
+    ),
+    (
+        "float",
+        "Float / tile",
+        "Toggle the focused window between floating and tiled.",
+        {"do": "hypr", "lua": 'hl.dsp.window.float({ action = "toggle" })'},
     ),
     ("none", "Nothing", "Do nothing.", None),
 ]
@@ -1897,8 +2062,8 @@ def load_tools():
                        and reorder from the built-in set without needing to
                        know the action vocabulary at all. Unknown names are
                        skipped with a log line rather than failing closed.
-    With neither key, every library tool is active in its defined order --
-    unchanged from before "active_tools" existed.
+    With neither key, the default tools are active in their defined order: every library tool
+    except those marked "default": False (the later additions), so the ring stays as it was.
     """
     doc = load_config()
     specs = doc.get("tools")
@@ -1921,9 +2086,9 @@ def load_tools():
             tools = build_tools(specs)
             log(f"loaded {len(tools)} tools from {CONFIG_PATH} (active_tools)")
             return tools
-        log("active_tools matched nothing; falling back to the full library")
+        log("active_tools matched nothing; falling back to the default tools")
 
-    return build_tools(TOOL_LIBRARY)
+    return build_tools(DEFAULT_TOOLS)
 
 
 def parse_args(argv=None):

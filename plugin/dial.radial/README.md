@@ -171,6 +171,18 @@ The tool set is data, not code, and lives in the daemon's `TOOL_LIBRARY`
 | Arrow Keys | Up/Down, or Left/Right once toggled | flip axis |
 | Window Size | grow/shrink the focused window 40 px per click | flip width/height |
 | Brightness | screen backlight, 2 % per click (speed scales it), floor 1 % | — |
+| *Focus* | Tab / Shift+Tab: move through any form, dialog or toolbar | Enter |
+| *Tabs* | next / previous tab (Ctrl+Tab, Ctrl+Shift+Tab) | — |
+| *Select* | extend the selection a word at a time (Ctrl+Shift+Left/Right) | — |
+| *Pages* | Page Down / Page Up | — |
+| *Tile Focus* | move focus to the left/right tile, or up/down once toggled | flip axis |
+| *Move Window* | carry the focused window to the next/previous workspace | — |
+
+The italic tools are **not in the default set**, so the ring is the size it always was; add them in
+the settings window (**Look** page, the chips under the ring) or list them in `active_tools`. They exist so
+a whole session can be driven from the dial: *Focus* alone lets you operate any dialog with no keyboard.
+*Move Window* uses the same relative-workspace form as the Workspaces tool but its move has not been
+exercised on a live desktop yet; try it before relying on it.
 
 Window Size and Brightness are per-machine in practice: list them in `active_tools`
 where they make sense (Brightness needs a backlight; with none it logs once and does
@@ -285,7 +297,12 @@ Single, double and triple click each run an action you choose, in `config.json`:
 
 Those are the defaults. Options: `tool` (single only — the armed tool's own click),
 `dictation`, `enter`, `escape`, `backspace`, `space`, `tab`, `mute`, `play_pause`,
-`next_track`, `prev_track`, `maximize`, `none`. The list comes from the daemon
+`next_track`, `prev_track`, `maximize`, `launcher` (opens the Omarchy menu), `screenshot`, `copy`,
+`paste`, `cut`, `select_all`, `redo`, `tab_next`, `tab_prev`, `fullscreen`, `float`, `none`.
+**`copy` and `paste` are terminal-aware:** in a terminal Ctrl+C means "interrupt" and would kill the
+running program, so they send Ctrl+Insert and Shift+Insert there (the same as Omarchy's own
+universal copy and paste); `select_all` and `redo` do nothing in a terminal. A terminal is any window
+Omarchy tags `terminal`. Closing a window is deliberately not offered as a click action. The list comes from the daemon
 (`~/.config/dial-radial/clicks.json`, written at every start), so the settings window
 never hardcodes it. Pick them in the settings window's **Clicks** section — click a chip
 to cycle, right-click to go back.
