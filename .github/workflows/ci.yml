@@ -11,7 +11,7 @@ jobs:
     # Omarchy is Arch-based, so test against Arch.
     container: archlinux:latest
     steps:
-      - run: pacman -Syu --noconfirm --needed git python ruff shellcheck qt6-declarative
+      - run: pacman -Syu --noconfirm --needed git python python-coverage ruff shellcheck qt6-declarative
       - uses: actions/checkout@v4
       - name: Python lint
         run: ruff check bin/surface-dial-hypr bin/surface-dial-rise-widget scripts/add-menu-entry.py tests
@@ -19,8 +19,10 @@ jobs:
         run: ruff format --check bin/surface-dial-hypr bin/surface-dial-rise-widget scripts/add-menu-entry.py tests
       - name: Shell lint
         run: shellcheck install.sh bin/surface-dial-setup bin/surface-dial-bar scripts/pair-dial.sh
-      - name: Tests
-        run: python3 tests/test_dial.py
+      - name: Tests (with a coverage floor)
+        run: |
+          coverage run --include=bin/surface-dial-hypr tests/test_dial.py
+          coverage report --fail-under=60
       - name: QML component tests
         run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml
       - name: QML lint (informational)
