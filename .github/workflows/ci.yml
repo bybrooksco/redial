@@ -21,6 +21,8 @@ jobs:
         run: shellcheck install.sh bin/surface-dial-setup bin/surface-dial-bar scripts/pair-dial.sh
       - name: Tests
         run: python3 tests/test_dial.py
+      - name: QML component tests
+        run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml
       - name: QML lint (informational)
         # Quickshell's modules aren't installable in CI, so import warnings are expected.
         continue-on-error: true

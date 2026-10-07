@@ -32,6 +32,13 @@ Item {
   property var configDoc: ({})  // full parsed config.json, kept intact
   property var selected: []     // ordered active_tools names
   property bool dirty: false
+  property string ringFocus: ""  // ring tool that keeps keyboard focus across a keyboard move
+
+  // The window takes keyboard focus when it opens (see DialMenu.qml), Escape closes it, and Tab
+  // walks every control in reading order.
+  focus: true
+  Keys.onEscapePressed: root.closeRequested()
+  onVisibleChanged: if (visible) root.forceActiveFocus()
   property bool everLoadedManifest: false
   property bool everLoadedConfig: false
 
@@ -125,12 +132,18 @@ Item {
       spacing: Style.space(4)
       Repeater {
         model: choiceRow.options
-        delegate: Rectangle {
+        delegate: Pressable {
           id: chip
           required property var modelData
           readonly property bool active: choiceRow.current === modelData.key
+          label: choiceRow.title + ": " + modelData.label
+          checkable: true
+          checked: active
+          ringColor: choiceRow.cfg.accentColor
+          ringWidth: Math.max(2, Style.space(2))
+          onActivated: choiceRow.picked(modelData.key)
           width: Math.max(Style.space(64), chipText.implicitWidth + Style.space(20))
-          height: Style.space(28)
+          height: Style.space(32)
           radius: Style.space(6)
           color: active ? choiceRow.cfg.accentColor : Util.alpha(choiceRow.cfg.lineColor, 0.08)
           border.width: Math.max(1, Style.space(1.5))
@@ -143,10 +156,6 @@ Item {
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             color: chip.active ? choiceRow.cfg.backgroundColor : choiceRow.cfg.lineColor
-          }
-          MouseArea {
-            anchors.fill: parent
-            onClicked: choiceRow.picked(chip.modelData.key)
           }
         }
       }
@@ -524,7 +533,7 @@ Item {
       // card height would either clip it or leave dead space.
       anchors.centerIn: parent
       width: Style.space(420)
-      height: col.implicitHeight + Style.space(40)
+      height: Math.min(col.implicitHeight + Style.space(40), root.height - Style.space(48))
       radius: Style.cornerRadius
       // Forced fully opaque (alpha=1): the theme background can carry its own alpha. A settings
       // dialog must be fully legible, so this ignores plateOpacity.
@@ -536,6 +545,30 @@ Item {
       // Eat clicks so they don't fall through to the dismiss MouseArea behind.
       MouseArea { anchors.fill: parent; onClicked: {} }
 
+      // Taller than the screen (a small laptop, a large font): the content scrolls, and moving
+      // keyboard focus to a control scrolls it into view.
+      Flickable {
+        id: scroller
+        anchors.fill: parent
+        contentWidth: width
+        contentHeight: col.implicitHeight + Style.space(40)
+        boundsBehavior: Flickable.StopAtBounds
+        clip: true
+        interactive: contentHeight > height
+
+        Connections {
+          target: root.Window.window
+          function onActiveFocusItemChanged() {
+            var it = root.Window.window ? root.Window.window.activeFocusItem : null
+            if (!it || !col.contains(col.mapFromItem(it, 0, 0))) return
+            var y = col.mapFromItem(it, 0, 0).y + Style.space(20)
+            var pad = Style.space(12)
+            if (y - pad < scroller.contentY) scroller.contentY = Math.max(0, y - pad)
+            else if (y + it.height + pad > scroller.contentY + scroller.height)
+              scroller.contentY = Math.min(scroller.contentHeight - scroller.height, y + it.height + pad - scroller.height)
+          }
+        }
+
       Column {
         id: col
         anchors.top: parent.top
@@ -546,7 +579,7 @@ Item {
 
         Item {
           width: parent.width
-          height: Math.max(titleText.implicitHeight, liveTab.implicitHeight)
+          height: Math.max(titleText.implicitHeight, liveTab.height)
 
           Text {
             id: titleText
@@ -561,20 +594,25 @@ Item {
           // Peek at the live tool-rail/radial overlay in the same window --
           // one-way (see liveRequested above); a stray click here is cheap,
           // the hotkey brings you right back to this same Settings tab.
-          Text {
+          Pressable {
             id: liveTab
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            text: "Live ›"
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            color: liveTabMouse.containsMouse ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.6)
-            MouseArea {
-              id: liveTabMouse
-              anchors.fill: parent
-              anchors.margins: -Style.space(4)
-              hoverEnabled: true
-              onClicked: root.liveRequested()
+            label: "Show the live dial display"
+            color: "transparent"
+            ringColor: root.cfg.accentColor
+            ringWidth: Math.max(2, Style.space(2))
+            width: liveTabText.implicitWidth + Style.space(16)
+            height: Style.space(32)
+            radius: Style.space(6)
+            onActivated: root.liveRequested()
+            Text {
+              id: liveTabText
+              anchors.centerIn: parent
+              text: "Live ›"
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              color: liveTab.hovered ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.6)
             }
           }
         }
@@ -590,19 +628,28 @@ Item {
           spacing: Style.space(18)
           Repeater {
             model: [ { key: "look", label: "Look" }, { key: "feel", label: "Feel" } ]
-            delegate: Text {
+            delegate: Pressable {
               id: tabLabel
               required property var modelData
               readonly property bool active: root.page === modelData.key
-              text: modelData.label
-              font.family: Style.font.family
-              font.pixelSize: Style.font.body
-              font.bold: active
-              color: active ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.6)
-              MouseArea {
-                anchors.fill: parent
-                anchors.margins: -Style.space(4)
-                onClicked: root.page = tabLabel.modelData.key
+              label: modelData.label + " page"
+              checkable: true
+              checked: active
+              color: "transparent"
+              ringColor: root.cfg.accentColor
+              ringWidth: Math.max(2, Style.space(2))
+              width: tabText.implicitWidth + Style.space(16)
+              height: Style.space(32)
+              radius: Style.space(6)
+              onActivated: root.page = modelData.key
+              Text {
+                id: tabText
+                anchors.centerIn: parent
+                text: tabLabel.modelData.label
+                font.family: Style.font.family
+                font.pixelSize: Style.font.body
+                font.bold: tabLabel.active
+                color: tabLabel.active ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.6)
               }
             }
           }
@@ -644,11 +691,17 @@ Item {
                 spacing: Style.space(4)
                 Repeater {
                   model: modelData
-                  delegate: Rectangle {
+                  delegate: Pressable {
                     id: cell
                     required property string modelData
                     readonly property bool active: root.anchor === modelData
-                    width: Style.space(28); height: width
+                    label: "Position " + modelData.replace("-", " ")
+                    checkable: true
+                    checked: active
+                    ringColor: root.cfg.accentColor
+                    ringWidth: Math.max(2, Style.space(2))
+                    onActivated: root.setAnchor(modelData)
+                    width: Style.space(32); height: width
                     radius: Style.space(6)
                     color: active ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.08)
                     border.width: Math.max(1, Style.space(1.5))
@@ -664,11 +717,6 @@ Item {
                       radius: width / 2
                       color: cell.active ? root.cfg.backgroundColor
                                           : Util.alpha(root.cfg.lineColor, 0.5)
-                    }
-
-                    MouseArea {
-                      anchors.fill: parent
-                      onClicked: root.setAnchor(cell.modelData)
                     }
                   }
                 }
@@ -692,11 +740,17 @@ Item {
             spacing: Style.space(4)
             Repeater {
               model: root.sizeOptions
-              delegate: Rectangle {
+              delegate: Pressable {
                 id: sizeBtn
                 required property var modelData
                 readonly property bool active: root.sizeChoice === modelData.key
-                width: Style.space(64); height: Style.space(28)
+                label: "Size: " + modelData.label
+                checkable: true
+                checked: active
+                ringColor: root.cfg.accentColor
+                ringWidth: Math.max(2, Style.space(2))
+                onActivated: root.setSize(modelData.key)
+                width: Style.space(64); height: Style.space(32)
                 radius: Style.space(6)
                 color: active ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.08)
                 border.width: Math.max(1, Style.space(1.5))
@@ -708,11 +762,6 @@ Item {
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   color: sizeBtn.active ? root.cfg.backgroundColor : root.cfg.lineColor
-                }
-
-                MouseArea {
-                  anchors.fill: parent
-                  onClicked: root.setSize(sizeBtn.modelData.key)
                 }
               }
             }
@@ -747,29 +796,30 @@ Item {
             spacing: Style.space(6)
             Repeater {
               model: root.appearanceOptions
-              delegate: Rectangle {
+              delegate: Pressable {
                 id: appearanceBtn
                 required property var modelData
                 readonly property bool active: root.appearanceChoice === modelData.key
-                width: label.implicitWidth + Style.space(20)
-                height: Style.space(28)
+                label: "Appearance: " + modelData.label
+                checkable: true
+                checked: active
+                ringColor: root.cfg.accentColor
+                ringWidth: Math.max(2, Style.space(2))
+                onActivated: root.setAppearance(modelData)
+                width: appearanceText.implicitWidth + Style.space(20)
+                height: Style.space(32)
                 radius: Style.space(6)
                 color: active ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.08)
                 border.width: Math.max(1, Style.space(1.5))
                 border.color: active ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.25)
 
                 Text {
-                  id: label
+                  id: appearanceText
                   anchors.centerIn: parent
                   text: appearanceBtn.modelData.label
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   color: appearanceBtn.active ? root.cfg.backgroundColor : root.cfg.lineColor
-                }
-
-                MouseArea {
-                  anchors.fill: parent
-                  onClicked: root.setAppearance(appearanceBtn.modelData)
                 }
               }
             }
@@ -903,11 +953,19 @@ Item {
                   font.pixelSize: Style.font.caption
                   color: root.cfg.lineColor
                 }
-                Rectangle {
+                Pressable {
+                  id: clickChip
+                  label: clickRow.modelData.title + ": " + clickRow.action.label
+                  ringColor: root.cfg.accentColor
+                  ringWidth: Math.max(2, Style.space(2))
+                  onActivated: root.cycleClick("dial", clickRow.modelData.key, 1)
+                  onAlternate: root.cycleClick("dial", clickRow.modelData.key, -1)
+                  Keys.onRightPressed: activated()
+                  Keys.onLeftPressed: alternate()
                   width: clickRow.width - Style.space(92)
-                  height: Style.space(28)
+                  height: Style.space(32)
                   radius: Style.space(6)
-                  color: Util.alpha(root.cfg.lineColor, chipMouse.containsMouse ? 0.14 : 0.08)
+                  color: Util.alpha(root.cfg.lineColor, clickChip.hovered ? 0.14 : 0.08)
                   border.width: Math.max(1, Style.space(1.5))
                   border.color: Util.alpha(root.cfg.lineColor, 0.25)
 
@@ -917,15 +975,6 @@ Item {
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     color: root.cfg.lineColor
-                  }
-                  MouseArea {
-                    id: chipMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    onClicked: function (m) {
-                      root.cycleClick("dial", clickRow.modelData.key, m.button === Qt.RightButton ? -1 : 1)
-                    }
                   }
                 }
               }
@@ -975,10 +1024,16 @@ Item {
               font.bold: true
               color: Util.alpha(root.cfg.lineColor, 0.6)
             }
-            Rectangle {
+            Pressable {
               id: penEnableBtn
+              label: "Pen support"
+              checkable: true
+              checked: root.penEnabled
+              ringColor: root.cfg.accentColor
+              ringWidth: Math.max(2, Style.space(2))
+              onActivated: root.setPenEnabled(!root.penEnabled)
               anchors.verticalCenter: parent.verticalCenter
-              width: Style.space(52); height: Style.space(22)
+              width: Style.space(56); height: Style.space(32)
               radius: height / 2
               color: root.penEnabled ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.12)
               border.width: Math.max(1, Style.space(1.5))
@@ -990,7 +1045,6 @@ Item {
                 font.pixelSize: Style.font.caption
                 color: root.penEnabled ? root.cfg.backgroundColor : root.cfg.lineColor
               }
-              MouseArea { anchors.fill: parent; onClicked: root.setPenEnabled(!root.penEnabled) }
             }
           }
 
@@ -1026,11 +1080,19 @@ Item {
                     font.pixelSize: Style.font.caption
                     color: root.cfg.lineColor
                   }
-                  Rectangle {
+                  Pressable {
+                    id: tailChip
+                    label: "Pen tail button, " + tailRow.modelData.title + ": " + tailRow.action.label
+                    ringColor: root.cfg.accentColor
+                    ringWidth: Math.max(2, Style.space(2))
+                    onActivated: root.cycleClick("pentail", tailRow.modelData.key, 1)
+                    onAlternate: root.cycleClick("pentail", tailRow.modelData.key, -1)
+                    Keys.onRightPressed: activated()
+                    Keys.onLeftPressed: alternate()
                     width: tailRow.width - Style.space(92)
-                    height: Style.space(28)
+                    height: Style.space(32)
                     radius: Style.space(6)
-                    color: Util.alpha(root.cfg.lineColor, tailChipMouse.containsMouse ? 0.14 : 0.08)
+                    color: Util.alpha(root.cfg.lineColor, tailChip.hovered ? 0.14 : 0.08)
                     border.width: Math.max(1, Style.space(1.5))
                     border.color: Util.alpha(root.cfg.lineColor, 0.25)
 
@@ -1040,15 +1102,6 @@ Item {
                       font.family: Style.font.family
                       font.pixelSize: Style.font.caption
                       color: root.cfg.lineColor
-                    }
-                    MouseArea {
-                      id: tailChipMouse
-                      anchors.fill: parent
-                      hoverEnabled: true
-                      acceptedButtons: Qt.LeftButton | Qt.RightButton
-                      onClicked: function (m) {
-                        root.cycleClick("pentail", tailRow.modelData.key, m.button === Qt.RightButton ? -1 : 1)
-                      }
                     }
                   }
                 }
@@ -1079,10 +1132,16 @@ Item {
               width: parent.width
               spacing: Style.space(8)
 
-              Rectangle {
+              Pressable {
                 id: barrelEnableBtn
+                label: "Pen barrel button"
+                checkable: true
+                checked: root.barrelEnabled
+                ringColor: root.cfg.accentColor
+                ringWidth: Math.max(2, Style.space(2))
+                onActivated: root.setBarrelEnabled(!root.barrelEnabled)
                 anchors.verticalCenter: parent.verticalCenter
-                width: Style.space(52); height: Style.space(22)
+                width: Style.space(56); height: Style.space(32)
                 radius: height / 2
                 color: root.barrelEnabled ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.12)
                 border.width: Math.max(1, Style.space(1.5))
@@ -1094,18 +1153,25 @@ Item {
                   font.pixelSize: Style.font.caption
                   color: root.barrelEnabled ? root.cfg.backgroundColor : root.cfg.lineColor
                 }
-                MouseArea { anchors.fill: parent; onClicked: root.setBarrelEnabled(!root.barrelEnabled) }
               }
 
-              Rectangle {
+              Pressable {
                 id: barrelActionChip
                 readonly property var action: root.barrelAction()
+                label: "Pen barrel button: " + action.label
+                enabled: root.barrelEnabled
+                ringColor: root.cfg.accentColor
+                ringWidth: Math.max(2, Style.space(2))
+                onActivated: root.cycleBarrelAction(1)
+                onAlternate: root.cycleBarrelAction(-1)
+                Keys.onRightPressed: activated()
+                Keys.onLeftPressed: alternate()
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - Style.space(52) - Style.space(8)
-                height: Style.space(28)
+                width: parent.width - Style.space(56) - Style.space(8)
+                height: Style.space(32)
                 radius: Style.space(6)
                 opacity: root.barrelEnabled ? 1 : 0.4
-                color: Util.alpha(root.cfg.lineColor, barrelChipMouse.containsMouse ? 0.14 : 0.08)
+                color: Util.alpha(root.cfg.lineColor, barrelActionChip.hovered ? 0.14 : 0.08)
                 border.width: Math.max(1, Style.space(1.5))
                 border.color: Util.alpha(root.cfg.lineColor, 0.25)
 
@@ -1115,16 +1181,6 @@ Item {
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   color: root.cfg.lineColor
-                }
-                MouseArea {
-                  id: barrelChipMouse
-                  anchors.fill: parent
-                  enabled: root.barrelEnabled
-                  hoverEnabled: true
-                  acceptedButtons: Qt.LeftButton | Qt.RightButton
-                  onClicked: function (m) {
-                    root.cycleBarrelAction(m.button === Qt.RightButton ? -1 : 1)
-                  }
                 }
               }
             }
@@ -1198,7 +1254,7 @@ Item {
             text: "click"
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: Util.alpha(root.cfg.lineColor, 0.3)
+            color: Util.alpha(root.cfg.lineColor, 0.55)
           }
 
           Repeater {
@@ -1208,6 +1264,39 @@ Item {
               required property int index
               required property string modelData
               readonly property var meta: root.manifestByName(modelData)
+
+              // Keyboard: Left/Up and Right/Down move this tool round the ring, Delete takes
+              // it off. The same things the drag and the badge do with a pointer.
+              activeFocusOnTab: true
+              Accessible.role: Accessible.ListItem
+              Accessible.name: modelData + ", position " + (index + 1) + " of " + root.selected.length
+              Accessible.description: "Left and Right move it round the ring. Delete removes it."
+              Accessible.focusable: true
+              Component.onCompleted: if (root.ringFocus === modelData) chip.forceActiveFocus()
+              Keys.onPressed: event => {
+                var step = 0
+                if (event.key === Qt.Key_Left || event.key === Qt.Key_Up) step = -1
+                else if (event.key === Qt.Key_Right || event.key === Qt.Key_Down) step = 1
+                if (step !== 0) {
+                  event.accepted = true
+                  root.ringFocus = modelData
+                  root.moveTo(modelData, index + step)
+                } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+                  event.accepted = true
+                  root.ringFocus = ""
+                  root.toggleTool(modelData)
+                  root.forceActiveFocus()
+                }
+              }
+              Rectangle {
+                anchors.fill: parent
+                anchors.margins: -Math.max(2, Style.space(3))
+                radius: width / 2
+                color: "transparent"
+                border.width: Math.max(2, Style.space(2))
+                border.color: root.cfg.accentColor
+                visible: chip.activeFocus
+              }
               readonly property var slot: ring.slotPos(index)
               property real dragDX: 0
               property real dragDY: 0
@@ -1243,6 +1332,7 @@ Item {
                 color: root.cfg.backgroundColor
                 border.width: 1
                 border.color: Util.alpha(root.cfg.lineColor, 0.4)
+                z: 2  // above the drag area, so the whole badge takes the click
                 visible: !dragArea.pressed
                 Text {
                   anchors.centerIn: parent
@@ -1252,6 +1342,7 @@ Item {
                 }
                 MouseArea {
                   anchors.fill: parent
+                  anchors.margins: -Style.space(8)  // a 32 px target around the 16 px badge
                   onClicked: root.toggleTool(chip.modelData)
                 }
               }
@@ -1294,10 +1385,15 @@ Item {
           spacing: Style.space(6)
           Repeater {
             model: root.rows.filter(function (r) { return !r.checked })
-            delegate: Rectangle {
+            delegate: Pressable {
+              id: addChip
               required property var modelData
+              label: "Add " + modelData.name + " to the ring"
+              ringColor: root.cfg.accentColor
+              ringWidth: Math.max(2, Style.space(2))
+              onActivated: { root.toggleTool(modelData.name); root.forceActiveFocus() }
               width: chipRow.implicitWidth + Style.space(16)
-              height: Style.space(28)
+              height: Style.space(32)
               radius: height / 2
               color: Util.alpha(root.cfg.lineColor, 0.08)
               border.width: 1
@@ -1320,10 +1416,6 @@ Item {
                   color: Util.alpha(root.cfg.lineColor, 0.8)
                 }
               }
-              MouseArea {
-                anchors.fill: parent
-                onClicked: root.toggleTool(modelData.name)
-              }
             }
           }
         }
@@ -1333,8 +1425,13 @@ Item {
           spacing: Style.space(10)
           layoutDirection: Qt.RightToLeft
 
-          Rectangle {
+          Pressable {
             visible: root.page === "look"  // Save is for tool changes; the Feel page applies at once
+            label: root.dirty ? "Save tool changes" : "Save (nothing to save)"
+            enabled: root.dirty
+            ringColor: root.cfg.accentColor
+            ringWidth: Math.max(2, Style.space(2))
+            onActivated: root.save()
             width: Style.space(80); height: Style.space(32)
             radius: Style.space(8)
             color: root.dirty ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.15)
@@ -1346,13 +1443,12 @@ Item {
               font.bold: true
               color: root.dirty ? root.cfg.backgroundColor : Util.alpha(root.cfg.lineColor, 0.5)
             }
-            MouseArea {
-              anchors.fill: parent
-              enabled: root.dirty
-              onClicked: root.save()
-            }
           }
-          Rectangle {
+          Pressable {
+            label: "Close settings"
+            ringColor: root.cfg.accentColor
+            ringWidth: Math.max(2, Style.space(2))
+            onActivated: root.closeRequested()
             width: Style.space(80); height: Style.space(32)
             radius: Style.space(8)
             color: Util.alpha(root.cfg.lineColor, 0.08)
@@ -1363,9 +1459,9 @@ Item {
               font.pixelSize: Style.font.caption
               color: root.cfg.lineColor
             }
-            MouseArea { anchors.fill: parent; onClicked: root.closeRequested() }
           }
         }
+      }
       }
     }
 }

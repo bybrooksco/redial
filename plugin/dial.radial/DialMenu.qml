@@ -188,7 +188,7 @@ Item {
     WlrLayershell.namespace: "dial-dashboard"
     WlrLayershell.layer: WlrLayer.Overlay
     // Live: click-through (the dial is the input device). Settings: real mouse/keyboard input.
-    WlrLayershell.keyboardFocus: root.mode === "settings" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: root.mode === "settings" ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     mask: root.mode === "settings" ? null : clickThroughMask
 
