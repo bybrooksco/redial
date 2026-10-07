@@ -1574,6 +1574,80 @@ class Announce(Base):
         self.assertEqual(self.spoken, [])
 
 
+class ActionSpecs(Base):
+    """make_action: every verb compiles good specs and refuses bad ones without raising."""
+
+    GOOD = [
+        {"do": "exec", "cmd": ["true"]},
+        {"do": "hypr", "lua": "x()"},
+        {"do": "key", "keys": ["a"]},
+        {"do": "key", "keys": ["a"], "terminal_keys": []},
+        {"do": "brightness", "direction": "down", "step": 3},
+        {"do": "seek", "direction": "back", "step": 2.5},
+        {"do": "resize", "axis": "y", "direction": "shrink"},
+        {"do": "volume", "direction": "down"},
+        {"do": "dictation"},
+        {"do": "mouse", "button": "left"},
+        {"do": "mouse"},  # defaults to a right click, as the pen barrel does
+        {"do": "wheel"},
+    ]
+    BAD = [
+        {"do": "exec"},
+        {"do": "exec", "cmd": "ls"},
+        {"do": "exec", "cmd": ["ls", 1]},
+        {"do": "hypr"},
+        {"do": "hypr", "lua": ""},
+        {"do": "key"},
+        {"do": "key", "keys": []},
+        {"do": "key", "keys": "a"},
+        {"do": "key", "keys": ["a", 2]},
+        {"do": "resize", "axis": "z"},
+        {"do": "mouse", "button": "side"},
+        {"do": "teleport"},
+    ]
+
+    def test_good_specs_compile_to_callables(self):
+        for spec in self.GOOD:
+            self.assertTrue(callable(m.make_action(spec)), spec)
+
+    def test_bad_specs_are_refused_not_raised(self):
+        for spec in self.BAD:
+            self.assertIsNone(m.make_action(spec), spec)
+
+    def test_non_objects_and_empty_are_refused(self):
+        for spec in (None, {}, "exec", 5, [], {"do": "none"}, {"do": ""}):
+            self.assertIsNone(m.make_action(spec), spec)
+
+    def test_key_terminal_keys_junk_falls_back_to_plain_keys(self):
+        fn = m.make_action({"do": "key", "keys": ["a"], "terminal_keys": "oops"})
+        EVENTS.clear()
+        fn(1)
+        self.assertEqual(EVENTS, ["KEY:a"])
+
+    def test_bad_numbers_use_the_defaults(self):
+        calls = []
+        real = m.set_brightness
+        m.set_brightness = lambda mag, up, step, dev: calls.append((up, step))
+        try:
+            m.make_action({"do": "brightness", "step": "lots"})(1)
+            m.make_action({"do": "brightness", "direction": "down", "step": 4})(1)
+        finally:
+            m.set_brightness = real
+        self.assertEqual(calls, [(True, m.BRIGHT_STEP), (False, 4)])
+
+    def test_direction_words(self):
+        seen = []
+        real = m.seek_media
+        m.seek_media = lambda fwd, mag, step: seen.append(fwd)
+        try:
+            m.make_action({"do": "seek"})(1)
+            m.make_action({"do": "seek", "direction": "back"})(1)
+            m.make_action({"do": "seek", "direction": "BACK"})(1)
+        finally:
+            m.seek_media = real
+        self.assertEqual(seen, [True, False, False])
+
+
 class NewControls(Base):
     """The tools and click actions added for driving a whole session from the dial."""
 
