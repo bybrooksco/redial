@@ -15,7 +15,8 @@ import qs.Ui
 //   config.json  - the shared config. Keys this panel doesn't own are read whole and
 //                  written back untouched.
 //
-// active_tools and anchor both apply live: no Save step, no restart.
+// Position, size, appearance, clicks and pen apply immediately. Tool changes are staged and
+// written on Save; the daemon then reloads them while the dial is idle, so no restart either way.
 Item {
   id: root
   required property var cfg
@@ -426,7 +427,7 @@ Item {
             id: titleText
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            text: "Surface Dial Tools"
+            text: "Surface Dial"
             font.family: Style.font.family
             font.pixelSize: Style.font.body
             font.bold: true
@@ -454,7 +455,7 @@ Item {
         }
         Text {
           width: parent.width
-          text: "Checked tools are active, top to bottom. Restart the dial daemon after saving."
+          text: "Drag the ring to reorder. Click \u2715 to remove a tool, or a chip below to add one. Tool changes apply when you press Save; everything else applies immediately."
           wrapMode: Text.WordWrap
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
@@ -563,7 +564,7 @@ Item {
             text: "Applies immediately."
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: Util.alpha(root.cfg.lineColor, 0.45)
+            color: Util.alpha(root.cfg.lineColor, 0.5)
           }
         }
         }
@@ -619,7 +620,7 @@ Item {
             text: "Applies immediately."
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: Util.alpha(root.cfg.lineColor, 0.45)
+            color: Util.alpha(root.cfg.lineColor, 0.5)
           }
         }
 
@@ -705,7 +706,7 @@ Item {
             wrapMode: Text.WordWrap
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: Util.alpha(root.cfg.lineColor, 0.45)
+            color: Util.alpha(root.cfg.lineColor, 0.5)
           }
         }
 
@@ -814,7 +815,7 @@ Item {
                   maximumLineCount: 1
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
-                  color: Util.alpha(root.cfg.lineColor, 0.45)
+                  color: Util.alpha(root.cfg.lineColor, 0.5)
                 }
               }
             }
@@ -889,7 +890,7 @@ Item {
               maximumLineCount: 1
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
-              color: Util.alpha(root.cfg.lineColor, 0.45)
+              color: Util.alpha(root.cfg.lineColor, 0.5)
             }
           }
 
@@ -899,7 +900,7 @@ Item {
             wrapMode: Text.WordWrap
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: Util.alpha(root.cfg.lineColor, 0.45)
+            color: Util.alpha(root.cfg.lineColor, 0.5)
           }
         }
 

@@ -384,9 +384,10 @@ because that is a binding off `configDoc`.
 
 ## Settings window
 
-- Both `active_tools` and `anchor` apply live. `anchor` is just where Quickshell
-  draws the overlay, not state the daemon holds. `active_tools` is reloaded by the
-  daemon while the dial is idle.
+- Position, size, appearance, clicks and pen apply immediately. Tool changes are
+  staged (`dirty`) and written when you press Save; the daemon then reloads them
+  while the dial is idle, so there is no restart either way. `anchor` is just where
+  Quickshell draws the overlay, not state the daemon holds.
 - `tools.json`, `clicks.json` and `pen_clicks.json` are written by the daemon at
   startup, so the window never hardcodes a tool or action list. A tool added to
   the daemon's library just shows up. Keys the window doesn't own are read whole

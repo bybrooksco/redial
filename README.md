@@ -1,8 +1,14 @@
 # Surface Dial (+ Surface Pen)
 
-A Linux userspace daemon and Omarchy/Quickshell plugin for the Microsoft
-Surface Dial, with Surface Pen tail/barrel-button and eraser support sharing
-the same daemon. Built for Hyprland + Omarchy.
+A haptic knob for your Omarchy desktop. Turn it for volume, scroll, zoom, media
+scrubbing, brightness, window and workspace control; press and hold to pick a tool;
+click for whatever you set. An on-screen overlay shows what's armed, in a look that
+follows your Omarchy theme. The Surface Pen's tail and barrel buttons and eraser
+share the same daemon.
+
+It is a Linux userspace daemon plus an Omarchy/Quickshell plugin, built for
+Hyprland + Omarchy. The point is that good hardware shouldn't become e-waste
+because its maker moved on.
 
 Microsoft discontinued the Surface Dial.
 [daniel5151/surface-dial-linux](https://github.com/daniel5151/surface-dial-linux)

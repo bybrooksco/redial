@@ -174,7 +174,8 @@ The tool set is data, not code, and lives in the daemon's `TOOL_LIBRARY`
 
 Window Size and Brightness are per-machine in practice: list them in `active_tools`
 where they make sense (Brightness needs a backlight; with none it logs once and does
-nothing). Changing which tools are active applies live: the daemon reloads the
+nothing). Changing which tools are active applies live: press **Save** in the picker (or edit
+`active_tools`) and the daemon reloads the
 list the next time the dial is idle (never mid-gesture, because the state machine holds a
 tool index) and re-arms the default tool. The log says what it loaded.
 
