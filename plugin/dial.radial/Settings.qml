@@ -135,6 +135,14 @@ Item {
   readonly property color lineColor: resolveColor(get("colors.line"), "foreground")
   readonly property color backgroundColor: resolveColor(get("colors.background"), "background")
 
+  // Text colours for the settings card, which is always drawn opaque on backgroundColor. Each is
+  // the theme's own colour, adjusted only as far as needed to reach 4.5:1 (see Contrast.qml), so
+  // every theme stays legible without a hand-tuned palette.
+  Contrast { id: contrast }
+  function soft(alpha) { return contrast.soft(lineColor, backgroundColor, alpha) }
+  readonly property color accentText: contrast.asText(accentColor, lineColor, backgroundColor)
+  readonly property color onAccent: contrast.onFill(accentColor, backgroundColor, lineColor)
+
   readonly property string layout: {
     var v = String(get("layout"))
     return (v === "deck" || v === "dial" || v === "carousel" || v === "toast" || v === "omarchy") ? v : "dial"

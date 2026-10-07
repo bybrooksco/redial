@@ -6,6 +6,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Legible on every theme.** The settings window's text colours are now computed from the active theme and adjusted only as far as needed to reach 4.5:1 contrast (WCAG AA), including text on the accent colour. Before, 19 of the 22 shipped Omarchy themes fell short somewhere (catppuccin-latte and rose-pine as low as 2:1). Tested against all 22 palettes.
 - **Restart dial service** button: when the settings window finds the daemon is not running it offers a button that runs the new `surface-dial-restart` (also usable from a terminal).
 - **First-run welcome card** on the Look page: three sentences on turn, click and hold, with Got it / More help. Shown once (`intro_seen` in the config).
 - **Help page** in the settings window (third tab): what turn, click, hold and the menu do, and where to look when something is wrong.

@@ -134,7 +134,7 @@ Item {
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       font.bold: true
-      color: Util.alpha(choiceRow.cfg.lineColor, 0.6)
+      color: choiceRow.cfg.soft(0.6)
     }
 
     Flow {
@@ -165,7 +165,7 @@ Item {
             text: chip.modelData.label
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: chip.active ? choiceRow.cfg.backgroundColor : choiceRow.cfg.lineColor
+            color: chip.active ? choiceRow.cfg.onAccent : choiceRow.cfg.lineColor
           }
         }
       }
@@ -179,7 +179,7 @@ Item {
             ? " Custom value in config.json: " + choiceRow.current + choiceRow.unit + "." : "")
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
-      color: Util.alpha(choiceRow.cfg.lineColor, 0.5)
+      color: choiceRow.cfg.soft(0.5)
     }
   }
 
@@ -628,7 +628,7 @@ Item {
               text: "Live ›"
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
-              color: liveTab.hovered ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.6)
+              color: liveTab.hovered ? root.cfg.accentText : root.cfg.soft(0.6)
             }
           }
         }
@@ -638,7 +638,7 @@ Item {
           wrapMode: Text.WordWrap
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
-          color: root.statusGood ? Util.alpha(root.cfg.lineColor, 0.7) : root.cfg.accentColor
+          color: root.statusGood ? root.cfg.soft(0.7) : root.cfg.accentText
         }
         Pressable {
           visible: !root.statusFresh
@@ -702,7 +702,7 @@ Item {
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   font.bold: true
-                  color: root.cfg.backgroundColor
+                  color: root.cfg.onAccent
                 }
               }
               Pressable {
@@ -751,7 +751,7 @@ Item {
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
                 font.bold: tabLabel.active
-                color: tabLabel.active ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.6)
+                color: tabLabel.active ? root.cfg.accentText : root.cfg.soft(0.6)
               }
             }
           }
@@ -767,7 +767,7 @@ Item {
           wrapMode: Text.WordWrap
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
-          color: Util.alpha(root.cfg.lineColor, 0.6)
+          color: root.cfg.soft(0.6)
         }
 
         Row {
@@ -783,7 +783,7 @@ Item {
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.bold: true
-            color: Util.alpha(root.cfg.lineColor, 0.6)
+            color: root.cfg.soft(0.6)
           }
 
           Column {
@@ -837,7 +837,7 @@ Item {
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.bold: true
-            color: Util.alpha(root.cfg.lineColor, 0.6)
+            color: root.cfg.soft(0.6)
           }
 
           Row {
@@ -865,7 +865,7 @@ Item {
                   text: sizeBtn.modelData.label
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
-                  color: sizeBtn.active ? root.cfg.backgroundColor : root.cfg.lineColor
+                  color: sizeBtn.active ? root.cfg.onAccent : root.cfg.lineColor
                 }
               }
             }
@@ -875,7 +875,7 @@ Item {
             text: "Applies immediately."
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: Util.alpha(root.cfg.lineColor, 0.5)
+            color: root.cfg.soft(0.5)
           }
         }
         }
@@ -892,7 +892,7 @@ Item {
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.bold: true
-            color: Util.alpha(root.cfg.lineColor, 0.6)
+            color: root.cfg.soft(0.6)
           }
 
           Flow {
@@ -923,7 +923,7 @@ Item {
                   text: appearanceBtn.modelData.label
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
-                  color: appearanceBtn.active ? root.cfg.backgroundColor : root.cfg.lineColor
+                  color: appearanceBtn.active ? root.cfg.onAccent : root.cfg.lineColor
                 }
               }
             }
@@ -933,7 +933,7 @@ Item {
             text: "Applies immediately."
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: Util.alpha(root.cfg.lineColor, 0.5)
+            color: root.cfg.soft(0.5)
           }
         }
 
@@ -954,7 +954,7 @@ Item {
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: true
-                color: root.cfg.accentColor
+                color: root.cfg.accentText
               }
               Text {
                 width: parent.width
@@ -962,7 +962,7 @@ Item {
                 wrapMode: Text.WordWrap
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
-                color: Util.alpha(root.cfg.lineColor, 0.85)
+                color: root.cfg.soft(0.85)
               }
             }
           }
@@ -1084,7 +1084,7 @@ Item {
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.bold: true
-            color: Util.alpha(root.cfg.lineColor, 0.6)
+            color: root.cfg.soft(0.6)
           }
 
           Repeater {
@@ -1153,7 +1153,7 @@ Item {
             wrapMode: Text.WordWrap
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: Util.alpha(root.cfg.lineColor, 0.5)
+            color: root.cfg.soft(0.5)
           }
         }
 
@@ -1175,7 +1175,7 @@ Item {
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: true
-              color: Util.alpha(root.cfg.lineColor, 0.6)
+              color: root.cfg.soft(0.6)
             }
             Pressable {
               id: penEnableBtn
@@ -1196,7 +1196,7 @@ Item {
                 text: root.penEnabled ? "On" : "Off"
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
-                color: root.penEnabled ? root.cfg.backgroundColor : root.cfg.lineColor
+                color: root.penEnabled ? root.cfg.onAccent : root.cfg.lineColor
               }
             }
           }
@@ -1211,7 +1211,7 @@ Item {
               text: "Tail button"
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
-              color: Util.alpha(root.cfg.lineColor, 0.5)
+              color: root.cfg.soft(0.5)
             }
 
             Repeater {
@@ -1267,7 +1267,7 @@ Item {
                   maximumLineCount: 1
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
-                  color: Util.alpha(root.cfg.lineColor, 0.5)
+                  color: root.cfg.soft(0.5)
                 }
               }
             }
@@ -1278,7 +1278,7 @@ Item {
               text: "Barrel button"
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
-              color: Util.alpha(root.cfg.lineColor, 0.5)
+              color: root.cfg.soft(0.5)
             }
 
             Row {
@@ -1304,7 +1304,7 @@ Item {
                   text: root.barrelEnabled ? "On" : "Off"
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
-                  color: root.barrelEnabled ? root.cfg.backgroundColor : root.cfg.lineColor
+                  color: root.barrelEnabled ? root.cfg.onAccent : root.cfg.lineColor
                 }
               }
 
@@ -1345,7 +1345,7 @@ Item {
               maximumLineCount: 1
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
-              color: Util.alpha(root.cfg.lineColor, 0.5)
+              color: root.cfg.soft(0.5)
             }
           }
 
@@ -1355,7 +1355,7 @@ Item {
             wrapMode: Text.WordWrap
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: Util.alpha(root.cfg.lineColor, 0.5)
+            color: root.cfg.soft(0.5)
           }
         }
 
@@ -1407,7 +1407,7 @@ Item {
             text: "click"
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: Util.alpha(root.cfg.lineColor, 0.55)
+            color: root.cfg.soft(0.55)
           }
 
           Repeater {
@@ -1491,7 +1491,7 @@ Item {
                   anchors.centerIn: parent
                   text: "×"
                   font.pixelSize: Style.space(10)
-                  color: Util.alpha(root.cfg.lineColor, 0.7)
+                  color: root.cfg.soft(0.7)
                 }
                 MouseArea {
                   anchors.fill: parent
@@ -1566,7 +1566,7 @@ Item {
                   text: modelData.name
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
-                  color: Util.alpha(root.cfg.lineColor, 0.8)
+                  color: root.cfg.soft(0.8)
                 }
               }
             }
@@ -1594,7 +1594,7 @@ Item {
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: true
-              color: root.dirty ? root.cfg.backgroundColor : Util.alpha(root.cfg.lineColor, 0.5)
+              color: root.dirty ? root.cfg.onAccent : root.cfg.soft(0.5)
             }
           }
           Pressable {
