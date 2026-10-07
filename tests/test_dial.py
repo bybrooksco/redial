@@ -1109,6 +1109,94 @@ class DaemonLog(unittest.TestCase):
         self.assertTrue(all(re.search(r" T\d message \d+$", x) for x in lines))
 
 
+class LatchedMenu(Base):
+    """menu_latch: a quick hold-and-release leaves the menu open for turn-then-click."""
+
+    def write(self, **kv):
+        time.sleep(0.005)
+        with open(self.cfg, "w") as f:
+            json.dump(kv, f)
+
+    def opened(self):
+        d = m.Dial()
+        d.on_press(0.0)
+        d.tick(0.5)
+        self.assertTrue(d.menu)
+        return d
+
+    def test_off_by_default_release_selects_as_before(self):
+        self.write()
+        d = self.opened()
+        d.on_release(0.6)
+        self.assertFalse(d.menu)
+
+    def test_release_without_turning_keeps_the_menu_open(self):
+        self.write(menu_latch=True)
+        d = self.opened()
+        d.on_release(0.6)
+        self.assertTrue(d.menu)
+        self.assertTrue(d.menu_latched)
+
+    def test_turn_then_click_chooses_the_highlighted_tool(self):
+        self.write(menu_latch=True)
+        d = self.opened()
+        d.on_release(0.6)
+        d.on_rotate(m.MENU_STEP, 1.0)
+        want = d.menu_pick
+        self.assertNotEqual(want, m.IDLE_TOOL)
+        d.on_press(1.5)
+        d.on_release(1.6)
+        self.assertFalse(d.menu)
+        self.assertEqual(d.tool, want)
+
+    def test_turning_while_still_holding_keeps_the_classic_release_to_select(self):
+        self.write(menu_latch=True)
+        d = self.opened()
+        d.on_rotate(m.MENU_STEP, 0.6)
+        d.on_release(0.8)
+        self.assertFalse(d.menu)
+        self.assertNotEqual(d.tool, m.IDLE_TOOL)
+
+    def test_tiny_tremor_turn_does_not_count_as_moving(self):
+        self.write(menu_latch=True)
+        d = self.opened()
+        d.on_rotate(m.MENU_STEP // 4, 0.6)
+        d.on_release(0.8)
+        self.assertTrue(d.menu, "a twitch under one step must not defeat the latch")
+
+    def test_untouched_latched_menu_closes_without_changing_the_tool(self):
+        self.write(menu_latch=True, menu_timeout_ms=5000)
+        d = self.opened()
+        d.on_release(0.6)
+        d.tick(4.0)
+        self.assertTrue(d.menu)
+        d.tick(6.0)
+        self.assertFalse(d.menu)
+        self.assertEqual(d.tool, m.IDLE_TOOL)
+
+    def test_turning_extends_the_timeout(self):
+        self.write(menu_latch=True, menu_timeout_ms=5000)
+        d = self.opened()
+        d.on_release(0.6)
+        d.on_rotate(m.MENU_STEP // 4, 4.0)
+        d.tick(8.0)
+        self.assertTrue(d.menu)
+
+    def test_the_timeout_is_clamped(self):
+        self.write(menu_timeout_ms=10)
+        self.assertEqual(m.menu_idle_timeout(), 3.0)
+        self.write(menu_timeout_ms=10**6)
+        self.assertEqual(m.menu_idle_timeout(), 12.0)
+
+    def test_a_latched_menu_is_closed_on_detach(self):
+        self.write(menu_latch=True)
+        d = self.opened()
+        d.on_release(0.6)
+        d.reset_gestures()
+        self.assertFalse(d.menu)
+        self.assertFalse(d.menu_latched)
+
+
 class NewControls(Base):
     """The tools and click actions added for driving a whole session from the dial."""
 

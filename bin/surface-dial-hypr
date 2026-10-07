@@ -1779,6 +1779,24 @@ def return_buzz():
     return live_bool("return_buzz", True)
 
 
+def menu_latch():
+    """Whether a quick press-and-release leaves the tool menu open (config "menu_latch").
+
+    Off: the menu is hold, turn, release. On: hold until it opens and let go to keep it open,
+    then turn to choose and click to select; turning while still holding behaves as before.
+    """
+    return live_bool("menu_latch", False)
+
+
+def menu_idle_timeout():
+    """Seconds a latched menu waits untouched before closing without a choice.
+
+    Capped under the overlay's own 15 s watchdog, so the daemon always closes first and the
+    picture never disappears while the menu is still live.
+    """
+    return live_num("menu_timeout_ms", 8000, 3000, 12000) / 1000
+
+
 def menu_step():
     """Dial counts per menu-highlight change, scaled by sensitivity."""
     return max(10, round(MENU_STEP / sensitivity()))
@@ -2124,6 +2142,9 @@ class Dial:
         self.menu = False
         self.menu_accum = 0.0
         self.menu_pick = IDLE_TOOL
+        self.menu_latched = False  # menu stayed open after the opening press was released
+        self.menu_moved = False  # the highlight left the starting tool since the menu opened
+        self.menu_last = 0.0
         self.down_at = None
         self.pending_click = None
         self.pending_double = None  # second press seen; waiting to see if a third follows
@@ -2181,6 +2202,7 @@ class Dial:
             MENU_STREAM.close()
             MENU_UI.close()
         self.menu = False
+        self.menu_latched = False
         self.down_at = None
         self.pending_click = None
         self.pending_double = None
@@ -2214,11 +2236,13 @@ class Dial:
 
         if self.menu:
             self.menu_accum += value
+            self.menu_last = now
             step = menu_step()
             while abs(self.menu_accum) >= step:
                 d = 1 if self.menu_accum > 0 else -1
                 self.menu_accum -= d * step
                 self.menu_pick = (self.menu_pick + d) % len(TOOLS)
+                self.menu_moved = self.menu_moved or self.menu_pick != self.tool
                 HAPTIC.fire(PAT_TICK)
                 self.show_menu()
             # Continuous position in tool units. The divisor 2*step keeps the
@@ -2308,7 +2332,14 @@ class Dial:
         held = now - self.down_at
         self.down_at = None
         if self.menu:
+            if menu_latch() and not self.menu_latched and not self.menu_moved:
+                # Let go without having turned: keep the menu open for a tap-to-choose.
+                self.menu_latched = True
+                self.menu_last = now
+                HAPTIC.fire(PAT_TICK, rate_limit=False)
+                return
             self.menu = False
+            self.menu_latched = False
             MENU_STREAM.close()
             MENU_UI.close()
             self._arm(self.menu_pick, now)
@@ -2352,11 +2383,26 @@ class Dial:
                 self.menu = True
                 self.menu_pick = self.tool
                 self.menu_accum = 0.0
+                self.menu_moved = False
+                self.menu_latched = False
+                self.menu_last = now
                 HAPTIC.fire(PAT_MENU, rate_limit=False)
                 MENU_UI.open(self.menu_pick)
                 MENU_STREAM.connect()
             else:
                 timeout = remain
+
+        if self.menu and self.menu_latched and self.down_at is None:
+            remain = (self.menu_last + menu_idle_timeout()) - now
+            if remain <= 0:
+                # Nobody chose: close, keep whatever tool was armed.
+                self.menu = False
+                self.menu_latched = False
+                MENU_STREAM.close()
+                MENU_UI.close()
+                self.last_action = now
+            else:
+                timeout = remain if timeout is None else min(timeout, remain)
 
         if self.pending_click is not None:
             remain = self.pending_click - now

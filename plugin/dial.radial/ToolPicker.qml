@@ -793,6 +793,26 @@ Item {
           current: root.cfgValue("hold_ms", 400)
           onPicked: key => root.setConfigKey("hold_ms", key)
         }
+        ChoiceRow {
+          visible: root.page === "feel"
+          cfg: root.cfg
+          title: "Tool menu"
+          help: "Hold: hold the button, turn, let go to choose. Tap: hold until it opens, let go, then turn and click to choose, with no need to hold while turning."
+          options: [ { key: false, label: "Hold" }, { key: true, label: "Tap" } ]
+          current: root.cfgValue("menu_latch", false)
+          onPicked: key => root.setConfigKey("menu_latch", key)
+        }
+        ChoiceRow {
+          visible: root.page === "feel" && root.cfgValue("menu_latch", false) === true
+          cfg: root.cfg
+          title: "Tap menu closes after"
+          unit: " ms"
+          help: "How long an untouched tap-menu waits before closing without changing anything."
+          options: [ { key: 5000, label: "5 s" }, { key: 8000, label: "8 s" },
+                     { key: 12000, label: "12 s" } ]
+          current: root.cfgValue("menu_timeout_ms", 8000)
+          onPicked: key => root.setConfigKey("menu_timeout_ms", key)
+        }
 
         // What a single / double / triple click does. Each chip cycles through the
         // options (left-click forward, right-click back); the description below says
