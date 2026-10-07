@@ -1066,8 +1066,8 @@ def open_input(name):
     return fh, path
 
 
-def eraser_watcher():
-    """Eraser dragged on the screen scrolls, in allowlisted windows only.
+class EraserState:
+    """What the eraser end of the pen is doing, fed one stylus event at a time.
 
     Engages on BTN_TOUCH while BTN_TOOL_RUBBER is active -- the eraser end
     actually down, not merely hovering (proximity fires constantly). The
@@ -1075,16 +1075,120 @@ def eraser_watcher():
     cannot flip mid-drag. Anywhere not on the allowlist, nothing is emitted
     at all and the eraser behaves exactly as it always has.
     """
-    rubber = False
-    dragging = False
-    last_y = None
-    last_x = None
-    travel = trav_x = trav_y = 0.0
-    axis = None
-    cur_accum = 0.0
-    touch_at = 0.0
-    gain = ERASER_SCROLL_GAIN_DEFAULT
-    y_mode = "wheel"
+
+    def __init__(self):
+        self.rubber = False
+        self.gain = ERASER_SCROLL_GAIN_DEFAULT
+        self.y_mode = "wheel"
+        self.touch_at = 0.0
+        self.reset()
+
+    def reset(self):
+        """Forget any drag in progress (eraser lifted, or the device went away)."""
+        self.dragging = False
+        self.last_y = None
+        self.last_x = None
+        self.travel = self.trav_x = self.trav_y = 0.0
+        self.axis = None
+        self.cur_accum = 0.0
+
+    def handle(self, etype, code, value, now):
+        if etype == EV_KEY and code == BTN_STYLUS:
+            self._barrel(value)
+        elif etype == EV_KEY and code == BTN_TOOL_RUBBER:
+            self.rubber = bool(value)
+            if not self.rubber:
+                self.dragging, self.last_y, self.last_x = False, None, None
+                self.axis = None
+        elif etype == EV_KEY and code == BTN_TOUCH:
+            if value == 1 and self.rubber:
+                self._touch_down(now)
+            else:
+                self._touch_up(now)
+        elif etype == EV_ABS and self.dragging and code in (ABS_X, ABS_Y):
+            if code == ABS_Y:
+                self._move_y(value)
+            else:
+                self._move_x(value)
+
+    def _barrel(self, value):
+        """Barrel button -> pen.barrel action. Bound globally, not allowlisted.
+
+        A "mouse" action passes press/release through; any other action fires once on press.
+        """
+        enabled, name = pen_barrel_config()
+        if not enabled:
+            return
+        spec = _PEN_BARREL_BY_NAME[name][3]
+        if isinstance(spec, dict) and spec.get("do") == "mouse":
+            btn = mouse_button(spec)
+            if btn is not None:
+                POINTER.click(btn, value == 1)
+                log(f"barrel -> {name} {'down' if value else 'up'}")
+        elif value == 1:
+            fn = pen_barrel_fn(name)
+            if fn:
+                log(f"barrel -> {name}")
+                fn(1)
+
+    def _touch_down(self, now):
+        cls = focused_class()
+        if cls not in ERASER_SCROLL_CLASSES:
+            log(f"eraser down in {cls} -> left alone")
+            return
+        self.reset()
+        self.dragging = True
+        self.touch_at = now
+        self.gain = ERASER_SCROLL_GAIN.get(cls, ERASER_SCROLL_GAIN_DEFAULT)
+        # Same routing as the dial's Scroll tool (SCROLL_SUPPRESS_CLASSES); decided once per touch.
+        self.y_mode = scroll_mode()
+        log(f"eraser down in {cls} (gain {self.gain}, y_mode {self.y_mode})")
+
+    def _touch_up(self, now):
+        if self.dragging and self.travel < ERASER_TAP_MAX_TRAVEL:
+            held = now - self.touch_at
+            if held >= ERASER_HOLD_S:
+                log(f"eraser hold ({held:.2f}s) -> delete word")
+                key("ctrl", "BackSpace")
+            else:
+                log(f"eraser tap ({held:.2f}s) -> Escape")
+                key("Escape")
+        self.dragging, self.last_y, self.last_x = False, None, None
+        self.axis = None
+
+    def _pick_axis(self):
+        if self.axis is None and self.travel >= ERASER_TAP_MAX_TRAVEL:
+            self.axis = "y" if self.trav_y >= self.trav_x else "x"
+            log(f"eraser drag axis = {self.axis}")
+
+    def _move_y(self, value):
+        if self.last_y is not None:
+            dy = value - self.last_y
+            self.travel += abs(dy)
+            self.trav_y += abs(dy)
+            self._pick_axis()
+            if self.axis == "y" and dy and self.y_mode != "suppress":
+                POINTER.scroll(dy * self.gain)
+        self.last_y = value
+
+    def _move_x(self, value):
+        if self.last_x is not None:
+            dx = value - self.last_x
+            self.travel += abs(dx)
+            self.trav_x += abs(dx)
+            self._pick_axis()
+            if self.axis == "x":
+                self.cur_accum += dx
+                while abs(self.cur_accum) >= ERASER_CURSOR_STEP:
+                    d = 1 if self.cur_accum > 0 else -1
+                    self.cur_accum -= d * ERASER_CURSOR_STEP
+                    key("Right" if d > 0 else "Left")
+        self.last_x = value
+
+
+def eraser_watcher():
+    """Read the stylus device and feed an EraserState; reconnect when it goes away."""
+    state = EraserState()
     while True:
         fh, path = open_input(STYLUS_NAME)
         if fh is None:
@@ -1097,89 +1201,10 @@ def eraser_watcher():
                     if not data or len(data) < EV_SIZE:
                         break
                     _, _, etype, code, value = struct.unpack(EV_FORMAT, data)
-
-                    if etype == EV_KEY and code == BTN_STYLUS:
-                        # Barrel button -> pen.barrel action. Bound globally, not
-                        # allowlisted. A "mouse" action passes press/release through;
-                        # any other action fires once on press.
-                        enabled, name = pen_barrel_config()
-                        if enabled:
-                            spec = _PEN_BARREL_BY_NAME[name][3]
-                            if isinstance(spec, dict) and spec.get("do") == "mouse":
-                                btn = mouse_button(spec)
-                                if btn is not None:
-                                    POINTER.click(btn, value == 1)
-                                    log(f"barrel -> {name} {'down' if value else 'up'}")
-                            elif value == 1:
-                                fn = pen_barrel_fn(name)
-                                if fn:
-                                    log(f"barrel -> {name}")
-                                    fn(1)
-
-                    elif etype == EV_KEY and code == BTN_TOOL_RUBBER:
-                        rubber = bool(value)
-                        if not rubber:
-                            dragging, last_y, last_x = False, None, None
-                            axis = None
-
-                    elif etype == EV_KEY and code == BTN_TOUCH:
-                        if value == 1 and rubber:
-                            cls = focused_class()
-                            if cls in ERASER_SCROLL_CLASSES:
-                                dragging, last_y, last_x = True, None, None
-                                travel = trav_x = trav_y = 0.0
-                                axis = None
-                                cur_accum = 0.0
-                                touch_at = time.monotonic()
-                                gain = ERASER_SCROLL_GAIN.get(cls, ERASER_SCROLL_GAIN_DEFAULT)
-                                # Same routing as the dial's Scroll tool
-                                # (SCROLL_SUPPRESS_CLASSES); decided once per touch.
-                                y_mode = scroll_mode()
-                                log(f"eraser down in {cls} (gain {gain}, y_mode {y_mode})")
-                            else:
-                                log(f"eraser down in {cls} -> left alone")
-                        else:
-                            if dragging and travel < ERASER_TAP_MAX_TRAVEL:
-                                held = time.monotonic() - touch_at
-                                if held >= ERASER_HOLD_S:
-                                    log(f"eraser hold ({held:.2f}s) -> delete word")
-                                    key("ctrl", "BackSpace")
-                                else:
-                                    log(f"eraser tap ({held:.2f}s) -> Escape")
-                                    key("Escape")
-                            dragging, last_y, last_x = False, None, None
-                            axis = None
-
-                    elif etype == EV_ABS and dragging and code in (ABS_X, ABS_Y):
-                        if code == ABS_Y:
-                            if last_y is not None:
-                                dy = value - last_y
-                                travel += abs(dy)
-                                trav_y += abs(dy)
-                                if axis is None and travel >= ERASER_TAP_MAX_TRAVEL:
-                                    axis = "y" if trav_y >= trav_x else "x"
-                                    log(f"eraser drag axis = {axis}")
-                                if axis == "y" and dy and y_mode != "suppress":
-                                    POINTER.scroll(dy * gain)
-                            last_y = value
-                        else:
-                            if last_x is not None:
-                                dx = value - last_x
-                                travel += abs(dx)
-                                trav_x += abs(dx)
-                                if axis is None and travel >= ERASER_TAP_MAX_TRAVEL:
-                                    axis = "y" if trav_y >= trav_x else "x"
-                                    log(f"eraser drag axis = {axis}")
-                                if axis == "x":
-                                    cur_accum += dx
-                                    while abs(cur_accum) >= ERASER_CURSOR_STEP:
-                                        d = 1 if cur_accum > 0 else -1
-                                        cur_accum -= d * ERASER_CURSOR_STEP
-                                        key("Right" if d > 0 else "Left")
-                            last_x = value
+                    state.handle(etype, code, value, time.monotonic())
         except OSError as exc:
             log(f"stylus read ended ({exc})")
-        dragging, last_y = False, None
+        state.dragging, state.last_y = False, None
         time.sleep(2)
 
 
@@ -1719,7 +1744,7 @@ CLICK_ACTIONS = [
 ]
 CLICK_DEFAULTS = {"single": "tool", "double": "dictation", "triple": "enter"}
 _CLICK_BY_NAME = {a[0]: a for a in CLICK_ACTIONS}
-_click_cache = {"mtime": object(), "choice": dict(CLICK_DEFAULTS)}
+_click_cache = {}
 _click_fns = {}
 
 
@@ -1735,6 +1760,24 @@ def live_config():
     if mtime != _live["mtime"]:
         _live.update(mtime=mtime, doc=load_config())
     return _live["doc"]
+
+
+def _pen_section(doc):
+    """The config's "pen" section, or {} if it is missing or not an object."""
+    pen = doc.get("pen")
+    return pen if isinstance(pen, dict) else {}
+
+
+def live_derived(cache, build):
+    """`build(config doc)`, recomputed only when the config file has changed.
+
+    `cache` is a dict holding the last doc and value. The doc object itself changes only when
+    the file does (see live_config), so identity is the whole check.
+    """
+    doc = live_config()
+    if cache.get("doc") is not doc:
+        cache.update(doc=doc, value=build(doc))
+    return cache["value"]
 
 
 def live_num(key, default, lo, hi):
@@ -1812,12 +1855,9 @@ def menu_step():
 
 def click_choice(kind):
     """Configured action name for "single" | "double" | "triple"."""
-    try:
-        mtime = os.stat(CONFIG_PATH).st_mtime_ns
-    except OSError:
-        mtime = None
-    if mtime != _click_cache["mtime"]:
-        raw = load_config().get("clicks")
+
+    def build(doc):
+        raw = doc.get("clicks")
         raw = raw if isinstance(raw, dict) else {}
         choice = dict(CLICK_DEFAULTS)
         for k in CLICK_DEFAULTS:
@@ -1826,8 +1866,9 @@ def click_choice(kind):
                 choice[k] = v
             elif v is not None:
                 log(f"clicks.{k}: {v!r} is not a usable action; using {CLICK_DEFAULTS[k]!r}")
-        _click_cache.update(mtime=mtime, choice=choice)
-    return _click_cache["choice"][kind]
+        return choice
+
+    return live_derived(_click_cache, build)[kind]
 
 
 def click_fn(name):
@@ -1865,18 +1906,15 @@ PEN_TAIL_DEFAULTS = {"single": "space", "double": "enter", "hold": "dictation"}
 # Hold defaults to Dictation: the old Omarchy-menu default was easy to trigger by accident
 # and includes power entries. See docs/DESIGN.md#pen-buttons.
 _PEN_TAIL_BY_NAME = {a[0]: a for a in PEN_TAIL_ACTIONS}
-_pen_tail_cache = {"mtime": object(), "choice": dict(PEN_TAIL_DEFAULTS)}
+_pen_tail_cache = {}
 _pen_tail_fns = {}
 
 
 def pen_tail_choice(slot):
     """Configured action name for the tail button's "single"|"double"|"hold"."""
-    try:
-        mtime = os.stat(CONFIG_PATH).st_mtime_ns
-    except OSError:
-        mtime = None
-    if mtime != _pen_tail_cache["mtime"]:
-        raw = load_config().get("pen", {}).get("tail_clicks")
+
+    def build(doc):
+        raw = _pen_section(doc).get("tail_clicks")
         raw = raw if isinstance(raw, dict) else {}
         choice = dict(PEN_TAIL_DEFAULTS)
         for k in PEN_TAIL_DEFAULTS:
@@ -1888,8 +1926,9 @@ def pen_tail_choice(slot):
                     f"pen.tail_clicks.{k}: {v!r} is not a usable action; "
                     f"using {PEN_TAIL_DEFAULTS[k]!r}"
                 )
-        _pen_tail_cache.update(mtime=mtime, choice=choice)
-    return _pen_tail_cache["choice"][slot]
+        return choice
+
+    return live_derived(_pen_tail_cache, build)[slot]
 
 
 def pen_tail_fn(slot):
@@ -1911,18 +1950,15 @@ PEN_BARREL_ACTIONS = _PEN_SHARED_ACTIONS + [
 ]
 PEN_BARREL_DEFAULT = "right_click"
 _PEN_BARREL_BY_NAME = {a[0]: a for a in PEN_BARREL_ACTIONS}
-_pen_barrel_cache = {"mtime": object(), "enabled": True, "action": PEN_BARREL_DEFAULT}
+_pen_barrel_cache = {}
 _pen_barrel_fns = {}
 
 
 def pen_barrel_config():
     """(enabled, action name) for the stylus barrel button, live-reloaded."""
-    try:
-        mtime = os.stat(CONFIG_PATH).st_mtime_ns
-    except OSError:
-        mtime = None
-    if mtime != _pen_barrel_cache["mtime"]:
-        raw = load_config().get("pen", {}).get("barrel")
+
+    def build(doc):
+        raw = _pen_section(doc).get("barrel")
         raw = raw if isinstance(raw, dict) else {}
         enabled = bool(raw.get("enabled", True))
         action = raw.get("action")
@@ -1933,8 +1969,9 @@ def pen_barrel_config():
                     f"using {PEN_BARREL_DEFAULT!r}"
                 )
             action = PEN_BARREL_DEFAULT
-        _pen_barrel_cache.update(mtime=mtime, enabled=enabled, action=action)
-    return _pen_barrel_cache["enabled"], _pen_barrel_cache["action"]
+        return enabled, action
+
+    return live_derived(_pen_barrel_cache, build)
 
 
 def pen_barrel_fn(name):
@@ -2650,7 +2687,7 @@ def main():
     # same daemon. It stays on by default so existing setups are unchanged, and
     # it costs nothing where no pen exists (the watchers simply find no device),
     # but it can be turned off for a dial-only install.
-    if bool(load_config().get("pen", {}).get("enabled", True)):
+    if bool(_pen_section(load_config()).get("enabled", True)):
         threading.Thread(target=eraser_watcher, daemon=True).start()
         threading.Thread(target=pen_button_watcher, daemon=True).start()
     else:

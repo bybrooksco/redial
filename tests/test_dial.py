@@ -83,7 +83,8 @@ def install_stubs(cfg_path):
     m.CONFIG_PATH = cfg_path
     m.ACTIONS.inline = True  # assert straight after a gesture, not after a worker thread
     m.TOOLS = m.build_tools(m.DEFAULT_TOOLS)  # what the daemon runs with and no config
-    m._click_cache.update(mtime=object())
+    for cache in (m._click_cache, m._pen_tail_cache, m._pen_barrel_cache):
+        cache.clear()
     m._live.update(mtime=object())
 
 
@@ -1327,6 +1328,193 @@ class Status(Base):
             self.assertEqual(m.dial_bluetooth(), (None, None))
         finally:
             m.subprocess.run = real
+
+
+class FakePointer:
+    def __init__(self):
+        self.scrolls, self.clicks = [], []
+
+    def scroll(self, v):
+        self.scrolls.append(v)
+
+    def click(self, btn, down):
+        self.clicks.append((btn, down))
+
+
+class PenConfig(Base):
+    """The pen's click settings: read live, validated, unusable values fall back."""
+
+    def write(self, pen):
+        time.sleep(0.005)
+        with open(self.cfg, "w") as f:
+            json.dump({"pen": pen}, f)
+
+    def test_tail_defaults(self):
+        self.write({})
+        self.assertEqual(
+            [m.pen_tail_choice(k) for k in ("single", "double", "hold")],
+            ["space", "enter", "dictation"],
+        )
+
+    def test_tail_choices_are_used_live(self):
+        self.write({"tail_clicks": {"single": "escape"}})
+        self.assertEqual(m.pen_tail_choice("single"), "escape")
+        self.write({"tail_clicks": {"single": "enter"}})
+        self.assertEqual(m.pen_tail_choice("single"), "enter")
+
+    def test_tail_unknown_action_falls_back_to_the_default(self):
+        self.write({"tail_clicks": {"double": "launch-missiles", "hold": 7}})
+        self.assertEqual(m.pen_tail_choice("double"), "enter")
+        self.assertEqual(m.pen_tail_choice("hold"), "dictation")
+
+    def test_tail_junk_section_is_ignored(self):
+        self.write({"tail_clicks": "nonsense"})
+        self.assertEqual(m.pen_tail_choice("single"), "space")
+
+    def test_tail_unbound_action_compiles_to_none_not_an_error(self):
+        self.write({"tail_clicks": {"single": "none"}})
+        self.assertIsNone(m.pen_tail_fn("single"))
+
+    def test_a_pen_section_that_is_not_an_object_is_ignored(self):
+        time.sleep(0.005)
+        with open(self.cfg, "w") as f:
+            json.dump({"pen": "oops"}, f)
+        self.assertEqual(m.pen_tail_choice("single"), "space")
+        self.assertEqual(m.pen_barrel_config(), (True, "right_click"))
+
+    def test_barrel_defaults_to_right_click_enabled(self):
+        self.write({})
+        self.assertEqual(m.pen_barrel_config(), (True, "right_click"))
+
+    def test_barrel_can_be_disabled_and_remapped(self):
+        self.write({"barrel": {"enabled": False, "action": "middle_click"}})
+        self.assertEqual(m.pen_barrel_config(), (False, "middle_click"))
+
+    def test_barrel_unknown_action_falls_back(self):
+        self.write({"barrel": {"action": "bogus"}})
+        self.assertEqual(m.pen_barrel_config(), (True, "right_click"))
+
+
+class Eraser(Base):
+    """EraserState: tap = Escape, hold = delete word, drag = scroll or cursor, allowlist only."""
+
+    def setUp(self):
+        super().setUp()
+        self.ptr = FakePointer()
+        self._saved = (m.POINTER, m.focused_class, m.scroll_mode)
+        m.POINTER = self.ptr
+        self.cls = "firefox"
+        m.focused_class = lambda: self.cls
+        m.scroll_mode = lambda: "wheel"
+        with open(self.cfg, "w") as f:
+            json.dump({}, f)
+        self.e = m.EraserState()
+
+    def tearDown(self):
+        m.POINTER, m.focused_class, m.scroll_mode = self._saved
+
+    def ev(self, code, value, now=0.0, etype=None):
+        self.e.handle(m.EV_KEY if etype is None else etype, code, value, now)
+
+    def down(self, now=0.0):
+        self.ev(m.BTN_TOOL_RUBBER, 1)
+        self.ev(m.BTN_TOUCH, 1, now)
+
+    def up(self, now):
+        self.ev(m.BTN_TOUCH, 0, now)
+
+    def abs(self, code, v):
+        self.e.handle(m.EV_ABS, code, v, 0.0)
+
+    def test_a_quick_tap_sends_escape(self):
+        self.down(0.0)
+        self.up(0.1)
+        self.assertEqual(EVENTS, ["KEY:Escape"])
+
+    def test_a_long_press_deletes_a_word(self):
+        self.down(0.0)
+        self.up(m.ERASER_HOLD_S + 0.1)
+        self.assertEqual(EVENTS, ["KEY:ctrl+BackSpace"])
+
+    def test_nothing_happens_outside_the_allowlist(self):
+        self.cls = "some-editor"
+        self.down(0.0)
+        self.abs(m.ABS_Y, 0)
+        self.abs(m.ABS_Y, 500)
+        self.up(0.1)
+        self.assertEqual(EVENTS, [])
+        self.assertEqual(self.ptr.scrolls, [])
+
+    def test_vertical_drag_scrolls_and_is_not_a_tap(self):
+        self.down(0.0)
+        for y in range(0, 400, 20):
+            self.abs(m.ABS_Y, y)
+        self.up(0.5)
+        self.assertTrue(self.ptr.scrolls)
+        self.assertNotIn("KEY:Escape", EVENTS)
+
+    def test_scroll_is_suppressed_when_the_class_routes_to_keys(self):
+        m.scroll_mode = lambda: "suppress"
+        self.down(0.0)
+        for y in range(0, 400, 20):
+            self.abs(m.ABS_Y, y)
+        self.assertEqual(self.ptr.scrolls, [])
+
+    def test_horizontal_drag_moves_the_cursor_by_keys(self):
+        self.down(0.0)
+        for x in range(0, 600, 20):
+            self.abs(m.ABS_X, x)
+        self.assertIn("KEY:Right", EVENTS)
+        self.assertNotIn("KEY:Left", EVENTS)
+        self.assertEqual(self.ptr.scrolls, [])
+
+    def test_leftward_drag_moves_the_cursor_left(self):
+        self.down(0.0)
+        for x in range(600, 0, -20):
+            self.abs(m.ABS_X, x)
+        self.assertIn("KEY:Left", EVENTS)
+
+    def test_hovering_with_the_eraser_does_nothing(self):
+        self.ev(m.BTN_TOOL_RUBBER, 1)
+        self.abs(m.ABS_Y, 0)
+        self.abs(m.ABS_Y, 900)
+        self.assertEqual(self.ptr.scrolls, [])
+        self.assertEqual(EVENTS, [])
+
+    def test_touch_without_the_eraser_end_is_ignored(self):
+        self.ev(m.BTN_TOUCH, 1, 0.0)
+        self.up(0.1)
+        self.assertEqual(EVENTS, [])
+
+    def test_lifting_the_eraser_mid_drag_ends_it(self):
+        self.down(0.0)
+        self.ev(m.BTN_TOOL_RUBBER, 0)
+        self.abs(m.ABS_Y, 0)
+        self.abs(m.ABS_Y, 900)
+        self.assertEqual(self.ptr.scrolls, [])
+
+    def test_barrel_mouse_action_passes_press_and_release(self):
+        with open(self.cfg, "w") as f:
+            json.dump({"pen": {"barrel": {"action": "right_click"}}}, f)
+        self.ev(m.BTN_STYLUS, 1)
+        self.ev(m.BTN_STYLUS, 0)
+        self.assertEqual([d for _, d in self.ptr.clicks], [True, False])
+
+    def test_barrel_key_action_fires_once_on_press_only(self):
+        time.sleep(0.005)
+        with open(self.cfg, "w") as f:
+            json.dump({"pen": {"barrel": {"action": "enter"}}}, f)
+        self.ev(m.BTN_STYLUS, 1)
+        self.ev(m.BTN_STYLUS, 0)
+        self.assertEqual(EVENTS, ["KEY:Return"])
+
+    def test_disabled_barrel_does_nothing(self):
+        time.sleep(0.005)
+        with open(self.cfg, "w") as f:
+            json.dump({"pen": {"barrel": {"enabled": False}}}, f)
+        self.ev(m.BTN_STYLUS, 1)
+        self.assertEqual(EVENTS, [])
+        self.assertEqual(self.ptr.clicks, [])
 
 
 class NewControls(Base):
