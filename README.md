@@ -45,7 +45,7 @@ This is an independent implementation and shares no code with it.
 On Omarchy, two commands (replace the URL with this repo's):
 
 ```
-omarchy plugin add https://github.com/<you>/surface-dial.git --enable
+omarchy plugin add https://github.com/bybrooksco/surface-dial.git --enable
 ~/.config/omarchy/plugins/dial.radial/install.sh
 ```
 

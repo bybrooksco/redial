@@ -7,7 +7,7 @@
 # here is ever run with sudo on your behalf).
 #
 # The shortest path on Omarchy:
-#     omarchy plugin add https://github.com/<you>/surface-dial.git --enable
+#     omarchy plugin add https://github.com/bybrooksco/surface-dial.git --enable
 #     ~/.config/omarchy/plugins/dial.radial/install.sh
 #
 # Safe to re-run. It shows what it will do and asks once; the steps that restart the
