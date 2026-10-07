@@ -199,6 +199,26 @@ and cannot misfire while the pen is still down.
   which edge Hyprland must move for that to hold. No magnitude: a fixed step per
   detent keeps every click the same size.
 
+## Feel settings and the two-page window
+
+Five timings and thresholds that used to be constants are now live settings (`sensitivity`, `auto_return_s`,
+`return_buzz`, `double_click_ms`, `hold_ms`), read through one shared reader (`live_config`) that re-reads the file
+only when its mtime moves and validates every value the same way: numbers are clamped to a range, anything else is
+the default. They exist because the defaults can be wrong for a particular person; the first one was added when a
+user with limited reach found six seconds short, and the rest follow the same reasoning. Defaults are unchanged.
+
+Details that are easy to get wrong: the release handler has its own "was this a hold?" check, separate from the one
+that opens the menu, so it must use the same `hold_time()` or a press longer than 0.4 s but shorter than the setting
+is swallowed; the window for a double click is used in three places (single click waiting, the second press, the
+third press); sensitivity scales three things (tool steps, the menu step, continuous gain), each with a test that
+fails if that one wiring is reverted. Tools that hold a modifier stay capped at 10 s (see Interaction model).
+
+The settings window has no scrolling (its height is its contents), and the new rows would have made it taller than
+before. So it is two pages, **Look** (position, size, appearance, the tool ring and its Save) and **Feel** (the five
+rows, clicks, pen); each page is shorter than the old single page. Pages are shown by a `visible:` condition on the
+existing sections, not by moving code, so the drag ring is untouched. `omarchy-shell dialtools page look|feel`
+switches page without a mouse. Save appears only on Look, since tool changes are the only staged ones.
+
 ## Click gestures
 
 Triple click exists for dictation: double click starts or stops recording, triple

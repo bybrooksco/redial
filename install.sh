@@ -242,7 +242,9 @@ if pgrep -f "$DAEMON_RE" >/dev/null; then
 elif confirm "The daemon is not running. Start it now (it also starts at login)?"; then
     start_daemon && ok "daemon started"
 fi
-if (( CHANGED_PLUGIN && ! SHELL_RESTARTED )) && [[ "$(omarchy-shell dialmenu ping 2>/dev/null)" == "ok" ]]; then
+# No ping check here: right after the plugin files change the shell may be mid-reload and not answer,
+# which is exactly when the restart is needed (an earlier version skipped it silently then).
+if (( CHANGED_PLUGIN && ! SHELL_RESTARTED )) && command -v omarchy-restart-shell >/dev/null; then
     if confirm "The plugin changed. Restart the shell (a few seconds) to load it?"; then
         if omarchy-restart-shell 2>/dev/null; then
             ok "shell restarted"

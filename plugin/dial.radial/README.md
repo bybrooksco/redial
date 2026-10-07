@@ -255,19 +255,27 @@ parsed as Lua and fails, and `hyprctl` still exits 0, so the failure is only
 visible in its output. Use `hl.dsp.window.cycle_next()`. Reference:
 `/usr/share/omarchy/default/hypr/bindings/`.
 
-## Return to Volume
+## Feel
 
-The dial rests in Volume. A tool you arm (Scroll, Zoom, Media, ...) stays armed while you use it
-and drops back to Volume after you stop, so nothing stays armed by accident. How long that takes is
-`auto_return_s` in `config.json`, or the **Return to Volume after** row in the settings window.
-It applies immediately, no restart.
+How the dial feels to use. The settings window's **Feel** page (the Look page holds position, size,
+appearance and the tool ring) sets these, or put them in `config.json`. They apply immediately, no restart,
+and every number is clamped to a safe range (text or true/false means the default).
 
-- Default **6 seconds**, which is what the project has always used. The settings window offers 6, 15,
-  30 and 60 s; in the file any number from **3 to 300** works (outside that range it is clamped; text or
-  true/false means the default).
-- **Zoom is always capped at 10 seconds.** It holds Ctrl while armed, so every key you type in another
-  app would carry Ctrl. A long setting never leaves Ctrl held.
-- This is the dial's own idle timer, not the Bluetooth link: the daemon never touches the connection.
+| Setting (`config.json`) | What it does | Default | Range |
+|---|---|---|---|
+| `sensitivity` | How much you turn for each step. Higher = less turning. Scales tool steps, the tool menu and Scroll/Zoom gain. | `1` | 0.5 to 2 |
+| `auto_return_s` | Seconds a tool stays armed after you stop turning, before it drops back to Volume. | `6` | 3 to 300 |
+| `return_buzz` | Whether the dial buzzes when a tool drops back to Volume. | `true` | true / false |
+| `double_click_ms` | How long a second (or third) press can take and still count as a double (or triple) click. | `250` | 150 to 600 |
+| `hold_ms` | How long to hold the button to open the tool menu. | `400` | 200 to 1500 |
+
+Notes:
+
+- The defaults are what the project has always used. In particular the return-to-Volume time has been 6 seconds
+  since the first version, so there is no older, longer value; 15 s or more suits slower or lower-effort use.
+- **Zoom is always capped at 10 seconds**, whatever `auto_return_s` says. It holds Ctrl while armed, so every key
+  you type in another app would carry Ctrl. There is deliberately no "never".
+- `auto_return_s` is the dial's own idle timer. The daemon never touches the Bluetooth connection.
 
 ## Click gestures
 
@@ -331,6 +339,7 @@ its own, not from dial rotation:
     omarchy-shell dialtools open
     omarchy-shell dialtools close
     omarchy-shell dialtools state
+    omarchy-shell dialtools page feel    # or: look
 
 ## Continuous rotation
 

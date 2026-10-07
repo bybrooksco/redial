@@ -82,7 +82,7 @@ def install_stubs(cfg_path):
     m.ACTIONS.inline = True  # assert straight after a gesture, not after a worker thread
     m.TOOLS = m.build_tools(m.TOOL_LIBRARY)
     m._click_cache.update(mtime=object())
-    m._disarm_cache.update(mtime=object())
+    m._live.update(mtime=object())
 
 
 def tool_index(name):
@@ -873,6 +873,180 @@ class AutoReturn(Base):
         d = self.armed_dial("Zoom")
         d.tick(11.0)
         self.assertEqual(d.tool, m.IDLE_TOOL)
+
+
+class FeelSettings(Base):
+    """sensitivity, double_click_ms, hold_ms and return_buzz: read live, validated, and used."""
+
+    def write(self, **kv):
+        time.sleep(0.005)  # distinct mtime
+        with open(self.cfg, "w") as f:
+            json.dump(kv, f)
+
+    # --- reading and validating
+    def test_defaults_are_the_original_behaviour(self):
+        self.write()
+        self.assertEqual(m.sensitivity(), 1.0)
+        self.assertEqual(m.double_window(), 0.25)
+        self.assertEqual(m.hold_time(), 0.4)
+        self.assertTrue(m.return_buzz())
+
+    def test_values_are_used_and_changes_apply_without_a_restart(self):
+        self.write(sensitivity=1.5, double_click_ms=400, hold_ms=700, return_buzz=False)
+        self.assertEqual(
+            (m.sensitivity(), m.double_window(), m.hold_time(), m.return_buzz()),
+            (1.5, 0.4, 0.7, False),
+        )
+        self.write(sensitivity=0.6)
+        self.assertEqual(m.sensitivity(), 0.6)
+
+    def test_out_of_range_numbers_are_clamped(self):
+        self.write(sensitivity=99, double_click_ms=1, hold_ms=99999)
+        self.assertEqual(m.sensitivity(), 2.0)
+        self.assertEqual(m.double_window(), 0.15)
+        self.assertEqual(m.hold_time(), 1.5)
+        self.write(sensitivity=0)
+        self.assertEqual(m.sensitivity(), 0.5)
+
+    def test_junk_means_the_default(self):
+        for junk in ("fast", True, None, [1], float("nan"), float("inf")):
+            self.write(sensitivity=junk, double_click_ms=junk, hold_ms=junk, return_buzz=junk)
+            self.assertEqual(
+                (m.sensitivity(), m.double_window(), m.hold_time(), m.return_buzz()),
+                (1.0, 0.25, 0.4, True),
+                repr(junk),
+            )
+
+    # --- sensitivity changes how far you turn
+    def test_higher_sensitivity_means_a_shorter_step(self):
+        base = m.TOOLS[tool_index("Volume")]["detent"]
+        d = m.Dial()
+        for sens, want in ((1.0, base), (2.0, round(base / 2)), (0.5, base * 2)):
+            self.write(sensitivity=sens)
+            self.assertEqual(d.detent(), want, sens)
+
+    def test_a_step_is_never_less_than_one_count(self):
+        self.write(sensitivity=2.0)
+        d = m.Dial()
+        for t in m.TOOLS:
+            d.tool = m.TOOLS.index(t)
+            self.assertGreaterEqual(d.detent(), 1)
+
+    def test_scroll_gain_scales_with_sensitivity(self):
+        sent = []
+        real_pointer, real_focus = m.POINTER, m.focused_class
+        m.POINTER = types.SimpleNamespace(scroll=sent.append)
+        m.focused_class = lambda: ""  # never ask the real compositor in a test
+        self.addCleanup(
+            lambda: (setattr(m, "POINTER", real_pointer), setattr(m, "focused_class", real_focus))
+        )
+        out = {}
+        for sens in (1.0, 2.0):
+            self.write(sensitivity=sens)
+            d = m.Dial()
+            d.tool = tool_index("Scroll")
+            sent.clear()
+            d.on_rotate(10, 0.0)
+            out[sens] = sent[0]
+        self.assertAlmostEqual(out[2.0], out[1.0] * 2)
+
+    def test_the_menu_needs_less_turning_at_higher_sensitivity(self):
+        def picks(sens):
+            self.write(sensitivity=sens)
+            d = m.Dial()
+            d.menu, d.menu_pick, d.menu_accum = True, 0, 0.0
+            d.on_rotate(m.MENU_STEP // 2, 0.0)
+            return d.menu_pick
+
+        self.assertEqual(picks(1.0), 0)  # half a step: not yet
+        self.assertEqual(picks(2.0), 1)  # the same turn is a whole step now
+
+    # --- click timing
+    def test_holding_to_open_the_menu_uses_the_configured_time(self):
+        def opened_at(hold_ms, t):
+            self.write(hold_ms=hold_ms)
+            d = m.Dial()
+            d.on_press(0.0)
+            d.tick(t)
+            return d.menu
+
+        self.assertTrue(opened_at(400, 0.5))
+        self.assertFalse(opened_at(1000, 0.5))
+        self.assertTrue(opened_at(1000, 1.1))
+
+    def test_a_single_click_waits_for_the_configured_double_click_window(self):
+        def fired_by(window_ms, t):
+            self.write(double_click_ms=window_ms)
+            EVENTS.clear()
+            d = m.Dial()
+            d.on_press(0.0)
+            d.on_release(0.05)
+            d.tick(t)
+            return bool(EVENTS)
+
+        self.assertTrue(fired_by(250, 0.4))  # default: past the window, the click fires
+        self.assertFalse(fired_by(600, 0.4))  # relaxed: still waiting for a second press
+        self.assertTrue(fired_by(600, 0.8))
+
+    def test_a_press_shorter_than_the_hold_time_is_still_a_click(self):
+        # Held 0.6 s with a 1 s hold setting: too short to open the menu, so it must count as
+        # a click, not be dropped as a (never-completed) hold.
+        self.write(hold_ms=1000)
+        EVENTS.clear()
+        d = m.Dial()
+        d.on_press(0.0)
+        d.tick(0.6)
+        d.on_release(0.6)
+        d.tick(1.2)
+        self.assertFalse(d.menu)
+        self.assertTrue(EVENTS, "the click was swallowed")
+
+    def test_a_second_press_inside_a_widened_window_is_a_double_click(self):
+        def run(window_ms):
+            self.write(double_click_ms=window_ms)
+            EVENTS.clear()
+            d = m.Dial()
+            d.on_press(0.0)
+            d.on_release(0.05)
+            d.tick(0.3)  # the default window has expired by now; a wider one has not
+            d.on_press(0.45)
+            d.on_release(0.5)
+            d.tick(1.6)
+            return list(EVENTS)
+
+        self.assertNotIn("DICTATION", run(250))  # two separate single clicks
+        self.assertIn("DICTATION", run(600))  # one double click
+
+    def test_a_third_press_inside_a_widened_window_is_a_triple_click(self):
+        def run(window_ms):
+            self.write(double_click_ms=window_ms)
+            EVENTS.clear()
+            d = m.Dial()
+            d.on_press(0.0)
+            d.on_release(0.05)
+            d.on_press(0.2)
+            d.on_release(0.25)  # second press done: now waiting for a possible third
+            d.tick(0.6)  # the default window has expired by now; a wider one has not
+            d.on_press(0.65)
+            d.tick(2.0)
+            return list(EVENTS)
+
+        self.assertNotIn(
+            "KEY:Return", run(250)
+        )  # double fired first; the third press is a new click
+        self.assertIn("KEY:Return", run(600))  # a real triple click (default action: Enter)
+
+    # --- the return buzz
+    def test_the_return_buzz_can_be_turned_off(self):
+        buzzed = []
+        m.HAPTIC = types.SimpleNamespace(fire=lambda pattern, **k: buzzed.append(pattern))
+        for on, want in ((True, [m.PAT_IDLE]), (False, [])):
+            self.write(return_buzz=on)
+            buzzed.clear()
+            d = m.Dial()
+            d.tool = tool_index("Scroll")
+            d.disarm(1.0)
+            self.assertEqual(buzzed, want, on)
 
 
 if __name__ == "__main__":

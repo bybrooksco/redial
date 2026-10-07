@@ -3,8 +3,12 @@
   "_layout": "dial | deck | carousel | toast | omarchy. dial is the circular instrument (see 'face' below for which one); deck and carousel are both horizontal card rows (deck: dense, original; carousel: fewer details, selected card simply larger); toast is a single pill plus a dot strip, the smallest footprint; omarchy is a single card in the shell's own OSD style (it follows the Omarchy theme, not 'colors'). All of them are pickable live from the settings window's Appearance section.",
   "layout": "dial",
   "anchor": "bottom",
-  "_auto_return_s": "Seconds an armed tool stays armed after you stop turning, before it drops back to Volume. 3 to 300; default 6. Zoom is always capped at 10 because it holds Ctrl while armed. Applies live, no restart. Also set from the settings window (Return to Volume after).",
+  "_feel": "Five 'feel' settings, all live (no restart) and clamped to a safe range; also set from the settings window's Feel page. sensitivity 0.5-2 (higher = less turning); auto_return_s 3-300 seconds an armed tool stays armed before dropping back to Volume (Zoom is always capped at 10 because it holds Ctrl); return_buzz true/false; double_click_ms 150-600; hold_ms 200-1500 (hold the button this long to open the tool menu).",
+  "sensitivity": 1,
   "auto_return_s": 6,
+  "return_buzz": true,
+  "double_click_ms": 250,
+  "hold_ms": 400,
   "watchdogMs": 15000,
   "colors": {
     "_comment": "\"theme\" follows the Omarchy palette. Also accepts a role name (accent, foreground, background, urgent, muted) or a literal hex such as \"#78824b\".",

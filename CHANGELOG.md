@@ -6,7 +6,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- **Return to Volume after** setting (`auto_return_s`, 3-300 s, default 6 s): how long an armed tool stays armed before dropping back to Volume. Live, in the settings window and `config.json`. Zoom is capped at 10 s because it holds Ctrl.
+- **Feel settings**, live and clamped, in `config.json` and a new **Feel** page of the settings window: `sensitivity` (0.5-2), `auto_return_s` (3-300 s, default 6; Zoom capped at 10 s because it holds Ctrl), `return_buzz`, `double_click_ms` (150-600), `hold_ms` (200-1500). Defaults unchanged.
+- The settings window is now two pages, **Look** and **Feel**, so it stays shorter than before (it does not scroll). `omarchy-shell dialtools page look|feel`.
 - **Omarchy** layout: a card in the same visual language as Omarchy's own OSD, following the shell theme.
 - `--version` and `--help` on the daemon.
 - Optional systemd user unit (`systemd/surface-dial.service`) that restarts the daemon on failure.
@@ -14,6 +15,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 - `SECURITY.md`, `CONTRIBUTING.md`, issue templates, `.editorconfig`.
 
 ### Changed
+- `install.sh` now offers the shell restart after the plugin changes even if the shell is not answering at that moment (it used to skip it silently, leaving the old QML running).
 - Settings window: the header text was stale (it described a checklist and a daemon restart); it now describes the drag ring and the Save step. The title is "Surface Dial", matching the menu entry. Helper text contrast raised from 4.4:1 to 5.3:1 on a white-on-black theme.
 - `install.sh` now restarts what it updated: it offers to restart the daemon and the shell, because replacing files does not change what is already running (the shell keeps an old `DialMenu.qml` until restarted). It also offers to start the daemon if it is not running.
 - Installs with `omarchy plugin add <git-url>`: a root `manifest.json` makes the repo a plugin Omarchy accepts, without moving any files.

@@ -1531,28 +1531,65 @@ _click_cache = {"mtime": object(), "choice": dict(CLICK_DEFAULTS)}
 _click_fns = {}
 
 
-_disarm_cache = {"mtime": object(), "s": DISARM_S}
+_live = {"mtime": object(), "doc": {}}
 
 
-def disarm_after(tool):
-    """Seconds of stillness before `tool` falls back to the rest tool.
-
-    From config "auto_return_s", re-read whenever the file changes (no restart). Numbers are clamped
-    to 3-300 s; anything else (text, true/false, NaN) means the default. Tools that hold a
-    modifier are capped at HOLD_MOD_DISARM_CAP_S.
-    """
+def live_config():
+    """The config as of its last change, re-read only when the file's mtime moves."""
     try:
         mtime = os.stat(CONFIG_PATH).st_mtime_ns
     except OSError:
         mtime = None
-    if mtime != _disarm_cache["mtime"]:
-        v = load_config().get("auto_return_s")
-        good = isinstance(v, int | float) and not isinstance(v, bool) and math.isfinite(v)
-        _disarm_cache.update(
-            mtime=mtime, s=min(max(float(v), DISARM_MIN_S), DISARM_MAX_S) if good else DISARM_S
-        )
-    secs = _disarm_cache["s"]
+    if mtime != _live["mtime"]:
+        _live.update(mtime=mtime, doc=load_config())
+    return _live["doc"]
+
+
+def live_num(key, default, lo, hi):
+    """A config number clamped to [lo, hi]; anything else (text, true/false, NaN) is `default`."""
+    v = live_config().get(key)
+    if isinstance(v, int | float) and not isinstance(v, bool) and math.isfinite(v):
+        return min(max(float(v), lo), hi)
+    return default
+
+
+def live_bool(key, default):
+    v = live_config().get(key)
+    return v if isinstance(v, bool) else default
+
+
+def disarm_after(tool):
+    """Seconds of stillness before `tool` falls back to the rest tool (config "auto_return_s").
+
+    Clamped to 3-300 s. A tool that holds a modifier is capped at HOLD_MOD_DISARM_CAP_S.
+    """
+    secs = live_num("auto_return_s", DISARM_S, DISARM_MIN_S, DISARM_MAX_S)
     return min(secs, HOLD_MOD_DISARM_CAP_S) if tool.get("hold_mod") else secs
+
+
+def sensitivity():
+    """How much of a turn each step takes (config "sensitivity", 0.5-2). Higher = less turning."""
+    return live_num("sensitivity", 1.0, 0.5, 2.0)
+
+
+def double_window():
+    """Seconds a second press has to count as a double click (config "double_click_ms", 150-600)."""
+    return live_num("double_click_ms", DOUBLE_S * 1000, 150, 600) / 1000
+
+
+def hold_time():
+    """Seconds to hold the button to open the tool menu (config "hold_ms", 200-1500)."""
+    return live_num("hold_ms", HOLD_S * 1000, 200, 1500) / 1000
+
+
+def return_buzz():
+    """Whether the dial buzzes when a tool drops back to Volume (config "return_buzz")."""
+    return live_bool("return_buzz", True)
+
+
+def menu_step():
+    """Dial counts per menu-highlight change, scaled by sensitivity."""
+    return max(10, round(MENU_STEP / sensitivity()))
 
 
 def click_choice(kind):
@@ -1925,7 +1962,7 @@ class Dial:
         self.arrow_horizontal = False
 
     def detent(self):
-        return TOOLS[self.tool]["detent"]
+        return max(1, round(TOOLS[self.tool]["detent"] / sensitivity()))
 
     def magnitude(self):
         """Units per detent, from rotation speed. Discrete tools stay at 1."""
@@ -1964,7 +2001,8 @@ class Dial:
         self._arm(IDLE_TOOL, now)
         self.accum = 0.0
         self.last_action = now
-        HAPTIC.fire(PAT_IDLE, rate_limit=False)
+        if return_buzz():
+            HAPTIC.fire(PAT_IDLE, rate_limit=False)
         self.show_tool("idle")
 
     def on_rotate(self, value, now):
@@ -1984,20 +2022,21 @@ class Dial:
 
         if self.menu:
             self.menu_accum += value
-            while abs(self.menu_accum) >= MENU_STEP:
+            step = menu_step()
+            while abs(self.menu_accum) >= step:
                 d = 1 if self.menu_accum > 0 else -1
-                self.menu_accum -= d * MENU_STEP
+                self.menu_accum -= d * step
                 self.menu_pick = (self.menu_pick + d) % len(TOOLS)
                 HAPTIC.fire(PAT_TICK)
                 self.show_menu()
-            # Continuous position in tool units. The divisor 2*MENU_STEP keeps the
+            # Continuous position in tool units. The divisor 2*step keeps the
             # fraction within +-0.5 of menu_pick so the QML highlight and the real pick
             # flip together. See docs/DESIGN.md#menu-highlight-alignment.
-            MENU_STREAM.pos(self.menu_pick + self.menu_accum / (2 * MENU_STEP), now)
+            MENU_STREAM.pos(self.menu_pick + self.menu_accum / (2 * step), now)
             return
 
         if TOOLS[self.tool].get("continuous"):
-            gain = TOOLS[self.tool].get("gain", SCROLL_GAIN)
+            gain = TOOLS[self.tool].get("gain", SCROLL_GAIN) * sensitivity()
             sign = 1 if TOOLS[self.tool].get("invert") else -1
             if TOOLS[self.tool].get("terminal_aware") and scroll_mode() == "suppress":
                 return
@@ -2070,7 +2109,7 @@ class Dial:
     def on_release(self, now):
         if self.double_down:
             self.double_down = False
-            self.pending_double = now + DOUBLE_S
+            self.pending_double = now + double_window()
             return
         if self.down_at is None:
             return
@@ -2086,9 +2125,9 @@ class Dial:
             HAPTIC.fire(PAT_SELECT, rate_limit=False)
             self.show_tool("armed" if self.tool != IDLE_TOOL else "idle")
             return
-        if held >= HOLD_S:
+        if held >= hold_time():
             return
-        self.pending_click = now + DOUBLE_S
+        self.pending_click = now + double_window()
 
     def maybe_reload_tools(self, now):
         """Apply an edited tool list without a restart, only while idle."""
@@ -2116,7 +2155,7 @@ class Dial:
         timeout = None
 
         if self.down_at is not None and not self.menu:
-            remain = (self.down_at + HOLD_S) - now
+            remain = (self.down_at + hold_time()) - now
             if remain <= 0:
                 self.menu = True
                 self.menu_pick = self.tool

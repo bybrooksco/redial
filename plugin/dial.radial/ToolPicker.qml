@@ -72,31 +72,94 @@ Item {
     configDoc = out
   }
 
-  // How long an armed tool stays armed once you stop turning (the daemon's "auto_return_s",
-  // re-read live). The daemon clamps it to 3-300 s and caps Zoom at 10 s, because Zoom holds
-  // Ctrl while armed.
-  readonly property var autoReturnOptions: [
-    { key: 6,  label: "6 s" },
-    { key: 15, label: "15 s" },
-    { key: 30, label: "30 s" },
-    { key: 60, label: "60 s" }
-  ]
-  property real autoReturnChoice: {
-    var v = configDoc ? configDoc.auto_return_s : undefined
-    return (typeof v === "number" && isFinite(v)) ? v : 6
+  // Which page of the window is showing: "look" (position, size, appearance, tools) or "feel"
+  // (sensitivity, timings, clicks, pen). Everything on "feel" applies immediately.
+  property string page: "look"
+
+  // A saved setting, or `fallback` if it is missing or the wrong type.
+  function cfgValue(key, fallback) {
+    var v = configDoc ? configDoc[key] : undefined
+    var ok = typeof v === typeof fallback && (typeof v !== "number" || isFinite(v))
+    return ok ? v : fallback
   }
-  // A value written by hand that none of the chips match.
-  readonly property bool autoReturnCustom: {
-    for (var i = 0; i < autoReturnOptions.length; i++)
-      if (autoReturnOptions[i].key === autoReturnChoice) return false
-    return true
-  }
-  function setAutoReturn(secs) {
+  // Write one key back to config.json, keeping every other key as it is.
+  function setConfigKey(key, value) {
     var out = ({})
     for (var k in configDoc) out[k] = configDoc[k]
-    out.auto_return_s = secs
+    out[key] = value
     configFile.setText(JSON.stringify(out, null, 2))
     configDoc = out
+  }
+
+  // One labelled row of choice chips. `current` is the stored value; if it matches none of the
+  // chips (a value written by hand) a note says so. The daemon clamps every value to a safe range.
+  component ChoiceRow: Column {
+    id: choiceRow
+    property var cfg
+    property string title: ""
+    property string help: ""
+    property string unit: ""
+    property var options: []
+    property var current
+    signal picked(var key)
+    readonly property bool custom: {
+      for (var i = 0; i < options.length; i++)
+        if (options[i].key === current) return false
+      return true
+    }
+    width: parent ? parent.width : 0
+    spacing: Style.space(6)
+
+    Text {
+      text: choiceRow.title
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      font.bold: true
+      color: Util.alpha(choiceRow.cfg.lineColor, 0.6)
+    }
+
+    Flow {
+      width: parent.width
+      spacing: Style.space(4)
+      Repeater {
+        model: choiceRow.options
+        delegate: Rectangle {
+          id: chip
+          required property var modelData
+          readonly property bool active: choiceRow.current === modelData.key
+          width: Math.max(Style.space(64), chipText.implicitWidth + Style.space(20))
+          height: Style.space(28)
+          radius: Style.space(6)
+          color: active ? choiceRow.cfg.accentColor : Util.alpha(choiceRow.cfg.lineColor, 0.08)
+          border.width: Math.max(1, Style.space(1.5))
+          border.color: active ? choiceRow.cfg.accentColor : Util.alpha(choiceRow.cfg.lineColor, 0.25)
+
+          Text {
+            id: chipText
+            anchors.centerIn: parent
+            text: chip.modelData.label
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            color: chip.active ? choiceRow.cfg.backgroundColor : choiceRow.cfg.lineColor
+          }
+          MouseArea {
+            anchors.fill: parent
+            onClicked: choiceRow.picked(chip.modelData.key)
+          }
+        }
+      }
+    }
+
+    Text {
+      width: parent.width
+      wrapMode: Text.WordWrap
+      visible: text !== ""
+      text: choiceRow.help + (choiceRow.custom
+            ? " Custom value in config.json: " + choiceRow.current + choiceRow.unit + "." : "")
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      color: Util.alpha(choiceRow.cfg.lineColor, 0.5)
+    }
   }
 
   // One picker across all seven overlay options, though four are a "face" and three a "layout".
@@ -480,9 +543,33 @@ Item {
             }
           }
         }
+        Row {
+          spacing: Style.space(18)
+          Repeater {
+            model: [ { key: "look", label: "Look" }, { key: "feel", label: "Feel" } ]
+            delegate: Text {
+              id: tabLabel
+              required property var modelData
+              readonly property bool active: root.page === modelData.key
+              text: modelData.label
+              font.family: Style.font.family
+              font.pixelSize: Style.font.body
+              font.bold: active
+              color: active ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.6)
+              MouseArea {
+                anchors.fill: parent
+                anchors.margins: -Style.space(4)
+                onClicked: root.page = tabLabel.modelData.key
+              }
+            }
+          }
+        }
+
         Text {
           width: parent.width
-          text: "Drag the ring to reorder. Click \u2715 to remove a tool, or a chip below to add one. Tool changes apply when you press Save; everything else applies immediately."
+          text: root.page === "look"
+                ? "Drag the ring to reorder. Click \u2715 to remove a tool, or a chip below to add one. Tool changes apply when you press Save; everything else applies immediately."
+                : "How the dial feels to use. Everything on this page applies immediately."
           wrapMode: Text.WordWrap
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
@@ -492,6 +579,7 @@ Item {
         Row {
           width: parent.width
           spacing: Style.space(36)
+          visible: root.page === "look"
 
         Column {
           spacing: Style.space(6)
@@ -599,6 +687,7 @@ Item {
         // Overall look. Flow, not Row: six chips don't fit one line at this
         // card width, so they wrap to a second rather than overflow it.
         Column {
+          visible: root.page === "look"
           width: parent.width
           spacing: Style.space(6)
 
@@ -651,65 +740,65 @@ Item {
           }
         }
 
-        // How long a tool stays armed after you stop turning, before it drops back to Volume.
-        Column {
-          width: parent.width
-          spacing: Style.space(6)
-
-          Text {
-            text: "Return to Volume after"
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-            color: Util.alpha(root.cfg.lineColor, 0.6)
-          }
-
-          Row {
-            spacing: Style.space(4)
-            Repeater {
-              model: root.autoReturnOptions
-              delegate: Rectangle {
-                id: returnBtn
-                required property var modelData
-                readonly property bool active: root.autoReturnChoice === modelData.key
-                width: Style.space(64); height: Style.space(28)
-                radius: Style.space(6)
-                color: active ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.08)
-                border.width: Math.max(1, Style.space(1.5))
-                border.color: active ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.25)
-
-                Text {
-                  anchors.centerIn: parent
-                  text: returnBtn.modelData.label
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.caption
-                  color: returnBtn.active ? root.cfg.backgroundColor : root.cfg.lineColor
-                }
-
-                MouseArea {
-                  anchors.fill: parent
-                  onClicked: root.setAutoReturn(returnBtn.modelData.key)
-                }
-              }
-            }
-          }
-
-          Text {
-            width: parent.width
-            wrapMode: Text.WordWrap
-            text: "How long a tool stays armed after you stop turning. Zoom always returns after 10 s, "
-                  + "because it holds Ctrl."
-                  + (root.autoReturnCustom ? " Custom value in config.json: " + root.autoReturnChoice + " s." : "")
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            color: Util.alpha(root.cfg.lineColor, 0.5)
-          }
+        // Feel: how far you turn, how long things take, and the return-to-Volume behaviour.
+        ChoiceRow {
+          visible: root.page === "feel"
+          cfg: root.cfg
+          title: "Sensitivity"
+          help: "How much you turn for each step. Higher means less turning."
+          options: [ { key: 0.6, label: "Low" }, { key: 1, label: "Normal" },
+                     { key: 1.5, label: "High" }, { key: 2, label: "Very high" } ]
+          current: root.cfgValue("sensitivity", 1)
+          onPicked: key => root.setConfigKey("sensitivity", key)
+        }
+        ChoiceRow {
+          visible: root.page === "feel"
+          cfg: root.cfg
+          title: "Return to Volume after"
+          unit: " s"
+          help: "How long a tool stays armed after you stop turning. Zoom always returns after 10 s, because it holds Ctrl."
+          options: [ { key: 6, label: "6 s" }, { key: 15, label: "15 s" },
+                     { key: 30, label: "30 s" }, { key: 60, label: "60 s" } ]
+          current: root.cfgValue("auto_return_s", 6)
+          onPicked: key => root.setConfigKey("auto_return_s", key)
+        }
+        ChoiceRow {
+          visible: root.page === "feel"
+          cfg: root.cfg
+          title: "Buzz when returning to Volume"
+          help: "A short buzz when a tool drops back to Volume."
+          options: [ { key: true, label: "On" }, { key: false, label: "Off" } ]
+          current: root.cfgValue("return_buzz", true)
+          onPicked: key => root.setConfigKey("return_buzz", key)
+        }
+        ChoiceRow {
+          visible: root.page === "feel"
+          cfg: root.cfg
+          title: "Double-click speed"
+          unit: " ms"
+          help: "How long a second press can take and still count as a double click."
+          options: [ { key: 200, label: "Quick" }, { key: 250, label: "Normal" },
+                     { key: 400, label: "Relaxed" }, { key: 600, label: "Slow" } ]
+          current: root.cfgValue("double_click_ms", 250)
+          onPicked: key => root.setConfigKey("double_click_ms", key)
+        }
+        ChoiceRow {
+          visible: root.page === "feel"
+          cfg: root.cfg
+          title: "Hold to open the tool menu"
+          unit: " ms"
+          help: "How long to hold the button before the menu opens."
+          options: [ { key: 250, label: "Quick" }, { key: 400, label: "Normal" },
+                     { key: 700, label: "Relaxed" }, { key: 1000, label: "Slow" } ]
+          current: root.cfgValue("hold_ms", 400)
+          onPicked: key => root.setConfigKey("hold_ms", key)
         }
 
         // What a single / double / triple click does. Each chip cycles through the
         // options (left-click forward, right-click back); the description below says
         // in plain words what the current choice will do.
         Column {
+          visible: root.page === "feel"
           width: parent.width
           spacing: Style.space(6)
 
@@ -797,6 +886,7 @@ Item {
         // enable toggle + single action chip. No daemon restart needed --
         // both buttons re-read config.json live, same as the dial's clicks.
         Column {
+          visible: root.page === "feel"
           width: parent.width
           spacing: Style.space(6)
 
@@ -991,6 +1081,7 @@ Item {
         // Repeater over a plain JS array has no stable delegate identity, so a live swap would
         // destroy the delegate being dragged. See docs/DESIGN.md#settings-window.
         Item {
+          visible: root.page === "look"
           id: ring
           width: parent.width
           height: Style.space(230)
@@ -1124,6 +1215,7 @@ Item {
 
         // Inactive tools, tap to add to the end of the ring.
         Flow {
+          visible: root.page === "look"
           width: parent.width
           spacing: Style.space(6)
           Repeater {
@@ -1168,6 +1260,7 @@ Item {
           layoutDirection: Qt.RightToLeft
 
           Rectangle {
+            visible: root.page === "look"  // Save is for tool changes; the Feel page applies at once
             width: Style.space(80); height: Style.space(32)
             radius: Style.space(8)
             color: root.dirty ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.15)
