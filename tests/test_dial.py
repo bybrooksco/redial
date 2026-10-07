@@ -1648,6 +1648,63 @@ class ActionSpecs(Base):
         self.assertEqual(seen, [True, False, False])
 
 
+class AxisToggle(Base):
+    """Tools with axis_toggle (Arrow Keys, Tile Focus): a click flips vertical/horizontal."""
+
+    def armed(self, name):
+        m.TOOLS = m.build_tools(m.TOOL_LIBRARY)
+        d = m.Dial()
+        d._arm(tool_index(name), 0.0)
+        return d
+
+    def turn(self, d, counts):
+        EVENTS.clear()
+        d.on_rotate(counts, 0.0)
+        return list(EVENTS)
+
+    def flip(self, d):
+        m.click_choice = lambda kind: "tool"
+        d.on_press(1.0)
+        d.on_release(1.05)
+        d.tick(3.0)
+
+    def setUp(self):
+        super().setUp()
+        self._cc = m.click_choice
+        with open(self.cfg, "w") as f:
+            json.dump({}, f)
+
+    def tearDown(self):
+        m.click_choice = self._cc
+
+    def test_arrow_keys_vertical_then_horizontal(self):
+        d = self.armed("Arrow Keys")
+        self.assertEqual(self.turn(d, 60), ["KEY:Down"])
+        self.assertEqual(self.turn(d, -60), ["KEY:Up"])
+        self.flip(d)
+        self.assertTrue(d.arrow_horizontal)
+        self.assertEqual(self.turn(d, 60), ["KEY:Right"])
+        self.assertEqual(self.turn(d, -60), ["KEY:Left"])
+
+    def test_tile_focus_uses_its_own_alt_actions_both_ways(self):
+        def direction(events):
+            self.assertEqual(len(events), 1, events)
+            return events[0].split('direction = "')[1][0]
+
+        d = self.armed("Tile Focus")
+        self.assertEqual((direction(self.turn(d, 60)), direction(self.turn(d, -60))), ("r", "l"))
+        self.flip(d)
+        self.assertTrue(d.arrow_horizontal)
+        self.assertEqual((direction(self.turn(d, 60)), direction(self.turn(d, -60))), ("d", "u"))
+
+    def test_a_fresh_arm_always_starts_vertical(self):
+        d = self.armed("Tile Focus")
+        self.flip(d)
+        d._arm(tool_index("Volume"), 5.0)
+        d._arm(tool_index("Tile Focus"), 6.0)
+        self.assertFalse(d.arrow_horizontal)
+
+
 class NewControls(Base):
     """The tools and click actions added for driving a whole session from the dial."""
 

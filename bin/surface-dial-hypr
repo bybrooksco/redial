@@ -2362,6 +2362,16 @@ class Dial:
         value = self.through_deadzone(value, now)
         if not value:
             return  # inside the dead zone: not activity, so a twitch cannot hold a tool armed
+        self._track_speed(value, now)
+        if self.menu:
+            self._rotate_menu(value, now)
+        elif TOOLS[self.tool].get("continuous"):
+            self._rotate_continuous(value, now)
+        else:
+            self._rotate_discrete(value, now)
+
+    def _track_speed(self, value, now):
+        """Count the event and update `speed` (counts per second over SPEED_WINDOW)."""
         self.rot_events += 1
         if now - self.last_rot_log > 2.0:
             self.last_rot_log = now
@@ -2376,57 +2386,60 @@ class Dial:
             self.rot_hist.popleft()
         self.speed = sum(c for _, c in self.rot_hist) / SPEED_WINDOW
 
-        if self.menu:
-            self.menu_accum += value
-            self.menu_last = now
-            step = menu_step()
-            while abs(self.menu_accum) >= step:
-                d = 1 if self.menu_accum > 0 else -1
-                self.menu_accum -= d * step
-                self.menu_pick = (self.menu_pick + d) % len(TOOLS)
-                self.menu_moved = self.menu_moved or self.menu_pick != self.tool
-                HAPTIC.fire(PAT_TICK)
-                self.show_menu()
-            # Continuous position in tool units. The divisor 2*step keeps the
-            # fraction within +-0.5 of menu_pick so the QML highlight and the real pick
-            # flip together. See docs/DESIGN.md#menu-highlight-alignment.
-            MENU_STREAM.pos(self.menu_pick + self.menu_accum / (2 * step), now)
-            return
+    def _rotate_menu(self, value, now):
+        self.menu_accum += value
+        self.menu_last = now
+        step = menu_step()
+        while abs(self.menu_accum) >= step:
+            d = 1 if self.menu_accum > 0 else -1
+            self.menu_accum -= d * step
+            self.menu_pick = (self.menu_pick + d) % len(TOOLS)
+            self.menu_moved = self.menu_moved or self.menu_pick != self.tool
+            HAPTIC.fire(PAT_TICK)
+            self.show_menu()
+        # Continuous position in tool units. The divisor 2*step keeps the
+        # fraction within +-0.5 of menu_pick so the QML highlight and the real pick
+        # flip together. See docs/DESIGN.md#menu-highlight-alignment.
+        MENU_STREAM.pos(self.menu_pick + self.menu_accum / (2 * step), now)
 
-        if TOOLS[self.tool].get("continuous"):
-            gain = TOOLS[self.tool].get("gain", SCROLL_GAIN) * sensitivity()
-            sign = 1 if TOOLS[self.tool].get("invert") else -1
-            if TOOLS[self.tool].get("terminal_aware") and scroll_mode() == "suppress":
-                return
-            POINTER.scroll(sign * value * gain)  # default: cw = scroll down
-            self.scroll_accum += value
-            while abs(self.scroll_accum) >= SCROLL_TICK:
-                d = 1 if self.scroll_accum > 0 else -1
-                self.scroll_accum -= d * SCROLL_TICK
-                HAPTIC.fire(PAT_TICK)
-            self.last_action = now
+    def _rotate_continuous(self, value, now):
+        t = TOOLS[self.tool]
+        gain = t.get("gain", SCROLL_GAIN) * sensitivity()
+        sign = 1 if t.get("invert") else -1
+        if t.get("terminal_aware") and scroll_mode() == "suppress":
             return
+        POINTER.scroll(sign * value * gain)  # default: cw = scroll down
+        self.scroll_accum += value
+        while abs(self.scroll_accum) >= SCROLL_TICK:
+            d = 1 if self.scroll_accum > 0 else -1
+            self.scroll_accum -= d * SCROLL_TICK
+            HAPTIC.fire(PAT_TICK)
+        self.last_action = now
 
+    def _rotate_discrete(self, value, now):
         self.accum += value
         step = self.detent()
         while abs(self.accum) >= step:
             d = 1 if self.accum > 0 else -1
             self.accum -= d * step
-            mag = self.magnitude()
-            t = TOOLS[self.tool]
-            debug(f"detent {t['name']} {'cw' if d > 0 else 'ccw'} mag={mag} speed={self.speed:.0f}")
-            if t.get("axis_toggle") and self.arrow_horizontal:
-                alt = t.get("alt")
-                if alt:
-                    fn = alt["cw" if d > 0 else "ccw"]
-                    if fn:
-                        ACTIONS.submit(fn, mag)
-                else:
-                    ACTIONS.submit(key, "Right" if d > 0 else "Left")
-            else:
-                ACTIONS.submit(t["cw" if d > 0 else "ccw"], mag)
+            self._fire_detent(d)
             HAPTIC.fire(PAT_TICK)
             self.last_action = now
+
+    def _fire_detent(self, d):
+        """Run the armed tool's action for one detent in direction d (+1 clockwise)."""
+        mag = self.magnitude()
+        t = TOOLS[self.tool]
+        debug(f"detent {t['name']} {'cw' if d > 0 else 'ccw'} mag={mag} speed={self.speed:.0f}")
+        side = "cw" if d > 0 else "ccw"
+        if t.get("axis_toggle") and self.arrow_horizontal:
+            alt = t.get("alt")
+            if not alt:
+                ACTIONS.submit(key, "Right" if d > 0 else "Left")
+            elif alt[side]:
+                ACTIONS.submit(alt[side], mag)
+        else:
+            ACTIONS.submit(t[side], mag)
 
     def on_press(self, now):
         debug("button down")
@@ -2516,92 +2529,110 @@ class Dial:
         log(f"tool list reloaded: {', '.join(t['name'] for t in TOOLS)}")
 
     def tick(self, now):
+        """Advance every timed gesture; returns seconds until the next one is due, or None."""
         self.maybe_reload_tools(now)
-        timeout = None
+        waits = [
+            self._tick_hold(now),
+            self._tick_latched_menu(now),
+            self._tick_single_click(now),
+            self._tick_double_click(now),
+            self._tick_auto_return(now),
+        ]
+        waits = [w for w in waits if w is not None]
+        return min(waits) if waits else None
 
-        if self.down_at is not None and not self.menu:
-            remain = (self.down_at + hold_time()) - now
-            if remain <= 0:
-                self.menu = True
-                self.menu_pick = self.tool
-                self.menu_accum = 0.0
-                self.menu_moved = False
-                self.menu_latched = False
-                self.menu_last = now
-                HAPTIC.fire(PAT_MENU, rate_limit=False)
-                MENU_UI.open(self.menu_pick)
-                MENU_STREAM.connect()
-            else:
-                timeout = remain
+    def _tick_hold(self, now):
+        """Open the tool menu once the button has been held long enough."""
+        if self.down_at is None or self.menu:
+            return None
+        remain = (self.down_at + hold_time()) - now
+        if remain > 0:
+            return remain
+        self.menu = True
+        self.menu_pick = self.tool
+        self.menu_accum = 0.0
+        self.menu_moved = False
+        self.menu_latched = False
+        self.menu_last = now
+        HAPTIC.fire(PAT_MENU, rate_limit=False)
+        MENU_UI.open(self.menu_pick)
+        MENU_STREAM.connect()
+        return None
 
-        if self.menu and self.menu_latched and self.down_at is None:
-            remain = (self.menu_last + menu_idle_timeout()) - now
-            if remain <= 0:
-                # Nobody chose: close, keep whatever tool was armed.
-                self.menu = False
-                self.menu_latched = False
-                MENU_STREAM.close()
-                MENU_UI.close()
-                self.last_action = now
-            else:
-                timeout = remain if timeout is None else min(timeout, remain)
+    def _tick_latched_menu(self, now):
+        """Close a tap-menu that nobody touched, keeping whatever tool was armed."""
+        if not (self.menu and self.menu_latched and self.down_at is None):
+            return None
+        remain = (self.menu_last + menu_idle_timeout()) - now
+        if remain > 0:
+            return remain
+        self.menu = False
+        self.menu_latched = False
+        MENU_STREAM.close()
+        MENU_UI.close()
+        self.last_action = now
+        return None
 
-        if self.pending_click is not None:
-            remain = self.pending_click - now
-            if remain <= 0:
-                self.pending_click = None
-                t = TOOLS[self.tool]
-                single = click_choice("single")
-                if single != "tool":
-                    fn = click_fn(single)
-                    if fn:
-                        ACTIONS.submit(fn, 1)
-                        HAPTIC.fire(PAT_TICK, rate_limit=False)
-                        self.last_action = now
-                elif t.get("axis_toggle"):
-                    self.arrow_horizontal = not self.arrow_horizontal
-                    HAPTIC.fire(PAT_TICK, rate_limit=False)
-                    alt = t.get("alt")
-                    if alt:
-                        notify(
-                            alt["title"] if self.arrow_horizontal else alt["base_title"],
-                            alt["subtitle"] if self.arrow_horizontal else alt["base_subtitle"],
-                        )
-                    else:
-                        notify(
-                            "↔  Arrow Keys" if self.arrow_horizontal else "↕  Arrow Keys",
-                            "horizontal (Left/Right)"
-                            if self.arrow_horizontal
-                            else "vertical (Up/Down)",
-                        )
-                    self.last_action = now
-                else:
-                    fn = t["click"]
-                    if fn:
-                        # Compiled actions all take a magnitude; a click is one step.
-                        ACTIONS.submit(fn, 1)
-                        HAPTIC.fire(PAT_TICK, rate_limit=False)
-                        self.last_action = now
-            else:
-                timeout = remain if timeout is None else min(timeout, remain)
+    def _tick_single_click(self, now):
+        """Run the single-click action once the double-click window has passed."""
+        if self.pending_click is None:
+            return None
+        remain = self.pending_click - now
+        if remain > 0:
+            return remain
+        self.pending_click = None
+        single = click_choice("single")
+        if single != "tool":
+            self._run_click(click_fn(single), now)
+        elif TOOLS[self.tool].get("axis_toggle"):
+            self._toggle_axis(now)
+        else:
+            self._run_click(TOOLS[self.tool]["click"], now)
+        return None
 
-        if self.pending_double is not None:
-            remain = self.pending_double - now
-            if remain <= 0:
-                self.pending_double = None
-                self._fire_gesture("double", now)
-            else:
-                timeout = remain if timeout is None else min(timeout, remain)
+    def _run_click(self, fn, now):
+        """Submit a compiled click action (one step) with a tick of feedback."""
+        if fn:
+            ACTIONS.submit(fn, 1)
+            HAPTIC.fire(PAT_TICK, rate_limit=False)
+            self.last_action = now
 
-        # nothing stays armed: fall back to the safe tool when left alone
-        if self.tool != IDLE_TOOL and not self.menu and self.down_at is None:
-            remain = (self.last_action + disarm_after(TOOLS[self.tool])) - now
-            if remain <= 0:
-                self.disarm(now)
-            else:
-                timeout = remain if timeout is None else min(timeout, remain)
+    def _toggle_axis(self, now):
+        """Click on Arrow Keys (or any axis_toggle tool): flip vertical / horizontal."""
+        self.arrow_horizontal = not self.arrow_horizontal
+        HAPTIC.fire(PAT_TICK, rate_limit=False)
+        alt = TOOLS[self.tool].get("alt")
+        if alt:
+            notify(
+                alt["title"] if self.arrow_horizontal else alt["base_title"],
+                alt["subtitle"] if self.arrow_horizontal else alt["base_subtitle"],
+            )
+        else:
+            notify(
+                "↔  Arrow Keys" if self.arrow_horizontal else "↕  Arrow Keys",
+                "horizontal (Left/Right)" if self.arrow_horizontal else "vertical (Up/Down)",
+            )
+        self.last_action = now
 
-        return timeout
+    def _tick_double_click(self, now):
+        if self.pending_double is None:
+            return None
+        remain = self.pending_double - now
+        if remain > 0:
+            return remain
+        self.pending_double = None
+        self._fire_gesture("double", now)
+        return None
+
+    def _tick_auto_return(self, now):
+        """Nothing stays armed: fall back to the safe tool when left alone."""
+        if self.tool == IDLE_TOOL or self.menu or self.down_at is not None:
+            return None
+        remain = (self.last_action + disarm_after(TOOLS[self.tool])) - now
+        if remain > 0:
+            return remain
+        self.disarm(now)
+        return None
 
 
 EVIOCSCLOCKID = 0x400445A0  # _IOW('E', 0xa0, int)
