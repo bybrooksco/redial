@@ -117,8 +117,8 @@ Item {
         font.family: Style.font.family
         font.pixelSize: active ? Style.font.displayLarge : Style.font.title
         color: active ? face.cfg.backgroundColor : Util.alpha(face.cfg.lineColor, 0.55)
-        Behavior on font.pixelSize { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
-        Behavior on color { ColorAnimation { duration: 130 } }
+        Behavior on font.pixelSize { NumberAnimation { duration: cfg.motionFast; easing.type: Easing.OutCubic } }
+        Behavior on color { ColorAnimation { duration: cfg.motionFast } }
       }
     }
   }

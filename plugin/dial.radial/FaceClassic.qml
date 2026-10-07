@@ -210,7 +210,7 @@ Item {
     rotation: face.needleDeg
     Behavior on rotation {
       enabled: !face.live
-      NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+      NumberAnimation { duration: cfg.motionSlow; easing.type: Easing.OutCubic }
     }
 
     Rectangle {
@@ -306,8 +306,8 @@ Item {
         font.family: Style.font.family
         font.pixelSize: active ? Style.font.displayLarge : Style.font.title
         color: active ? face.cfg.accentColor : Util.alpha(face.cfg.lineColor, 0.34)
-        Behavior on font.pixelSize { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
-        Behavior on color { ColorAnimation { duration: 130 } }
+        Behavior on font.pixelSize { NumberAnimation { duration: cfg.motionFast; easing.type: Easing.OutCubic } }
+        Behavior on color { ColorAnimation { duration: cfg.motionFast } }
       }
     }
   }

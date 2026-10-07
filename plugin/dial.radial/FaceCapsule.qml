@@ -199,10 +199,10 @@ Item {
                                  : Util.alpha(face.cfg.lineColor, 0.38)
         antialiasing: true
 
-        Behavior on width  { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-        Behavior on height { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-        Behavior on color  { ColorAnimation { duration: 150 } }
-        Behavior on border.color { ColorAnimation { duration: 150 } }
+        Behavior on width  { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
+        Behavior on height { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
+        Behavior on color  { ColorAnimation { duration: cfg.motionBase } }
+        Behavior on border.color { ColorAnimation { duration: cfg.motionBase } }
 
         Text {
           anchors.centerIn: parent
@@ -218,7 +218,7 @@ Item {
           font.bold: cap.active
           color: cap.active ? face.cfg.backgroundColor
                             : Util.alpha(face.cfg.lineColor, 0.72)
-          Behavior on color { ColorAnimation { duration: 150 } }
+          Behavior on color { ColorAnimation { duration: cfg.motionBase } }
         }
       }
 

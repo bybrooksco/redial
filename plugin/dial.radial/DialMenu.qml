@@ -238,13 +238,13 @@ Item {
                        : (atBottom ? parent.height - height - root.edgeMargin
                                    : (parent.height - height) / 2))
 
-      Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-      Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+      Behavior on x { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
+      Behavior on y { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
 
       opacity: root.opened ? 1 : 0
       scale: root.opened ? 1 : 0.96
-      Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-      Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+      Behavior on opacity { NumberAnimation { duration: cfg.motionFast; easing.type: Easing.OutCubic } }
+      Behavior on scale { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
 
       // Header: names the selection, so the deck reads even at a glance.
       Item {
@@ -304,10 +304,10 @@ Item {
               opacity: active ? 1 : 0.62
               scale: active ? 1 : 0.93
 
-              Behavior on opacity { NumberAnimation { duration: 140 } }
-              Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-              Behavior on color { ColorAnimation { duration: 140 } }
-              Behavior on border.color { ColorAnimation { duration: 140 } }
+              Behavior on opacity { NumberAnimation { duration: cfg.motionBase } }
+              Behavior on scale { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
+              Behavior on color { ColorAnimation { duration: cfg.motionBase } }
+              Behavior on border.color { ColorAnimation { duration: cfg.motionBase } }
 
               Column {
                 anchors.centerIn: parent
@@ -351,7 +351,7 @@ Item {
                       radius: parent.radius
                       width: parent.width * Math.max(0, Math.min(1, (modelData.value || 0) / 100))
                       color: cfg.accentColor
-                      Behavior on width { NumberAnimation { duration: 120 } }
+                      Behavior on width { NumberAnimation { duration: cfg.motionFast } }
                     }
                   }
                 }
@@ -416,13 +416,13 @@ Item {
                        : (atBottom ? parent.height - height - root.edgeMargin
                                    : (parent.height - height) / 2))
 
-      Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-      Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+      Behavior on x { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
+      Behavior on y { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
 
       opacity: root.opened ? 1 : 0
       scale: root.opened ? 1 : 0.96
-      Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-      Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+      Behavior on opacity { NumberAnimation { duration: cfg.motionFast; easing.type: Easing.OutCubic } }
+      Behavior on scale { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
 
       // One animated scalar drives every card. A card's weight is a "hat" of its distance from
       // `pos`, and the weights always sum to exactly 1, so the row's total width is constant on
@@ -448,7 +448,7 @@ Item {
         return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t,
                        a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t)
       }
-      NumberAnimation { id: posAnim; target: carousel; property: "pos"; duration: 170; easing.type: Easing.OutCubic }
+      NumberAnimation { id: posAnim; target: carousel; property: "pos"; duration: cfg.motionBase; easing.type: Easing.OutCubic }
 
       Row {
         id: row
@@ -528,13 +528,13 @@ Item {
                        : (atBottom ? parent.height - height - root.edgeMargin
                                    : (parent.height - height) / 2))
 
-      Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-      Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+      Behavior on x { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
+      Behavior on y { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
 
       opacity: root.opened ? 1 : 0
       scale: root.opened ? 1 : 0.96
-      Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-      Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+      Behavior on opacity { NumberAnimation { duration: cfg.motionFast; easing.type: Easing.OutCubic } }
+      Behavior on scale { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
 
       Rectangle {
         id: pill
@@ -616,8 +616,8 @@ Item {
             radius: height / 2
             scale: active ? 1.7 : 1
             color: active ? cfg.accentColor : Util.alpha(cfg.lineColor, 0.25)
-            Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-            Behavior on color { ColorAnimation { duration: 160 } }
+            Behavior on scale { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
+            Behavior on color { ColorAnimation { duration: cfg.motionBase } }
           }
         }
       }
@@ -687,11 +687,11 @@ Item {
               : (atTop ? root.edgeMargin
                        : (atBottom ? parent.height - height - bottomMargin
                                    : (parent.height - height) / 2))
-      Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-      Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+      Behavior on x { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
+      Behavior on y { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
 
       opacity: root.opened ? 1 : 0
-      Behavior on opacity { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+      Behavior on opacity { NumberAnimation { duration: cfg.motionFast; easing.type: Easing.OutCubic } }
 
       BorderSurface {
         id: omarchyCard
@@ -751,7 +751,7 @@ Item {
                 height: parent.height
                 width: parent.width * Math.max(0, Math.min(1, (omarchy.hasValue ? omarchy.activeTool.value : 0) / 100))
                 color: Color.accent
-                Behavior on width { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+                Behavior on width { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
               }
             }
 
@@ -766,7 +766,7 @@ Item {
                   width: Math.max(1, (omarchy.barW - Style.space(3) * (root.tools.length - 1)) / Math.max(1, root.tools.length))
                   height: parent.height
                   color: index === root.index ? Color.accent : Util.alpha(Color.popups.text, 0.45)
-                  Behavior on color { ColorAnimation { duration: 140 } }
+                  Behavior on color { ColorAnimation { duration: cfg.motionBase } }
                 }
               }
             }
@@ -820,8 +820,8 @@ Item {
                        : (atBottom ? parent.height - height - edge
                                    : (parent.height - height) / 2))
 
-      Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-      Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+      Behavior on x { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
+      Behavior on y { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
 
       opacity: root.opened ? 1 : 0
       // Size is a uniform scale about the edge/corner the overlay is anchored to, so
@@ -832,8 +832,8 @@ Item {
         : (atBottom ? (atLeft ? Item.BottomLeft : (atRight ? Item.BottomRight : Item.Bottom))
         : (atLeft ? Item.Left : (atRight ? Item.Right : Item.Center))))
       scale: (root.opened ? 1 : 0.97) * cfg.sizeScale
-      Behavior on opacity { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
-      Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+      Behavior on opacity { NumberAnimation { duration: cfg.motionFast; easing.type: Easing.OutCubic } }
+      Behavior on scale { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
 
       // Backing. `none` is the default; `disc` exists because 0.5px hairlines
       // over arbitrary desktop content can wash out, and it is one config value
@@ -945,7 +945,7 @@ Item {
                    Math.min(plate.height - height - Style.space(34),
                             faceLoader.y + ly - height / 2))
         }
-        Behavior on y { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+        Behavior on y { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
         spacing: Style.space(3)
         // Never wider than the room left on the plate (30-unit right margin): this column
         // used to end 4 units short of the border, so a long click label ran over it.

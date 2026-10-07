@@ -889,6 +889,15 @@ Item {
         ChoiceRow {
           visible: root.page === "feel"
           cfg: root.cfg
+          title: "Reduce motion"
+          help: "Turns off sliding, scaling and fading on the dial display: everything changes instantly."
+          options: [ { key: false, label: "Off" }, { key: true, label: "On" } ]
+          current: root.cfgValue("reduce_motion", false)
+          onPicked: key => root.setConfigKey("reduce_motion", key)
+        }
+        ChoiceRow {
+          visible: root.page === "feel"
+          cfg: root.cfg
           title: "Ignore small turns"
           unit: " counts"
           help: "Ignores a bump or a tremor: after a pause, the dial has to turn this far before anything happens. Higher ignores more."
@@ -1309,8 +1318,8 @@ Item {
               color: Util.alpha(root.cfg.accentColor, dragArea.pressed ? 0.30 : 0.16)
               border.width: Math.max(1, Style.space(1.5))
               border.color: root.cfg.accentColor
-              Behavior on x { enabled: !dragArea.pressed; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-              Behavior on y { enabled: !dragArea.pressed; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+              Behavior on x { enabled: !dragArea.pressed; NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
+              Behavior on y { enabled: !dragArea.pressed; NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
 
               Text {
                 anchors.centerIn: parent

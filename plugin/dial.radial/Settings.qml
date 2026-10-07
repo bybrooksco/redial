@@ -164,6 +164,12 @@ Item {
     if (face === "gauge") return "none"
     return "disc"
   }
+  // Motion: three speeds used by every animation, all zero when reduce_motion is on (config key
+  // or Feel page), so nothing slides, scales or fades; changes of state are then instant.
+  readonly property bool reduceMotion: !!(doc && doc.reduce_motion === true)
+  readonly property int motionFast: reduceMotion ? 0 : 120   // fades, small text and colour shifts
+  readonly property int motionBase: reduceMotion ? 0 : 160   // moves, scale, highlight travel
+  readonly property int motionSlow: reduceMotion ? 0 : 260   // whole-dial rotations
   readonly property int watchdogMs: num("watchdogMs", 2000, 120000)
 
   readonly property int barCount: num("dial.barCount", 24, 720)
