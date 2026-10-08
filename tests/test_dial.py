@@ -2849,6 +2849,17 @@ class SelfInstaller(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(self.target, f)), f)
         self.assertFalse(self.exists(".local/bin/surface-dial-hypr"))
         self.assertFalse(self.exists(".config/omarchy/plugins/dial.radial"))
+        self.assertIn("Unpacked only", r.stdout)
+        self.assertNotIn("Before you continue", r.stdout)  # it stopped before the notice
+
+    def test_it_refuses_to_run_as_root(self):
+        with open(os.path.join(self.stubs, "id"), "w") as f:
+            f.write("#!/bin/sh\necho 0\n")
+        os.chmod(os.path.join(self.stubs, "id"), 0o755)
+        r = self.run_installer("--extract-only")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("not root", r.stderr)
+        self.assertFalse(os.path.exists(self.target))
 
     def test_saying_no_at_the_notice_installs_nothing_and_says_how_to_continue(self):
         r = self.run_installer(text="n\nn\n")
@@ -2867,7 +2878,8 @@ class SelfInstaller(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertTrue(self.exists(".local/bin/surface-dial-hypr"))
         self.assertTrue(self.exists(".config/omarchy/plugins/dial.radial/DialMenu.qml"))
-        self.assertIn("Go ahead?", r.stdout)  # install.sh's own prompt was shown
+        # install.sh ran with its own plan and questions (not silently with -y)
+        self.assertIn("For your user only, no sudo", r.stdout)
         self.assertIn("uninstall.sh", r.stdout)
         self.assertTrue(os.path.exists(os.path.join(self.target, "uninstall.sh")))
 
@@ -2925,7 +2937,16 @@ class SelfInstaller(unittest.TestCase):
         self.assertTrue(any(".old-" in n for n in names))
 
     def test_a_machine_that_is_not_omarchy_is_told_so(self):
-        r = self.run_installer("--extract-only", path="/usr/bin:/bin")
+        # A PATH with only the plain tools the installer needs, and no hyprctl or omarchy-shell
+        # (this machine's real /usr/bin has them).
+        plain = tempfile.mkdtemp()
+        for tool in (
+            "bash tar base64 sha256sum awk mktemp id date cut tail rm mkdir mv sed cat less dirname"
+        ).split():
+            real = shutil_which(tool)
+            if real:
+                os.symlink(real, os.path.join(plain, tool))
+        r = self.run_installer("--extract-only", path=plain)
         self.assertIn("does not look like an Omarchy", r.stdout)
 
     def test_unknown_options_are_refused(self):

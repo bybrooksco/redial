@@ -12,7 +12,7 @@ coverage run --include=bin/surface-dial-hypr tests/test_dial.py && coverage repo
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml   # keyboard/accessibility of Pressable; headless (note: /usr/bin/qmltestrunner is the Qt 5 one)
 ruff check bin/surface-dial-hypr bin/surface-dial-rise-widget scripts/add-menu-entry.py tests
 ruff format --check bin/surface-dial-hypr bin/surface-dial-rise-widget scripts/add-menu-entry.py tests
-shellcheck install.sh uninstall.sh bin/surface-dial-setup bin/surface-dial-restart bin/surface-dial-bar scripts/pair-dial.sh
+shellcheck install.sh uninstall.sh scripts/make-installer.sh scripts/installer-template.sh bin/surface-dial-setup bin/surface-dial-restart bin/surface-dial-bar scripts/pair-dial.sh
 ```
 
 These are exactly what CI runs. (`ruff check .` alone would skip the daemon: ruff only

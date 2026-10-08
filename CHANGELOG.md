@@ -10,6 +10,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 The first version given to testers. Not yet public; see `docs/ROADMAP.md` for what comes before 1.0.
 
 ### Added
+- **Single-file installer** for testers: `scripts/make-installer.sh <ref> <out>` builds one file (about 220 KB, small enough to email) that contains the whole release. Running it checks its own checksum, shows a plain-language notice, unpacks to `~/.local/share/surface-dial-beta/` and then runs the normal `install.sh`, which asks before every change. The unpacked folder stays so `uninstall.sh` is available. `--extract-only` and `--unattended` for the careful and the scripted.
+- **`FEEDBACK.md`**: a short sheet for testers (setup, eight things to try on day one, questions for after a few days).
 - **Tool descriptions on hover.** Hover a tool in the settings window (the ring or the chips below it) and a short description appears: what turning does and what a click does. It also appears when a tool gets keyboard focus, and screen readers are given it as the control's description. Every tool now carries its description in its data (published in `tools.json`), so tools you define can have one too. `omarchy-shell dialtools tip <name>` shows one without a mouse.
 - **`uninstall.sh`**: removes everything `install.sh` added (programs, plugin, start-at-login lines, menu entry), moving it to a backup folder first; keeps your settings unless `--purge`; asks before the one sudo step.
 - The Help page ends with the version number, so a bug report can say which version it is about.

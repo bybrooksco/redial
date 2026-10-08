@@ -36,6 +36,7 @@ This is an independent implementation and shares no code with it.
   python3 tests/test_dial.py` tests a live install.
 - `manifest.json` — makes this repo a plugin `omarchy plugin add` accepts.
 - `scripts/add-menu-entry.py` — adds Setup > Surface Dial to the Omarchy menu.
+- `scripts/make-installer.sh` — builds the single-file installer for a release (see `docs/RELEASING.md`).
 - `uninstall.sh` — removes what `install.sh` added (backs it up first; keeps your settings).
 - `install.sh` — installs all of the above. Idempotent, shows its plan and asks once
   (plus separately for the shell restart, sudo steps and the Rise widget), and backs up
