@@ -2755,6 +2755,183 @@ class ToolDescriptions(Base):
         self.assertTrue(next(e for e in manifest if e["name"] == "Volume")["default"])
 
 
+def _git_checkout_available():
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    return os.path.isdir(os.path.join(root, ".git")) and shutil_which("git") is not None
+
+
+def shutil_which(name):
+    import shutil
+
+    return shutil.which(name)
+
+
+@unittest.skipUnless(_git_checkout_available(), "needs a git checkout to build the installer")
+class SelfInstaller(unittest.TestCase):
+    """scripts/make-installer.sh + the single-file installer, run in a scratch HOME."""
+
+    ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+
+    @classmethod
+    def setUpClass(cls):
+        cls.out = tempfile.mkdtemp()
+        cls.installer = os.path.join(cls.out, "dial-installer.sh")
+        r = subprocess.run(
+            ["bash", os.path.join(cls.ROOT, "scripts", "make-installer.sh"), "HEAD", cls.installer],
+            capture_output=True,
+            text=True,
+            cwd=cls.ROOT,
+        )
+        assert r.returncode == 0, r.stdout + r.stderr
+        cls.version = m.__version__
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp()
+        self.stubs = tempfile.mkdtemp()
+        self.log = os.path.join(self.stubs, "calls.log")
+        for name, body in (
+            ("sudo", "exit 0"),
+            ("pkill", ""),
+            ("pgrep", "exit 1"),
+            ("sleep", ""),
+            ("hyprctl", ""),
+            ("omarchy-restart-shell", ""),
+            ("omarchy-pkg-add", ""),
+            ("omarchy-shell", 'case "$*" in *ping*) echo ok;; esac'),
+        ):
+            path = os.path.join(self.stubs, name)
+            with open(path, "w") as f:
+                f.write(f'#!/bin/sh\necho "{name} $*" >> "{self.log}"\n{body}\n')
+            os.chmod(path, 0o755)
+        os.makedirs(os.path.join(self.home, ".config", "hypr"))
+        with open(os.path.join(self.home, ".config", "hypr", "autostart.lua"), "w") as f:
+            f.write("-- mine\n")
+        self.env = {"HOME": self.home, "PATH": self.stubs + ":/usr/bin:/bin", "USER": "tester"}
+        self.target = os.path.join(
+            self.home, ".local/share/surface-dial-beta", f"surface-dial-{self.version}"
+        )
+
+    def run_installer(self, *args, text="", path=None, installer=None):
+        env = dict(self.env)
+        if path is not None:
+            env["PATH"] = path
+        return subprocess.run(
+            ["bash", installer or self.installer, *args],
+            env=env,
+            capture_output=True,
+            text=True,
+            input=text,
+        )
+
+    def exists(self, rel):
+        return os.path.exists(os.path.join(self.home, rel))
+
+    def test_it_is_one_file_a_few_hundred_kilobytes_with_a_checksum(self):
+        size = os.path.getsize(self.installer)
+        self.assertLess(size, 600_000)  # small enough to attach to an email
+        self.assertGreater(size, 20_000)
+        r = subprocess.run(
+            ["sha256sum", "-c", os.path.basename(self.installer) + ".sha256"],
+            cwd=self.out,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_the_version_comes_from_the_release_inside_it(self):
+        r = self.run_installer("--version")
+        self.assertEqual(r.stdout.strip(), self.version)
+
+    def test_extract_only_unpacks_everything_and_installs_nothing(self):
+        r = self.run_installer("--extract-only")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        for f in ("install.sh", "uninstall.sh", "BETA.md", "FEEDBACK.md", "SECURITY.md", "LICENSE"):
+            self.assertTrue(os.path.exists(os.path.join(self.target, f)), f)
+        self.assertFalse(self.exists(".local/bin/surface-dial-hypr"))
+        self.assertFalse(self.exists(".config/omarchy/plugins/dial.radial"))
+
+    def test_saying_no_at_the_notice_installs_nothing_and_says_how_to_continue(self):
+        r = self.run_installer(text="n\nn\n")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("Nothing was installed", r.stdout)
+        self.assertFalse(self.exists(".local/bin/surface-dial-hypr"))
+        self.assertTrue(os.path.exists(os.path.join(self.target, "install.sh")))
+
+    def test_the_notice_names_the_real_risks(self):
+        r = self.run_installer(text="n\nn\n")
+        for needle in ("BETA", "sudo", "input", "uninstall.sh", "sends nothing"):
+            self.assertIn(needle, r.stdout)
+
+    def test_yes_runs_the_installer_which_still_asks_its_own_questions(self):
+        r = self.run_installer(text="n\ny\n" + "y\n" * 40)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(self.exists(".local/bin/surface-dial-hypr"))
+        self.assertTrue(self.exists(".config/omarchy/plugins/dial.radial/DialMenu.qml"))
+        self.assertIn("Go ahead?", r.stdout)  # install.sh's own prompt was shown
+        self.assertIn("uninstall.sh", r.stdout)
+        self.assertTrue(os.path.exists(os.path.join(self.target, "uninstall.sh")))
+
+    def test_unattended_installs_without_the_notice(self):
+        r = self.run_installer("--unattended")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(self.exists(".local/bin/surface-dial-hypr"))
+        self.assertNotIn("I have read this", r.stdout)
+
+    def test_the_kept_uninstaller_removes_what_the_installer_added(self):
+        self.assertEqual(self.run_installer("--unattended").returncode, 0)
+        r = subprocess.run(
+            ["bash", os.path.join(self.target, "uninstall.sh"), "-y"],
+            env=self.env,
+            capture_output=True,
+            text=True,
+            input="",
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse(self.exists(".local/bin/surface-dial-hypr"))
+        with open(os.path.join(self.home, ".config/hypr/autostart.lua")) as f:
+            self.assertEqual(f.read(), "-- mine\n")
+
+    def test_a_changed_payload_is_refused_before_anything_is_unpacked(self):
+        with open(self.installer, "rb") as f:
+            data = bytearray(f.read())
+        pos = data.rindex(b"\n", 0, len(data) - 200) - 5  # inside the payload
+        data[pos] = ord("A") if data[pos] != ord("A") else ord("B")
+        bad = os.path.join(self.out, "bad.sh")
+        with open(bad, "wb") as f:
+            f.write(data)
+        r = self.run_installer("--extract-only", installer=bad)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("checksum mismatch", r.stderr)
+        self.assertFalse(os.path.exists(self.target))
+
+    def test_a_truncated_file_is_refused(self):
+        with open(self.installer) as f:
+            text = f.read()
+        cut = os.path.join(self.out, "cut.sh")
+        with open(cut, "w") as f:
+            f.write(
+                text[: text.index("__PAYLOAD_BELOW__\n") + len("__PAYLOAD_BELOW__\n")] + "AAAA\n"
+            )
+        r = self.run_installer("--extract-only", installer=cut)
+        self.assertEqual(r.returncode, 1)
+        self.assertFalse(os.path.exists(self.target))
+
+    def test_running_it_again_keeps_the_old_folder_aside(self):
+        self.assertEqual(self.run_installer("--extract-only").returncode, 0)
+        self.assertEqual(self.run_installer("--extract-only").returncode, 0)
+        parent = os.path.dirname(self.target)
+        names = os.listdir(parent)
+        self.assertEqual(len(names), 2, names)
+        self.assertTrue(any(".old-" in n for n in names))
+
+    def test_a_machine_that_is_not_omarchy_is_told_so(self):
+        r = self.run_installer("--extract-only", path="/usr/bin:/bin")
+        self.assertIn("does not look like an Omarchy", r.stdout)
+
+    def test_unknown_options_are_refused(self):
+        self.assertEqual(self.run_installer("--nuke").returncode, 2)
+
+
 class NewControls(Base):
     """The tools and click actions added for driving a whole session from the dial."""
 

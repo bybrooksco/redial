@@ -89,6 +89,9 @@ Please include:
 2. the output of `surface-dial-setup` (it checks everything and says what to fix);
 3. anything from `~/.local/state/surface-dial/daemon.log` that looks relevant, after reading it.
 
+`FEEDBACK.md` is a short sheet you can copy into an email: setup, a few things to try on the first day,
+and questions for after a few days. Use it or not, as you like.
+
 A good first week: use it for ordinary work, open the settings once and change something, try the
 **Feel** page's sliders if the dial feels too fast or too slow, and note anything that annoyed you,
 even slightly. "I did not understand this" is as valuable as "this is broken".
