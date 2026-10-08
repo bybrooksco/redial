@@ -5,7 +5,14 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-10-07 (first beta)
+
+The first version given to testers. Not yet public; see `docs/ROADMAP.md` for what comes before 1.0.
+
 ### Added
+- **Tool descriptions on hover.** Hover a tool in the settings window (the ring or the chips below it) and a short description appears: what turning does and what a click does. It also appears when a tool gets keyboard focus, and screen readers are given it as the control's description. Every tool now carries its description in its data (published in `tools.json`), so tools you define can have one too. `omarchy-shell dialtools tip <name>` shows one without a mouse.
+- **`uninstall.sh`**: removes everything `install.sh` added (programs, plugin, start-at-login lines, menu entry), moving it to a backup folder first; keeps your settings unless `--purge`; asks before the one sudo step.
+- The Help page ends with the version number, so a bug report can say which version it is about.
 - **Pointer** tool (move the mouse with the dial, accelerating with speed; click flips the axis) and **H Scroll** (sideways scrolling). Both off by default. The virtual pointer now supports relative motion and the horizontal wheel.
 - Click actions: **Left / Right / Middle click** (so the dial can press what Pointer points at), **Open a terminal / browser / files**, and **Quick assistant**, which runs the command you set in `assistant.cmd` (any AI or chat, local or hosted; no vendor assumed; changes apply without a restart).
 - **`launchers`** in the config: your own click actions that run a command (up to 12).
@@ -46,8 +53,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 - `active_tools` and `tools` changes now apply live, while the dial is idle. No daemon restart.
 - Python sources are ruff-formatted; shell scripts are shellcheck-clean.
 
-## [1.0.0]
+## [0.9.0]
 
-Initial public layout: daemon, Quickshell plugin with four faces (Pie Wheel,
+Initial layout (never released under this number; renumbered when the beta numbering was chosen): daemon, Quickshell plugin with four faces (Pie Wheel,
 Gauge, Carousel, Minimal Toast), Surface Pen support, doctor/setup script,
 Rise bar widget installer, udev rules and test suite.

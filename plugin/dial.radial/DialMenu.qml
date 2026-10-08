@@ -176,6 +176,7 @@ Item {
       return "ok"
     }
     function state(): string { return (root.opened && root.mode === "settings") ? "open" : "closed" }
+    function tip(name: string): string { return toolPicker.tipForName(name) ? "ok" : "not on the ring" }
     function page(name: string): string { toolPicker.page = (name === "feel" || name === "help") ? name : "look"; return "ok" }
     function ping(): string { return "ok" }
   }

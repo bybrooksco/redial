@@ -165,7 +165,7 @@ HOLD_S = 0.40  # press longer than this opens the menu
 # top-left | top-right | bottom-left | bottom-right
 # Config is shared with the overlay plugin; every key is optional and re-read when the menu
 # opens. Env vars win.
-__version__ = "1.0.0"
+__version__ = "0.9.7"
 
 # DIAL_CONFIG_DIR exists so tests can keep importing this file away from the real config.
 CONFIG_PATH = os.path.join(
@@ -1558,6 +1558,11 @@ def make_action(spec):
 TOOL_LIBRARY = [
     {
         "name": "Volume",
+        "description": (
+            "Turn for volume; fast spins change it in bigger steps. Click mutes. This is the "
+            "resting "
+            "tool every other tool returns to."
+        ),
         "icon": "\uf028",
         "detent": 60,
         "magnitude": True,
@@ -1571,6 +1576,7 @@ TOOL_LIBRARY = [
     },
     {
         "name": "Windows",
+        "description": "Cycle focus through your open windows. Click maximizes the focused window.",
         "icon": "\uf2d0",
         "detent": 150,
         "cw": {"do": "hypr", "lua": "hl.dsp.window.cycle_next()"},
@@ -1583,6 +1589,9 @@ TOOL_LIBRARY = [
     },
     {
         "name": "Workspaces",
+        "description": (
+            "Switch to the next or previous workspace. Click jumps back to the last one."
+        ),
         "icon": "\uf00a",
         "detent": 450,
         # Deliberately unscaled by speed: "+1" can create workspaces, so a fast
@@ -1600,6 +1609,7 @@ TOOL_LIBRARY = [
         # keys scroll; in a terminal they walk shell history instead. Real wheel
         # events need the uinput virtual pointer, which the continuous path uses.
         "name": "Scroll",
+        "description": "Smooth scrolling under the mouse pointer, faster when you turn faster.",
         "icon": "\uf07d",
         "detent": 60,
         "magnitude": True,
@@ -1614,6 +1624,7 @@ TOOL_LIBRARY = [
     },
     {
         "name": "Undo",
+        "description": "Counter-clockwise undoes, clockwise redoes.",
         "icon": "\uf0e2",
         "detent": 150,
         "cw": {"do": "key", "keys": ["ctrl", "shift", "z"]},
@@ -1623,6 +1634,10 @@ TOOL_LIBRARY = [
     {
         # Ctrl+scroll held while armed, not Ctrl+=/- (apps like Obsidian's Graph view ignore that).
         "name": "Zoom",
+        "description": (
+            "Zoom in and out (it holds Ctrl while armed, so it hands back to Volume after 10 "
+            "seconds). Click resets the zoom."
+        ),
         "icon": "\uf00e",
         "detent": 60,
         "magnitude": True,
@@ -1637,6 +1652,10 @@ TOOL_LIBRARY = [
     {
         # Scrubs the playhead; takes magnitude so a fast spin jumps further.
         "name": "Media",
+        "description": (
+            "Scrub through the song or video that is playing; fast spins jump further. Click plays "
+            "or pauses."
+        ),
         "icon": "\uf001",
         "detent": 60,
         "magnitude": True,
@@ -1650,6 +1669,7 @@ TOOL_LIBRARY = [
         # reason as Undo: fast spins skipping unpredictable numbers of words
         # is worse than a steady one-word-per-detent rhythm.
         "name": "Word Nav",
+        "description": "Move the text cursor one word at a time.",
         "icon": "\uf035",
         "detent": 60,
         "cw": {"do": "key", "keys": ["ctrl", "Right"]},
@@ -1660,6 +1680,7 @@ TOOL_LIBRARY = [
         # Click flips vertical/horizontal, handled in Dial (arrow_horizontal) because the do/cw/ccw
         # vocabulary has no persistent state. cw/ccw are the vertical default.
         "name": "Arrow Keys",
+        "description": "Press the arrow keys. Click flips between up/down and left/right.",
         "icon": "\uf047",
         "detent": 60,
         "axis_toggle": True,
@@ -1671,6 +1692,7 @@ TOOL_LIBRARY = [
         # Click flips the axis (alt axis is data). cw always grows; resize_active() picks the edge.
         # Fixed RESIZE_STEP per detent, no magnitude.
         "name": "Window Size",
+        "description": "Resize the focused window. Click flips between width and height.",
         "icon": "\uf065",
         "detent": 60,
         "axis_toggle": True,
@@ -1692,6 +1714,7 @@ TOOL_LIBRARY = [
         # Magnitude like Volume: a faster spin takes bigger steps. The device is
         # always named explicitly (see backlight_device()).
         "name": "Brightness",
+        "description": "Screen brightness, where the machine has a backlight (laptops).",
         "icon": "\uf185",
         "detent": 60,
         "magnitude": True,
@@ -1702,6 +1725,7 @@ TOOL_LIBRARY = [
     # --- tools for pointing and sideways scrolling, off by default like the ones below.
     {
         "name": "H Scroll",
+        "description": "Scroll sideways; clockwise goes right.",
         "icon": "\uf07e",
         "detent": 60,
         "magnitude": True,
@@ -1717,6 +1741,11 @@ TOOL_LIBRARY = [
         # (set it to Left click on the Feel page) presses the button. Slow turns are fine
         # steps, fast spins cross the screen.
         "name": "Pointer",
+        "description": (
+            "Move the mouse pointer: small turns are fine steps, fast spins cross the screen. "
+            "Click "
+            "flips between left/right and up/down. Set a click gesture to Left click to press."
+        ),
         "icon": "\uf245",
         "detent": 60,
         "continuous": True,
@@ -1740,6 +1769,10 @@ TOOL_LIBRARY = [
         # Operate any form, dialog or toolbar with the dial alone: turn to move focus,
         # click to activate.
         "name": "Focus",
+        "description": (
+            "Move between buttons and fields with Tab and Shift+Tab. Click presses Enter, so any "
+            "dialog can be used with the dial alone."
+        ),
         "icon": "\uf11c",
         "detent": 60,
         "default": False,
@@ -1749,6 +1782,7 @@ TOOL_LIBRARY = [
     },
     {
         "name": "Tabs",
+        "description": "Switch to the next or previous tab in a browser or editor.",
         "icon": "\uf24d",
         "detent": 60,
         "default": False,
@@ -1759,6 +1793,7 @@ TOOL_LIBRARY = [
     {
         # Extend a selection a word at a time, the partner of Word Nav (which only moves).
         "name": "Select",
+        "description": "Extend the text selection one word at a time.",
         "icon": "\uf246",
         "detent": 60,
         "default": False,
@@ -1768,6 +1803,7 @@ TOOL_LIBRARY = [
     },
     {
         "name": "Pages",
+        "description": "Page Down and Page Up.",
         "icon": "\uf15c",
         "detent": 60,
         "default": False,
@@ -1778,6 +1814,9 @@ TOOL_LIBRARY = [
     {
         # Move focus to the neighbouring tile. Click flips left/right and up/down, like Arrow Keys.
         "name": "Tile Focus",
+        "description": (
+            "Move focus between tiled windows. Click flips between left/right and up/down."
+        ),
         "icon": "\uf2d0",
         "detent": 60,
         "default": False,
@@ -1797,6 +1836,7 @@ TOOL_LIBRARY = [
     {
         # Carry the focused window to the next or previous workspace, and follow it.
         "name": "Move Window",
+        "description": "Carry the focused window to the next or previous workspace and follow it.",
         "icon": "\uf064",
         "detent": 60,
         "default": False,
@@ -2296,7 +2336,7 @@ def build_tools(specs):
 
 
 def write_tool_manifest():
-    """Publish {name, icon} for every library tool alongside the config.
+    """Publish {name, icon, description, default} for every library tool alongside the config.
 
     This is what the Quickshell tool-picker panel reads to know what it can
     offer -- so the picker never hardcodes a tool list of its own, and a new
@@ -2306,7 +2346,15 @@ def write_tool_manifest():
     path = os.path.join(os.path.dirname(CONFIG_PATH), "tools.json")
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        manifest = [{"name": t["name"], "icon": t.get("icon", "")} for t in TOOL_LIBRARY]
+        manifest = [
+            {
+                "name": t["name"],
+                "icon": t.get("icon", ""),
+                "description": t.get("description", ""),
+                "default": t.get("default", True),
+            }
+            for t in TOOL_LIBRARY
+        ]
         with open(path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2)
     except OSError as exc:

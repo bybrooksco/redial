@@ -142,6 +142,8 @@ Item {
   function soft(alpha) { return contrast.soft(lineColor, backgroundColor, alpha) }
   readonly property color accentText: contrast.asText(accentColor, lineColor, backgroundColor)
   readonly property color onAccent: contrast.onFill(accentColor, backgroundColor, lineColor)
+  // An opaque surface a little lighter (or darker) than the card, for tooltips.
+  function tint(t) { return contrast.mix(lineColor, backgroundColor, t) }
 
   readonly property string layout: {
     var v = String(get("layout"))

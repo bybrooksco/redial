@@ -18,7 +18,7 @@ jobs:
       - name: Python format
         run: ruff format --check bin/surface-dial-hypr bin/surface-dial-rise-widget scripts/add-menu-entry.py tests
       - name: Shell lint
-        run: shellcheck install.sh bin/surface-dial-setup bin/surface-dial-restart bin/surface-dial-bar scripts/pair-dial.sh
+        run: shellcheck install.sh uninstall.sh bin/surface-dial-setup bin/surface-dial-restart bin/surface-dial-bar scripts/pair-dial.sh
       - name: Tests (with a coverage floor)
         run: |
           coverage run --include=bin/surface-dial-hypr tests/test_dial.py

@@ -202,4 +202,15 @@ TestCase {
     var t = c.onFill(col("#ffffff"), col("#101010"), col("#eeeeee"))
     fuzzyCompare(t.r, col("#101010").r, 0.001)
   }
+
+  function test_tooltip_surface_keeps_the_foreground_legible_on_every_theme() {
+    for (var i = 0; i < palettes.length; i++) {
+      var p = palettes[i]
+      var surface = c.mix(col(p.fg), col(p.bg), 0.1)
+      var r = c.ratio(col(p.fg), surface)
+      verify(r >= 4.5 - 0.001, p.n + " tooltip text = " + r)
+      var t = c.ratio(c.asText(col(p.ac), col(p.fg), col(p.bg)), surface)
+      verify(t >= 3.0, p.n + " tooltip title = " + t)
+    }
+  }
 }

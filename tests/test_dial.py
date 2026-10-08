@@ -2491,6 +2491,270 @@ class PointerTools(Base):
         self.assertEqual(len(m.custom_launcher_actions({"launchers": many})), m.MAX_LAUNCHERS)
 
 
+class MenuEntryRemoval(unittest.TestCase):
+    """add-menu-entry.py --remove is the exact inverse of adding."""
+
+    @classmethod
+    def setUpClass(cls):
+        loader = importlib.machinery.SourceFileLoader(
+            "addmenu2", os.path.join(HERE, "..", "scripts", "add-menu-entry.py")
+        )
+        cls.am = importlib.util.module_from_spec(
+            importlib.util.spec_from_loader("addmenu2", loader)
+        )
+        loader.exec_module(cls.am)
+
+    def test_add_then_remove_gives_back_the_original_text(self):
+        for text in (
+            "{\n  // Extend the menu.\n}\n",
+            "{}",
+            '{\n  "a": {"label":"A"},\n}\n',
+            '{\n  "a": {"label":"A"} // keep me\n}\n',
+        ):
+            added = self.am.add_row(text)
+            back = self.am.remove_row(added)
+            self.assertEqual(self.am.parse_jsonc(back).keys() - {"a"}, set(), text)
+            self.assertNotIn(self.am.ID, self.am.parse_jsonc(back))
+            self.assertIn("keep me" if "keep me" in text else "", back)
+
+    def test_remove_refuses_an_edited_row(self):
+        added = self.am.add_row("{\n}\n").replace("Surface Dial", "Mine")
+        self.assertIsNone(self.am.remove_row(added))
+
+    def test_remove_on_a_file_without_the_row_is_a_noop(self):
+        self.assertIsNone(self.am.remove_row("{\n}\n"))
+
+    def test_remove_through_the_command_line_entry_point(self):
+        path = os.path.join(tempfile.mkdtemp(), "m.jsonc")
+        with open(path, "w") as f:
+            f.write('{\n  "a": {"label":"A"}\n}\n')
+        self.assertEqual(self.am.main(["x", path]), 0)
+        self.assertEqual(self.am.main(["x", "--remove", path]), 0)
+        with open(path) as f:
+            doc = self.am.parse_jsonc(f.read())
+        self.assertEqual(list(doc), ["a"])
+        self.assertEqual(self.am.main(["x", "--remove", path]), 0)  # again: nothing to do
+
+
+class UninstallScript(unittest.TestCase):
+    """uninstall.sh undoes install.sh in a scratch HOME, keeping settings and your own lines."""
+
+    ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    AUTOSTART = 'o.launch_on_start("waybar")\n-- my own line\n'
+    MENU = "{\n  // Extend the menu.\n}\n"
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp()
+        self.stubs = tempfile.mkdtemp()
+        self.log = os.path.join(self.stubs, "calls.log")
+        for name, body in (
+            ("sudo", "exit 0"),
+            ("pkill", ""),
+            ("pgrep", "exit 1"),
+            ("sleep", ""),
+            ("hyprctl", ""),
+            ("omarchy-restart-shell", ""),
+            ("omarchy-pkg-add", ""),
+            ("omarchy-shell", 'case "$*" in *ping*) echo ok;; esac'),
+        ):
+            path = os.path.join(self.stubs, name)
+            with open(path, "w") as f:
+                f.write(f'#!/bin/sh\necho "{name} $*" >> "{self.log}"\n{body}\n')
+            os.chmod(path, 0o755)
+        self.put(".config/hypr/autostart.lua", self.AUTOSTART)
+        self.put(".config/omarchy/extensions/omarchy-menu.jsonc", self.MENU)
+        self.env = {
+            "HOME": self.home,
+            "PATH": self.stubs + ":/usr/bin:/bin",
+            "USER": "tester",
+        }
+
+    def put(self, rel, text):
+        path = os.path.join(self.home, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write(text)
+
+    def read(self, rel):
+        with open(os.path.join(self.home, rel)) as f:
+            return f.read()
+
+    def exists(self, rel):
+        return os.path.exists(os.path.join(self.home, rel))
+
+    def sh(self, script, *args):
+        return subprocess.run(
+            ["bash", os.path.join(self.ROOT, script), *args],
+            env=self.env,
+            capture_output=True,
+            text=True,
+            input="",
+        )
+
+    def install(self):
+        r = self.sh("install.sh", "-y")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def calls(self):
+        return open(self.log).read().splitlines() if os.path.exists(self.log) else []
+
+    def test_install_then_uninstall_leaves_your_files_as_they_were(self):
+        self.install()
+        self.assertTrue(self.exists(".local/bin/surface-dial-hypr"))
+        self.assertTrue(self.exists(".config/omarchy/plugins/dial.radial/DialMenu.qml"))
+        self.assertIn("surface-dial-hypr", self.read(".config/hypr/autostart.lua"))
+        r = self.sh("uninstall.sh", "-y")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        for f in (
+            "surface-dial-hypr",
+            "surface-dial-setup",
+            "surface-dial-restart",
+            "surface-dial-bar",
+            "surface-dial-rise-widget",
+        ):
+            self.assertFalse(self.exists(f".local/bin/{f}"), f)
+        self.assertFalse(self.exists(".config/omarchy/plugins/dial.radial"))
+        self.assertEqual(self.read(".config/hypr/autostart.lua"), self.AUTOSTART)
+        self.assertEqual(self.read(".config/omarchy/extensions/omarchy-menu.jsonc"), self.MENU)
+
+    def test_settings_are_kept_unless_purged(self):
+        self.install()
+        self.put(".config/dial-radial/config.json", '{"sensitivity": 1.5}')
+        self.put(".local/state/surface-dial/daemon.log", "log\n")
+        self.assertEqual(self.sh("uninstall.sh", "-y").returncode, 0)
+        self.assertEqual(self.read(".config/dial-radial/config.json"), '{"sensitivity": 1.5}')
+        self.assertEqual(self.sh("uninstall.sh", "-y", "--purge").returncode, 0)
+        self.assertFalse(self.exists(".config/dial-radial"))
+        self.assertFalse(self.exists(".local/state/surface-dial"))
+
+    def test_nothing_is_deleted_outright_it_all_goes_to_a_backup(self):
+        self.install()
+        self.put(".config/dial-radial/config.json", "{}")
+        self.assertEqual(self.sh("uninstall.sh", "-y", "--purge").returncode, 0)
+        base = os.path.join(self.home, ".local/share/dial-kit-backups")
+        found = []
+        for root, _, files in os.walk(base):
+            if "uninstall-" in root:
+                found += files
+        for name in ("surface-dial-hypr", "DialMenu.qml", "config.json", "autostart.lua"):
+            self.assertIn(name, found, name)
+
+    def test_a_second_run_is_harmless(self):
+        self.install()
+        self.assertEqual(self.sh("uninstall.sh", "-y").returncode, 0)
+        r = self.sh("uninstall.sh", "-y")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.read(".config/hypr/autostart.lua"), self.AUTOSTART)
+
+    def test_running_it_on_a_machine_without_the_dial_changes_nothing(self):
+        r = self.sh("uninstall.sh", "-y")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.read(".config/hypr/autostart.lua"), self.AUTOSTART)
+        self.assertEqual(self.read(".config/omarchy/extensions/omarchy-menu.jsonc"), self.MENU)
+
+    def test_dash_y_never_uses_sudo_and_says_how_to_remove_the_udev_rule(self):
+        self.install()
+        udev = "/etc/udev/rules.d/70-surface-dial.rules"
+        r = self.sh("uninstall.sh", "-y")
+        self.assertFalse(any(c.startswith("sudo") for c in self.calls() if "rm -f" in c), r.stdout)
+        if os.path.exists(udev):  # only on a machine that really has the rule
+            self.assertIn("sudo rm " + udev, r.stdout)
+
+    def run_with_input(self, text, *args, udev=None):
+        env = dict(self.env)
+        if udev:
+            env["DIAL_UDEV_RULE"] = udev
+        return subprocess.run(
+            ["bash", os.path.join(self.ROOT, "uninstall.sh"), *args],
+            env=env,
+            capture_output=True,
+            text=True,
+            input=text,
+        )
+
+    def test_answering_no_to_the_first_question_changes_nothing(self):
+        self.install()
+        r = self.run_with_input("n\n")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("Nothing changed", r.stdout)
+        self.assertTrue(self.exists(".local/bin/surface-dial-hypr"))
+        self.assertTrue(self.exists(".config/omarchy/plugins/dial.radial"))
+
+    def test_the_udev_rule_is_removed_with_sudo_only_when_you_say_yes(self):
+        self.install()
+        rule = os.path.join(self.home, "70-surface-dial.rules")
+        open(rule, "w").write("x\n")
+        open(self.log, "w").close()
+        r = self.run_with_input("y\nn\n", udev=rule)  # go ahead; but keep the udev rule
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse(any("rm -f" in c for c in self.calls()), self.calls())
+        self.install()
+        open(self.log, "w").close()
+        r = self.run_with_input("y\ny\n", udev=rule)  # go ahead; remove the udev rule too
+        self.assertTrue(any(c.startswith("sudo rm -f " + rule) for c in self.calls()), self.calls())
+
+    def test_the_daemon_is_stopped_first(self):
+        self.install()
+        open(self.log, "w").close()
+        # pretend it is running for the first check, then gone
+        flag = os.path.join(self.stubs, "pgrep-count")
+        with open(os.path.join(self.stubs, "pgrep"), "w") as f:
+            f.write(
+                f'#!/bin/sh\nn=$(cat "{flag}" 2>/dev/null || echo 0)\necho $((n+1)) > "{flag}"\n'
+                '[ "$n" -eq 0 ] && exit 0\nexit 1\n'
+            )
+        os.chmod(os.path.join(self.stubs, "pgrep"), 0o755)
+        r = self.sh("uninstall.sh", "-y")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(any(c.startswith("pkill -TERM") for c in self.calls()), self.calls())
+
+    def test_a_hand_edited_menu_entry_is_left_alone_with_a_clear_message(self):
+        self.install()
+        path = ".config/omarchy/extensions/omarchy-menu.jsonc"
+        text = self.read(path).replace("Tools, size, clicks and appearance", "my own words")
+        self.put(path, text)
+        r = self.sh("uninstall.sh", "-y")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.read(path), text)
+        self.assertIn("setup.surface-dial", r.stdout)
+
+    def test_unknown_options_are_refused(self):
+        r = self.sh("uninstall.sh", "--nuke")
+        self.assertEqual(r.returncode, 2)
+
+
+class ToolDescriptions(Base):
+    """Every tool explains itself: the settings window shows it when you hover or focus the tool."""
+
+    def test_every_library_tool_has_a_plain_one_to_three_sentence_description(self):
+        for t in m.TOOL_LIBRARY:
+            d = t.get("description", "")
+            self.assertTrue(20 <= len(d) <= 220, (t["name"], len(d)))
+            self.assertTrue(d.endswith("."), t["name"])
+            self.assertLessEqual(d.count(". ") + 1, 3, t["name"])
+
+    def test_descriptions_are_unique(self):
+        descs = [t["description"] for t in m.TOOL_LIBRARY]
+        self.assertEqual(len(descs), len(set(descs)))
+
+    def test_descriptions_name_no_vendor(self):
+        text = " ".join(t["description"] for t in m.TOOL_LIBRARY).lower()
+        for brand in ("claude", "openai", "chatgpt", "gemini"):
+            self.assertNotIn(brand, text)
+
+    def test_the_manifest_publishes_them_with_the_default_flag(self):
+        m.write_tool_manifest()
+        path = os.path.join(os.path.dirname(m.CONFIG_PATH), "tools.json")
+        with open(path) as f:
+            manifest = json.load(f)
+        self.assertEqual([e["name"] for e in manifest], [t["name"] for t in m.TOOL_LIBRARY])
+        for entry, tool in zip(manifest, m.TOOL_LIBRARY, strict=True):
+            self.assertEqual(entry["description"], tool["description"])
+            self.assertEqual(entry["default"], tool.get("default", True))
+        self.assertFalse(next(e for e in manifest if e["name"] == "Pointer")["default"])
+        self.assertTrue(next(e for e in manifest if e["name"] == "Volume")["default"])
+
+
 class NewControls(Base):
     """The tools and click actions added for driving a whole session from the dial."""
 

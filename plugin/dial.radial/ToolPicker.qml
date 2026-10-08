@@ -107,6 +107,7 @@ Item {
     { title: "Coming back", body: "A tool you picked drops back to Volume after a few seconds without turning, so nothing stays armed by accident. Change how long on the Feel page." },
     { title: "Too jumpy or too slow", body: "Sensitivity changes how far you turn for each step. Ignore small turns filters out a bump or a tremor. Hold and double-click speed can both be relaxed." },
     { title: "Keyboard", body: "Tab moves between controls, Enter or Space presses one, Shift+Enter goes back through a list of choices, Escape closes this window." },
+    { title: "About", body: "Surface Dial " + (status.version || "(unknown version)") + ", beta. Please mention this number when you report a problem." },
     { title: "Something wrong?", body: "The line under the title says whether the dial is connected. If it says the service is not running, press Restart dial service. If that does not help, run surface-dial-setup in a terminal; it checks everything and says what to fix." }
   ]
 
@@ -345,6 +346,46 @@ Item {
     configDoc = out
   }
 
+  // Hover / focus descriptions for tools. One shared tooltip, shown after a short pause over a
+  // tool (or at once when it gets keyboard focus), hidden when the pointer or focus leaves.
+  property Item tipItem: null
+  property string tipTitle: ""
+  property string tipBody: ""
+  property Item tipPending: null
+  function toolDescription(name) {
+    var m = manifestByName(name)
+    return (m && m.description) ? String(m.description) : ""
+  }
+  function tipEnter(item, name, immediate) {
+    var body = toolDescription(name)
+    if (!body) return
+    tipPending = item
+    tipTitle = name
+    tipBody = body
+    if (immediate) { tipTimer.stop(); tipItem = item }
+    else tipTimer.restart()
+  }
+  function tipLeave(item) {
+    if (tipPending !== item && tipItem !== item) return
+    tipTimer.stop()
+    tipPending = null
+    tipItem = null
+  }
+  function tipHide() { tipTimer.stop(); tipPending = null; tipItem = null }
+  Timer {
+    id: tipTimer
+    interval: 350
+    onTriggered: root.tipItem = root.tipPending
+  }
+  // For `omarchy-shell dialtools tip <name>`: show a ring tool's tooltip right now.
+  function tipForName(name) {
+    var i = selected.indexOf(name)
+    var it = i >= 0 ? ringRepeater.itemAt(i) : null
+    if (!it) return false
+    tipEnter(it, name, true)
+    return true
+  }
+
   function manifestByName(name) {
     for (var i = 0; i < manifest.length; i++)
       if (manifest[i].name === name) return manifest[i]
@@ -571,6 +612,7 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         clip: true
         interactive: contentHeight > height
+        onContentYChanged: root.tipHide()
 
         Connections {
           target: root.Window.window
@@ -1411,6 +1453,7 @@ Item {
           }
 
           Repeater {
+            id: ringRepeater
             model: root.selected
             delegate: Rectangle {
               id: chip
@@ -1423,9 +1466,10 @@ Item {
               activeFocusOnTab: true
               Accessible.role: Accessible.ListItem
               Accessible.name: modelData + ", position " + (index + 1) + " of " + root.selected.length
-              Accessible.description: "Left and Right move it round the ring. Delete removes it."
               Accessible.focusable: true
               Component.onCompleted: if (root.ringFocus === modelData) chip.forceActiveFocus()
+              onActiveFocusChanged: if (activeFocus) root.tipEnter(chip, modelData, true); else root.tipLeave(chip)
+              Accessible.description: root.toolDescription(modelData) + " Left and Right move it round the ring. Delete removes it."
               Keys.onPressed: event => {
                 var step = 0
                 if (event.key === Qt.Key_Left || event.key === Qt.Key_Up) step = -1
@@ -1503,6 +1547,12 @@ Item {
               MouseArea {
                 id: dragArea
                 anchors.fill: parent
+                hoverEnabled: true
+                onContainsMouseChanged: {
+                  if (containsMouse && !pressed) root.tipEnter(chip, chip.modelData, false)
+                  else root.tipLeave(chip)
+                }
+                onPressedChanged: if (pressed) root.tipLeave(chip)
                 property real startMouseX: 0
                 property real startMouseY: 0
                 onPressed: (mouse) => {
@@ -1542,6 +1592,9 @@ Item {
               id: addChip
               required property var modelData
               label: "Add " + modelData.name + " to the ring"
+              Accessible.description: root.toolDescription(modelData.name)
+              onHoveredChanged: if (hovered) root.tipEnter(addChip, modelData.name, false); else root.tipLeave(addChip)
+              onActiveFocusChanged: if (activeFocus) root.tipEnter(addChip, modelData.name, true); else root.tipLeave(addChip)
               ringColor: root.cfg.accentColor
               ringWidth: Math.max(2, Style.space(2))
               onActivated: { root.toggleTool(modelData.name); root.forceActiveFocus() }
@@ -1615,6 +1668,49 @@ Item {
           }
         }
       }
+      }
+
+      // The shared tooltip. Lives in the card, above the scrolling content, so it is never clipped
+      // by it; placed above the tool if there is room, below it otherwise.
+      Rectangle {
+        id: tip
+        visible: root.tipItem !== null && root.tipBody !== ""
+        z: 100
+        readonly property point at: root.tipItem ? root.tipItem.mapToItem(card, 0, 0) : Qt.point(0, 0)
+        width: Math.min(Style.space(260), card.width - Style.space(24))
+        height: tipCol.implicitHeight + Style.space(16)
+        x: Math.max(Style.space(12), Math.min(card.width - width - Style.space(12),
+                                                 at.x + (root.tipItem ? root.tipItem.width / 2 : 0) - width / 2))
+        y: at.y - height - Style.space(8) >= Style.space(8)
+           ? at.y - height - Style.space(8)
+           : at.y + (root.tipItem ? root.tipItem.height : 0) + Style.space(8)
+        radius: Style.space(8)
+        color: root.cfg.tint(0.1)
+        border.width: Math.max(1, Style.space(1.5))
+        border.color: root.cfg.accentColor
+
+        Column {
+          id: tipCol
+          anchors.fill: parent
+          anchors.margins: Style.space(8)
+          spacing: Style.space(3)
+          Text {
+            width: parent.width
+            text: root.tipTitle
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            color: root.cfg.accentText
+          }
+          Text {
+            width: parent.width
+            text: root.tipBody
+            wrapMode: Text.WordWrap
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            color: root.cfg.lineColor
+          }
+        }
       }
     }
 }

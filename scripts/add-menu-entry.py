@@ -5,7 +5,8 @@ Omarchy reads user menu rows from ~/.config/omarchy/extensions/omarchy-menu.json
 file that may contain comments. This inserts one row without disturbing anything else in
 it, checks that the result still parses, and leaves the file untouched if it doesn't.
 
-    add-menu-entry.py [FILE]        # default: the Omarchy user extension
+    add-menu-entry.py [FILE]            # add the row (default file: the Omarchy user extension)
+    add-menu-entry.py --remove [FILE]   # take it out again, only if it is still as written
 """
 
 import json
@@ -83,7 +84,45 @@ def add_row(text):
     return head + ROW + text[close:]
 
 
+def remove_row(text):
+    """Return `text` without the row add_row() inserted; None if it is not there as inserted.
+
+    Only the exact text this script wrote is removed. A row the user has since edited is left
+    alone (the caller says so), and any comma that was added after the previous entry stays,
+    which the menu file's format allows.
+    """
+    return text.replace(ROW, "", 1) if ROW in text else None
+
+
+def remove(path):
+    """Take the Surface Dial row out of the menu file. Returns a process exit code."""
+    if not os.path.exists(path):
+        print("no menu file; nothing to remove")
+        return 0
+    original = open(path, encoding="utf-8").read()
+    if f'"{ID}"' not in original:
+        print("menu entry not present")
+        return 0
+    new = remove_row(original)
+    try:
+        if new is None:
+            raise ValueError("the entry was edited after install, so it was not touched")
+        if ID in parse_jsonc(new):
+            raise ValueError("entry still present after removal")
+    except Exception as exc:
+        print(f"add-menu-entry: left {path} untouched ({exc})", file=sys.stderr)
+        return 1
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(new)
+    os.replace(tmp, path)
+    print(f"removed 'Surface Dial' from {path}")
+    return 0
+
+
 def main(argv):
+    if len(argv) > 1 and argv[1] == "--remove":
+        return remove(argv[2] if len(argv) > 2 else DEFAULT)
     path = argv[1] if len(argv) > 1 else DEFAULT
     os.makedirs(os.path.dirname(path), exist_ok=True)
     original = open(path, encoding="utf-8").read() if os.path.exists(path) else "{\n}\n"
