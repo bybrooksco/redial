@@ -36,6 +36,7 @@ This is an independent implementation and shares no code with it.
   python3 tests/test_dial.py` tests a live install.
 - `manifest.json` — makes this repo a plugin `omarchy plugin add` accepts.
 - `scripts/add-menu-entry.py` — adds Setup > Surface Dial to the Omarchy menu.
+- `uninstall.sh` — removes what `install.sh` added (backs it up first; keeps your settings).
 - `install.sh` — installs all of the above. Idempotent, shows its plan and asks once
   (plus separately for the shell restart, sudo steps and the Rise widget), and backs up
   anything it would overwrite.
@@ -69,11 +70,18 @@ them with a key instead, bind `omarchy-shell dialtools toggle` in
 Once it's running, see `plugin/dial.radial/README.md` for configuration —
 tool selection, click gestures (dial and pen), position/size, colors.
 
+### Uninstall
+
+`bash uninstall.sh` reverses the install: it stops the daemon, removes the programs, the plugin,
+the start-at-login lines and the menu entry, moving each to a backup folder first. It keeps your
+settings unless you pass `--purge`, and asks before its one `sudo` step (the udev rule).
+
 ## Status
 
-Private, in active use. Runs daily on a Surface Studio (Omarchy); a second
-machine (a Dell laptop, also Omarchy) has run it as a proof of concept for
-multi-device use. Config (`~/.config/dial-radial/config.json`) is
+**Beta (0.9.x), heading for 1.0.** Read `BETA.md` first: it says plainly what has and has not been
+tested, what the installer changes, and how to undo it. The plan to 1.0 is in `docs/ROADMAP.md`.
+It runs daily on a Surface Studio (Omarchy); a second machine (a Dell laptop, also Omarchy) has
+run an earlier version as a proof of concept for multi-device use. Config (`~/.config/dial-radial/config.json`) is
 deliberately per-machine — `active_tools`, `pen`, `clicks`, `size` — and
 never something this repo or `install.sh` overwrites once it exists.
 
