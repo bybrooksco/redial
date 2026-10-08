@@ -7,7 +7,7 @@ follows your Omarchy theme. The Surface Pen's tail and barrel buttons and eraser
 share the same daemon.
 
 It is a Linux userspace daemon plus an Omarchy/Quickshell plugin, built for
-Hyprland + Omarchy. The point is that good hardware shouldn't become e-waste
+Hyprland + [Omarchy](https://omarchy.org) (a separate project; install it first). The point is that good hardware shouldn't become e-waste
 because its maker moved on.
 
 Microsoft discontinued the Surface Dial.

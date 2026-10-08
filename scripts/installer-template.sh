@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Surface Dial for Omarchy __VERSION__ (beta): self-extracting installer.
 #
-# One file. It contains the whole release; run it with:   bash <this file>
+# One file. It contains the whole release (not Omarchy itself, which you need first:
+# https://omarchy.org); run it with:   bash <this file>
 # It does nothing until you have read a short notice and said yes, then it unpacks the release to
 #   ~/.local/share/surface-dial-beta/surface-dial-__VERSION__/
 # and runs that folder's install.sh, which shows its own plan and asks before every change.
@@ -45,6 +46,8 @@ echo
 if ! command -v hyprctl >/dev/null || ! command -v omarchy-shell >/dev/null; then
     echo "  NOTE: this does not look like an Omarchy (Hyprland) session: hyprctl or omarchy-shell is"
     echo "        missing. The software is for Omarchy only and will not work elsewhere."
+    echo "        Omarchy is a separate project and is not included here; you can get it at"
+    echo "        https://omarchy.org"
     echo
 fi
 

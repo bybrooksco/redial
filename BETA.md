@@ -13,7 +13,8 @@ licensed.
 
 ## What you need
 
-- Linux with **Omarchy** (Hyprland and its Quickshell shell). Arch-based; the installer uses `pacman`
+- Linux with **Omarchy** (Hyprland and its Quickshell shell). Omarchy is a separate project and is *not*
+  included in this download; get it from <https://omarchy.org> first. Arch-based; the installer uses `pacman`
   through Omarchy's own helper.
 - A **Surface Dial**, paired over Bluetooth. The installer does not pair it for you; `surface-dial-setup` tells you if none is paired and explains how, and `scripts/pair-dial.sh` does the pairing.
 - About ten minutes, and willingness to restart your shell once.

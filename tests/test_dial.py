@@ -2948,6 +2948,7 @@ class SelfInstaller(unittest.TestCase):
                 os.symlink(real, os.path.join(plain, tool))
         r = self.run_installer("--extract-only", path=plain)
         self.assertIn("does not look like an Omarchy", r.stdout)
+        self.assertIn("https://omarchy.org", r.stdout)  # where to get it: it is not bundled
 
     def test_unknown_options_are_refused(self):
         self.assertEqual(self.run_installer("--nuke").returncode, 2)
