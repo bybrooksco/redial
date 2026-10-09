@@ -1081,6 +1081,35 @@ class FeelSettings(Base):
         )  # double fired first; the third press is a new click
         self.assertIn("KEY:Return", run(600))  # a real triple click (default action: Enter)
 
+    # --- the on-screen display
+    def test_the_on_screen_display_is_on_by_default_and_can_be_turned_off(self):
+        self.write()
+        self.assertTrue(m.osd_enabled())
+        self.write(osd=False)
+        self.assertFalse(m.osd_enabled())
+        self.write(osd="junk")
+        self.assertTrue(m.osd_enabled())  # not a true/false means the default
+
+    def test_with_the_display_off_nothing_is_shown_or_queued(self):
+        self.write(osd=False)
+        jobs, cmds = [], []
+        m.ACTIONS = types.SimpleNamespace(submit=lambda fn, *a: jobs.append(fn))
+        m.shutil = types.SimpleNamespace(which=lambda name: f"/x/{name}")
+        m.run = cmds.append
+        m.show_level("volume")
+        PRISTINE["osd"](icon="volume", progress=40)
+        m.Dial().on_rotate(1, 1.0)  # a first turn would normally be acknowledged
+        self.assertEqual((jobs, cmds), ([], []))
+
+    def test_turning_the_display_back_on_applies_without_a_restart(self):
+        self.write(osd=False)
+        m.ACTIONS = types.SimpleNamespace(submit=lambda fn, *a: None)
+        m.show_level("volume")
+        self.assertEqual(m._level_pending, set())
+        self.write(osd=True)
+        m.show_level("volume")
+        self.assertEqual(m._level_pending, {"volume"})
+
     # --- the return buzz
     def test_the_return_buzz_can_be_turned_off(self):
         buzzed = []

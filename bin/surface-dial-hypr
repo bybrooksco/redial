@@ -992,6 +992,8 @@ def osd(icon="", message="", progress=None, duration=900):
 
     Falls back to a notification where `omarchy-osd` is missing, so the dial is never silent.
     """
+    if not osd_enabled():
+        return
     exe = shutil.which("omarchy-osd")
     if not exe:
         if message:
@@ -1016,7 +1018,7 @@ def show_level(kind):
     The job reads the level when it runs, not when it was queued, so one waiting job always
     shows the latest value and a fast spin cannot back the action queue up with overlays.
     """
-    if kind in _level_pending:
+    if not osd_enabled() or kind in _level_pending:
         return
     _level_pending.add(kind)
     ACTIONS.submit(_show_level, kind)
@@ -2211,6 +2213,11 @@ def return_buzz():
     return live_bool("return_buzz", True)
 
 
+def osd_enabled():
+    """Whether the dial shows levels and tool names on screen as you turn (config "osd")."""
+    return live_bool("osd", True)
+
+
 def deadzone():
     """Counts the dial must turn after a pause before turning registers (config "deadzone")."""
     return live_num("deadzone", 0, 0, 100)
@@ -2720,7 +2727,7 @@ class Dial:
         """
         quiet = now - self.last_ack >= ACK_QUIET_S
         self.last_ack = now
-        if quiet and not self.menu:
+        if quiet and not self.menu and osd_enabled():
             ACTIONS.submit(self.show_ack)
 
     def show_ack(self):

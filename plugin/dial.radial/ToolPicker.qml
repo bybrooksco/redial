@@ -1035,6 +1035,15 @@ Item {
         ChoiceRow {
           visible: root.page === "feel"
           cfg: root.cfg
+          title: "On-screen display"
+          help: "Shows the volume, brightness or tool name on screen as you turn. Handy when you are learning the dial, and for movies; turn it off for a cleaner screen."
+          options: [ { key: true, label: "On" }, { key: false, label: "Off" } ]
+          current: root.cfgValue("osd", true)
+          onPicked: key => root.setConfigKey("osd", key)
+        }
+        ChoiceRow {
+          visible: root.page === "feel"
+          cfg: root.cfg
           title: "Buzz when returning to Volume"
           help: "A short buzz when a tool drops back to Volume."
           options: [ { key: true, label: "On" }, { key: false, label: "Off" } ]

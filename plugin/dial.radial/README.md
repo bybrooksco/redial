@@ -281,6 +281,7 @@ and every number is clamped to a safe range (text or true/false means the defaul
 |---|---|---|---|
 | `sensitivity` | How much you turn for each step. Higher = less turning. Scales tool steps, the tool menu and Scroll/Zoom gain. | `1` | 0.5 to 2 |
 | `auto_return_s` | Seconds a tool stays armed after you stop turning, before it drops back to Volume. | `6` | 3 to 300 |
+| `osd` | Show the volume or brightness level, or the tool name, on screen as you turn (Omarchy's own on-screen display). Handy while learning the dial and for movies; turn it off for a cleaner screen. | `true` | true / false |
 | `return_buzz` | Whether the dial buzzes when a tool drops back to Volume. | `true` | true / false |
 | `double_click_ms` | How long a second (or third) press can take and still count as a double (or triple) click. | `250` | 150 to 600 |
 | `hold_ms` | How long to hold the button to open the tool menu. | `400` | 200 to 1500 |
