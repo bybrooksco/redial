@@ -1923,12 +1923,13 @@ TOOL_LIBRARY = [
     },
     {
         # Carry the focused window to the next or previous workspace, and follow it. Click flips
-        # to rearranging it among the tiles of the current workspace (the same swap Omarchy binds
-        # to Super+Shift+arrows).
+        # to moving it around the current workspace: each detent swaps it with the next or
+        # previous window in the workspace's order, so it walks through every position however
+        # many windows there are (the way the Windows tool walks focus through them).
         "name": "Move Window",
         "description": (
             "Carry the focused window to the next or previous workspace and follow it. "
-            "Click flips to moving it among the tiles of this workspace."
+            "Click flips to moving it through the positions of this workspace."
         ),
         "icon": "\uf064",
         "detent": 60,
@@ -1940,9 +1941,9 @@ TOOL_LIBRARY = [
             "base_title": "\u21c4  Move Window",
             "base_subtitle": "to another workspace",
             "title": "\u25a6  Move Window",
-            "subtitle": "within this workspace",
-            "cw": {"do": "hypr", "lua": 'hl.dsp.window.swap({ direction = "r" })'},
-            "ccw": {"do": "hypr", "lua": 'hl.dsp.window.swap({ direction = "l" })'},
+            "subtitle": "around this workspace",
+            "cw": {"do": "hypr", "lua": "hl.dsp.window.swap({ next = true })"},
+            "ccw": {"do": "hypr", "lua": "hl.dsp.window.swap({ prev = true })"},
         },
         "click": {"do": "none", "label": "toggle workspaces/tiles"},
     },
