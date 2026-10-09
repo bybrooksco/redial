@@ -1922,15 +1922,29 @@ TOOL_LIBRARY = [
         "click": {"do": "none", "label": "toggle left-right/up-down"},
     },
     {
-        # Carry the focused window to the next or previous workspace, and follow it.
+        # Carry the focused window to the next or previous workspace, and follow it. Click flips
+        # to rearranging it among the tiles of the current workspace (the same swap Omarchy binds
+        # to Super+Shift+arrows).
         "name": "Move Window",
-        "description": "Carry the focused window to the next or previous workspace and follow it.",
+        "description": (
+            "Carry the focused window to the next or previous workspace and follow it. "
+            "Click flips to moving it among the tiles of this workspace."
+        ),
         "icon": "\uf064",
         "detent": 60,
         "default": False,
+        "axis_toggle": True,
         "cw": {"do": "hypr", "lua": 'hl.dsp.window.move({ workspace = "+1" })'},
         "ccw": {"do": "hypr", "lua": 'hl.dsp.window.move({ workspace = "-1" })'},
-        "click": None,
+        "alt": {
+            "base_title": "\u21c4  Move Window",
+            "base_subtitle": "to another workspace",
+            "title": "\u25a6  Move Window",
+            "subtitle": "within this workspace",
+            "cw": {"do": "hypr", "lua": 'hl.dsp.window.swap({ direction = "r" })'},
+            "ccw": {"do": "hypr", "lua": 'hl.dsp.window.swap({ direction = "l" })'},
+        },
+        "click": {"do": "none", "label": "toggle workspaces/tiles"},
     },
 ]
 

@@ -1742,6 +1742,25 @@ class AxisToggle(Base):
         self.assertTrue(d.arrow_horizontal)
         self.assertEqual((direction(self.turn(d, 60)), direction(self.turn(d, -60))), ("d", "u"))
 
+    def test_move_window_goes_across_workspaces_then_among_the_tiles_of_this_one(self):
+        d = self.armed("Move Window")
+        self.assertEqual(self.turn(d, 60), ['HYPR:hl.dsp.window.move({ workspace = "+1" })'])
+        self.assertEqual(self.turn(d, -60), ['HYPR:hl.dsp.window.move({ workspace = "-1" })'])
+        self.flip(d)
+        self.assertTrue(d.arrow_horizontal)
+        self.assertEqual(self.turn(d, 60), ['HYPR:hl.dsp.window.swap({ direction = "r" })'])
+        self.assertEqual(self.turn(d, -60), ['HYPR:hl.dsp.window.swap({ direction = "l" })'])
+        self.flip(d)  # and back
+        self.assertEqual(self.turn(d, 60), ['HYPR:hl.dsp.window.move({ workspace = "+1" })'])
+
+    def test_move_window_says_which_mode_a_click_chose(self):
+        seen = []
+        m.notify = lambda title, body="": seen.append((title, body))
+        d = self.armed("Move Window")
+        self.flip(d)
+        self.flip(d)
+        self.assertEqual([b for _, b in seen], ["within this workspace", "to another workspace"])
+
     def test_a_fresh_arm_always_starts_vertical(self):
         d = self.armed("Tile Focus")
         self.flip(d)

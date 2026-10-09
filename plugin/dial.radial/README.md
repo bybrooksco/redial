@@ -176,15 +176,16 @@ The tool set is data, not code, and lives in the daemon's `TOOL_LIBRARY`
 | *Select* | extend the selection a word at a time (Ctrl+Shift+Left/Right) | — |
 | *Pages* | Page Down / Page Up | — |
 | *Tile Focus* | move focus to the left/right tile, or up/down once toggled | flip axis |
-| *Move Window* | carry the focused window to the next/previous workspace | — |
+| *Move Window* | carry the focused window to the next/previous workspace, or among the tiles of this workspace once toggled | flip workspaces/tiles |
 | *H Scroll* | scroll sideways (clockwise is right); speed scales it | — |
 | *Pointer* | move the mouse pointer; slow turns are fine steps, fast spins cross the screen | flip left-right / up-down |
 
 The italic tools are **not in the default set**, so the ring is the size it always was; add them in
 the settings window (**Look** page, the chips under the ring) or list them in `active_tools`. They exist so
 a whole session can be driven from the dial: *Focus* alone lets you operate any dialog with no keyboard.
-*Move Window* uses the same relative-workspace form as the Workspaces tool but its move has not been
-exercised on a live desktop yet; try it before relying on it.
+*Move Window* starts by carrying the window to another workspace (the same relative form as the Workspaces
+tool); a click flips it to swapping the window left or right among the tiles of the current workspace, the same
+swap Omarchy binds to Super+Shift+arrows. A fresh arm always starts on workspaces.
 
 Window Size and Brightness are per-machine in practice: list them in `active_tools`
 where they make sense (Brightness needs a backlight; with none it logs once and does
