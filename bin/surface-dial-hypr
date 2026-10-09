@@ -752,6 +752,209 @@ def speak(text):
 
 
 # --------------------------------------------------------------------------
+# --- the guide ---
+# Teaches the dial by what the person actually does, one idea at a time, instead of up front:
+# a hint appears only when their behaviour shows they are ready for it (or stuck) and they have
+# not just done the thing. Progress and counters live in progress.json next to the config; the
+# counters are plain usage totals, kept on this machine only.
+GUIDE_COOLDOWN_S = 30.0  # never two hints within this long
+GUIDE_MAX_SHOWS = 3  # a hint that has not worked after this many showings is dropped
+GUIDE_FLUSH_S = 30.0  # progress is written at least this often while counters change
+GUIDE_STEPS_BEFORE_HINT = 10  # steps of turning with the next thing still undone
+
+
+def _hint_press():
+    label = TOOLS[IDLE_TOOL]["click_label"] if TOOLS else ""
+    if click_choice("single") != "tool":
+        label = _CLICK_BY_NAME[click_choice("single")][1]
+    return f"Press the dial: {label}" if label and label != "\u2014" else None
+
+
+def _hint_pick():
+    if menu_latch():
+        return "Turn to a tool, then click to choose it"
+    return "Keep holding, turn to a tool, then let go"
+
+
+# id, the event that completes it, what makes its hint appear, the hint text, whether showing the
+# hint is itself the lesson. Order is the order of learning; an event completes its stage even when
+# it happens early or out of order.
+GUIDE_STAGES = [
+    {
+        "id": "press",
+        "done": "click",
+        "when": ("steps", GUIDE_STEPS_BEFORE_HINT),
+        "text": _hint_press,
+    },
+    {
+        "id": "hold",
+        "done": "menu",
+        "when": ("steps", GUIDE_STEPS_BEFORE_HINT),
+        "text": lambda: "Hold the button to choose a tool",
+    },
+    {"id": "pick", "done": "pick", "when": ("event", "menu_same"), "text": _hint_pick},
+    {
+        "id": "own",
+        "done": None,
+        "when": ("steps", 3 * GUIDE_STEPS_BEFORE_HINT),
+        "text": lambda: "Make it yours: Menu > Setup > Surface Dial",
+    },
+]
+
+
+class Guide:
+    """The adaptive introduction: counts what the person does and speaks up when it will help.
+
+    `event(kind)` takes "step", "click", "menu" (menu opened), "pick" (a different tool chosen)
+    and "menu_same" (menu closed without a change). `say(text)` shows a hint. Nothing here blocks
+    or changes what the dial does; it only watches and, now and then, shows a line of text.
+    """
+
+    def __init__(self, path, say, clock=time.monotonic, enabled=lambda: True):
+        self.path = path
+        self.say = say
+        self.clock = clock
+        self.enabled = enabled
+        self.state = self._load()
+        self.session_steps = 0  # turning since the last hint or stage change
+        self.last_hint = -1e9
+        self.last_flush = clock()
+        self.dirty = False
+
+    @staticmethod
+    def _fresh():
+        return {
+            "version": 1,
+            "done": [],
+            "shown": {},
+            "counts": {"steps": 0, "clicks": 0, "menus": 0, "picks": 0},
+        }
+
+    def _load(self):
+        state = self._fresh()
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                doc = json.load(f)
+            if isinstance(doc, dict):
+                if isinstance(doc.get("done"), list):
+                    state["done"] = [d for d in doc["done"] if isinstance(d, str)]
+                if isinstance(doc.get("shown"), dict):
+                    state["shown"] = {
+                        k: v for k, v in doc["shown"].items() if isinstance(v, int) and v >= 0
+                    }
+                if isinstance(doc.get("counts"), dict):
+                    for k in state["counts"]:
+                        v = doc["counts"].get(k)
+                        if isinstance(v, int) and v >= 0:
+                            state["counts"][k] = v
+        except (OSError, ValueError):
+            pass  # no file yet, or a damaged one: start the introduction from the beginning
+        return state
+
+    def flush(self):
+        """Write progress, atomically. Best effort: the dial works without it."""
+        if not self.dirty:
+            return
+        tmp = f"{self.path}.{os.getpid()}.tmp"
+        try:
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self.state, f)
+            os.replace(tmp, self.path)
+            self.dirty = False
+        except OSError as exc:
+            log(f"could not write progress ({exc})")
+        self.last_flush = self.clock()
+
+    def reset(self):
+        """Start the introduction again (the counters go too)."""
+        self.state = self._fresh()
+        self.session_steps = 0
+        self.dirty = True
+        self.flush()
+
+    def _complete(self, stage_id):
+        if stage_id not in self.state["done"]:
+            self.state["done"].append(stage_id)
+            self.session_steps = 0
+            self.dirty = True
+            self.flush()
+
+    def event(self, kind):
+        counts = self.state["counts"]
+        key = {"step": "steps", "click": "clicks", "menu": "menus", "pick": "picks"}.get(kind)
+        if key:
+            counts[key] += 1
+            self.dirty = True
+        if kind == "step":
+            self.session_steps += 1
+        for stage in GUIDE_STAGES:
+            if stage["done"] == kind:
+                self._complete(stage["id"])
+        self._maybe_hint(kind)
+        if self.dirty and self.clock() - self.last_flush >= GUIDE_FLUSH_S:
+            self.flush()
+
+    def _next_stage(self):
+        for stage in GUIDE_STAGES:
+            if stage["id"] not in self.state["done"]:
+                return stage
+        return None
+
+    def _maybe_hint(self, kind):
+        stage = self._next_stage()
+        if stage is None or not self.enabled():
+            return
+        what, need = stage["when"]
+        ready = self.session_steps >= need if what == "steps" else kind == need
+        if not ready or self.state["shown"].get(stage["id"], 0) >= GUIDE_MAX_SHOWS:
+            return
+        now = self.clock()
+        if now - self.last_hint < GUIDE_COOLDOWN_S:
+            return
+        text = stage["text"]()
+        if not text:
+            return
+        self.last_hint = now
+        self.session_steps = 0
+        self.state["shown"][stage["id"]] = self.state["shown"].get(stage["id"], 0) + 1
+        self.dirty = True
+        if stage["done"] is None:
+            self._complete(stage["id"])  # showing it was the lesson
+        self.flush()
+        self.say(text)
+
+
+class NoGuide:
+    """What the dial uses until the daemon starts the real guide (and in most tests)."""
+
+    def event(self, kind):
+        pass
+
+    def flush(self):
+        pass
+
+
+GUIDE = NoGuide()
+
+
+def guide_path():
+    return os.path.join(os.path.dirname(CONFIG_PATH), "progress.json")
+
+
+def guide_enabled():
+    """Whether hints are shown (config "guide", and never while the on-screen display is off)."""
+    return live_bool("guide", True) and osd_enabled()
+
+
+def _say_sync(text):
+    osd(message=text, duration=3500)
+
+
+def guide_say(text):
+    ACTIONS.submit(_say_sync, text)
+
+
 class Haptics:
     """Fire motor clicks without blocking the input loop."""
 
@@ -2568,11 +2771,47 @@ def parse_args(argv=None):
         epilog=f"Config: {CONFIG_PATH}. Docs: plugin/dial.radial/README.md",
     )
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    ap.add_argument(
+        "--reset-guide",
+        action="store_true",
+        help="forget the introduction's progress so it starts again (stop the daemon first)",
+    )
     return ap.parse_args(argv)
 
 
+def reset_guide_file(path, running):
+    """Delete the guide's progress file. Returns (exit code, message).
+
+    Refuses while the daemon runs: it keeps progress in memory and would write it straight back.
+    """
+    if running:
+        return (
+            1,
+            "The dial service is running. Stop it first (pkill -f surface-dial-hypr), then retry.",
+        )
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        return 0, "Nothing to reset: the introduction has not started yet."
+    except OSError as exc:
+        return 1, f"Could not remove {path}: {exc}"
+    return 0, "The introduction will start again. Start the dial service (surface-dial-restart)."
+
+
 if __name__ == "__main__":
-    parse_args()  # --help/--version exit here, before any side effects
+    _args = parse_args()  # --help/--version exit here, before any side effects
+    if _args.reset_guide:
+        _running = (
+            subprocess.run(
+                ["pgrep", "-f", "^python3 .*surface-dial-hypr$"], capture_output=True
+            ).returncode
+            == 0
+        )
+        _code, _msg = reset_guide_file(
+            os.path.join(os.path.dirname(CONFIG_PATH), "progress.json"), _running
+        )
+        print(_msg)
+        sys.exit(_code)
 
 write_tool_manifest()
 TOOLS = load_tools()
@@ -2790,6 +3029,7 @@ class Dial:
             d = 1 if self.scroll_accum > 0 else -1
             self.scroll_accum -= d * SCROLL_TICK
             HAPTIC.fire(PAT_TICK)
+            GUIDE.event("step")
 
     def _rotate_continuous(self, value, now):
         t = TOOLS[self.tool]
@@ -2823,6 +3063,7 @@ class Dial:
         t = TOOLS[self.tool]
         debug(f"detent {t['name']} {'cw' if d > 0 else 'ccw'} mag={mag} speed={self.speed:.0f}")
         side = "cw" if d > 0 else "ccw"
+        GUIDE.event("step")
         if t.get("axis_toggle") and self.arrow_horizontal:
             alt = t.get("alt")
             if not alt:
@@ -2888,6 +3129,7 @@ class Dial:
             self.menu_latched = False
             MENU_STREAM.close()
             MENU_UI.close()
+            GUIDE.event("pick" if self.menu_pick != self.tool else "menu_same")
             self._arm(self.menu_pick, now)
             self.accum = 0.0
             self.last_action = now
@@ -2948,6 +3190,7 @@ class Dial:
         HAPTIC.fire(PAT_MENU, rate_limit=False)
         MENU_UI.open(self.menu_pick)
         MENU_STREAM.connect()
+        GUIDE.event("menu")
         return None
 
     def _tick_latched_menu(self, now):
@@ -2972,6 +3215,7 @@ class Dial:
         if remain > 0:
             return remain
         self.pending_click = None
+        GUIDE.event("click")
         single = click_choice("single")
         if single != "tool":
             self._run_click(click_fn(single), now)
@@ -3183,6 +3427,9 @@ def main():
     else:
         log("pen support disabled by config")
     threading.Thread(target=status_loop, daemon=True).start()
+    global GUIDE
+    GUIDE = Guide(guide_path(), guide_say, enabled=guide_enabled)
+    atexit.register(GUIDE.flush)
     dial = Dial()
     waiting = False
     retries = 0

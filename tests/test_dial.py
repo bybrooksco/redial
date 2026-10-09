@@ -3046,6 +3046,267 @@ class LevelOverlay(Base):
         self.assertEqual(SHOWN, ["brightness"])
 
 
+class GuideTests(Base):
+    """The adaptive introduction: hints come when behaviour shows readiness, never nag, persist."""
+
+    def setUp(self):
+        super().setUp()
+        self.path = os.path.join(self.tmp, "progress.json")
+        self.now = [1000.0]
+        self.said = []
+
+    def guide(self, enabled=lambda: True):
+        return m.Guide(self.path, self.said.append, clock=lambda: self.now[0], enabled=enabled)
+
+    def steps(self, g, n):
+        for _ in range(n):
+            g.event("step")
+
+    def set_cfg(self, **kv):
+        time.sleep(0.005)
+        with open(self.cfg, "w") as f:
+            json.dump(kv, f)
+
+    # --- when hints appear
+    def test_no_hint_until_the_person_has_turned_a_while_without_pressing(self):
+        g = self.guide()
+        self.steps(g, m.GUIDE_STEPS_BEFORE_HINT - 1)
+        self.assertEqual(self.said, [])
+        g.event("step")
+        self.assertEqual(self.said, ["Press the dial: mute"])
+
+    def test_pressing_early_completes_the_stage_and_no_press_hint_ever_shows(self):
+        g = self.guide()
+        self.steps(g, 3)
+        g.event("click")
+        self.steps(g, 40)
+        self.assertNotIn("Press the dial: mute", self.said)
+        self.assertIn("press", g.state["done"])
+
+    def test_the_next_stage_follows_in_order(self):
+        g = self.guide()
+        g.event("click")
+        self.steps(g, m.GUIDE_STEPS_BEFORE_HINT)
+        self.assertEqual(self.said, ["Hold the button to choose a tool"])
+
+    def test_an_event_completes_its_stage_even_out_of_order(self):
+        g = self.guide()
+        g.event("menu")  # opened the tool menu before ever pressing
+        self.assertEqual(g.state["done"], ["hold"])
+        self.steps(g, m.GUIDE_STEPS_BEFORE_HINT)
+        self.assertEqual(self.said, ["Press the dial: mute"])  # press is still the next lesson
+
+    def test_closing_the_menu_without_choosing_shows_how_to_choose(self):
+        g = self.guide()
+        g.event("click")
+        g.event("menu")
+        g.event("menu_same")
+        self.assertEqual(self.said, ["Keep holding, turn to a tool, then let go"])
+
+    def test_the_choosing_hint_follows_the_tap_menu_setting(self):
+        self.set_cfg(menu_latch=True)
+        g = self.guide()
+        g.event("click")
+        g.event("menu")
+        g.event("menu_same")
+        self.assertEqual(self.said, ["Turn to a tool, then click to choose it"])
+
+    def test_choosing_a_tool_completes_that_stage(self):
+        g = self.guide()
+        g.event("menu")
+        g.event("pick")
+        self.assertEqual(g.state["done"], ["hold", "pick"])
+        g.event("menu_same")
+        self.assertEqual(self.said, [])
+
+    def test_the_last_stage_points_to_settings_once_and_only_after_the_others(self):
+        g = self.guide()
+        for kind in ("click", "menu", "pick"):
+            g.event(kind)
+        self.steps(g, 3 * m.GUIDE_STEPS_BEFORE_HINT)
+        self.assertEqual(self.said, ["Make it yours: Menu > Setup > Surface Dial"])
+        self.now[0] += 1000
+        self.steps(g, 100)
+        self.assertEqual(len(self.said), 1)  # showing it was the lesson
+
+    # --- it never nags
+    def test_a_hint_is_followed_by_a_cooldown(self):
+        g = self.guide()
+        self.steps(g, m.GUIDE_STEPS_BEFORE_HINT)
+        self.steps(g, m.GUIDE_STEPS_BEFORE_HINT)
+        self.assertEqual(len(self.said), 1)
+        self.now[0] += m.GUIDE_COOLDOWN_S + 1
+        self.steps(g, m.GUIDE_STEPS_BEFORE_HINT)
+        self.assertEqual(len(self.said), 2)
+
+    def test_a_hint_that_has_not_worked_is_dropped_after_a_few_showings(self):
+        g = self.guide()
+        for _ in range(m.GUIDE_MAX_SHOWS + 3):
+            self.now[0] += m.GUIDE_COOLDOWN_S + 1
+            self.steps(g, m.GUIDE_STEPS_BEFORE_HINT)
+        self.assertEqual(len(self.said), m.GUIDE_MAX_SHOWS)
+
+    def test_switched_off_it_stays_silent_but_still_counts(self):
+        g = self.guide(enabled=lambda: False)
+        self.steps(g, 50)
+        g.event("click")
+        self.assertEqual(self.said, [])
+        self.assertEqual((g.state["counts"]["steps"], g.state["counts"]["clicks"]), (50, 1))
+
+    def test_a_press_hint_is_skipped_when_the_click_does_nothing(self):
+        m.TOOLS[m.IDLE_TOOL]["click_label"] = "\u2014"
+        g = self.guide()
+        self.steps(g, m.GUIDE_STEPS_BEFORE_HINT)
+        self.assertEqual(self.said, [])
+
+    def test_the_hints_follow_the_settings(self):
+        self.set_cfg(guide=False)
+        self.assertFalse(m.guide_enabled())
+        self.set_cfg(osd=False)
+        self.assertFalse(m.guide_enabled())  # a screen with no display has nowhere to show them
+        self.set_cfg()
+        self.assertTrue(m.guide_enabled())
+
+    # --- progress is kept
+    def test_progress_survives_a_restart(self):
+        g = self.guide()
+        g.event("click")
+        self.steps(g, 12)
+        g.event("menu")
+        g.flush()
+        again = self.guide()
+        self.assertEqual(again.state["done"], ["press", "hold"])
+        self.assertEqual(again.state["counts"]["steps"], 12)
+
+    def test_counters_are_written_at_most_every_half_minute(self):
+        g = self.guide()
+        self.steps(g, 3)
+        self.assertFalse(os.path.exists(self.path))
+        self.now[0] += m.GUIDE_FLUSH_S + 1
+        g.event("step")
+        self.assertTrue(os.path.exists(self.path))
+
+    def test_a_damaged_or_odd_file_starts_fresh_without_crashing(self):
+        for junk in ("not json", "[1, 2]", json.dumps({"done": "x", "shown": [], "counts": 5})):
+            with open(self.path, "w") as f:
+                f.write(junk)
+            g = self.guide()
+            self.assertEqual(g.state["done"], [])
+            self.assertEqual(g.state["counts"]["steps"], 0)
+
+    def test_odd_values_inside_a_good_file_are_ignored(self):
+        with open(self.path, "w") as f:
+            json.dump(
+                {
+                    "done": ["press", 7],
+                    "shown": {"press": "x", "hold": 2},
+                    "counts": {"steps": -4, "clicks": 9},
+                },
+                f,
+            )
+        g = self.guide()
+        self.assertEqual(g.state["done"], ["press"])
+        self.assertEqual(g.state["shown"], {"hold": 2})
+        self.assertEqual((g.state["counts"]["steps"], g.state["counts"]["clicks"]), (0, 9))
+
+    def test_reset_starts_the_introduction_again(self):
+        g = self.guide()
+        g.event("click")
+        g.reset()
+        self.assertEqual(g.state["done"], [])
+        self.assertEqual(self.guide().state["done"], [])
+
+    def test_an_unwritable_place_does_not_stop_the_dial(self):
+        self.path = "/proc/nope/progress.json"
+        g = self.guide()
+        self.steps(g, m.GUIDE_STEPS_BEFORE_HINT)  # writes (and fails) when the hint shows
+        self.assertEqual(len(self.said), 1)
+
+    def test_hints_go_to_the_on_screen_display(self):
+        shown = []
+        m.osd = lambda **k: shown.append(k)
+        m.guide_say("hello")
+        self.assertEqual(shown, [{"message": "hello", "duration": 3500}])
+
+
+class GuideReset(Base):
+    def test_it_removes_the_progress_file(self):
+        path = os.path.join(self.tmp, "progress.json")
+        with open(path, "w") as f:
+            f.write("{}")
+        code, msg = m.reset_guide_file(path, running=False)
+        self.assertEqual(code, 0)
+        self.assertFalse(os.path.exists(path))
+        self.assertIn("start again", msg)
+
+    def test_it_says_so_when_there_is_nothing_to_reset(self):
+        code, msg = m.reset_guide_file(os.path.join(self.tmp, "none.json"), running=False)
+        self.assertEqual(code, 0)
+        self.assertIn("Nothing to reset", msg)
+
+    def test_it_refuses_while_the_daemon_runs_because_it_would_write_it_back(self):
+        path = os.path.join(self.tmp, "progress.json")
+        with open(path, "w") as f:
+            f.write("{}")
+        code, msg = m.reset_guide_file(path, running=True)
+        self.assertEqual(code, 1)
+        self.assertTrue(os.path.exists(path))
+        self.assertIn("Stop it first", msg)
+
+    def test_the_flag_is_documented_in_help(self):
+        out = subprocess.run(
+            [sys.executable, "-I", os.path.abspath(DAEMON), "--help"],
+            capture_output=True,
+            text=True,
+            env={
+                "DIAL_CONFIG_DIR": self.tmp,
+                "DIAL_LOG_PATH": os.path.join(self.tmp, "l"),
+                "PATH": os.environ["PATH"],
+            },
+        ).stdout
+        self.assertIn("--reset-guide", out)
+
+
+class GuideHooks(Base):
+    """The dial tells the guide what the person did."""
+
+    def setUp(self):
+        super().setUp()
+        self.seen = []
+        m.GUIDE = types.SimpleNamespace(event=self.seen.append, flush=lambda: None)
+
+    def test_a_completed_step_is_reported(self):
+        d = m.Dial()
+        d.on_rotate(60, 0.0)
+        self.assertEqual(self.seen.count("step"), 1)
+
+    def test_a_single_click_is_reported(self):
+        self.gesture(1)
+        self.assertEqual(self.seen, ["click"])
+
+    def test_opening_the_menu_and_leaving_it_unchanged_is_reported(self):
+        d = m.Dial()
+        d.on_press(0.0)
+        d.tick(1.0)
+        d.on_release(1.1)
+        self.assertEqual(self.seen, ["menu", "menu_same"])
+
+    def test_choosing_a_different_tool_is_reported(self):
+        d = m.Dial()
+        d.on_press(0.0)
+        d.tick(1.0)
+        d.menu_pick = 1
+        d.on_release(1.1)
+        self.assertEqual(self.seen, ["menu", "pick"])
+
+    def test_scrolling_counts_as_steps_too(self):
+        d = m.Dial()
+        d.tool = tool_index("Scroll")
+        m.POINTER = types.SimpleNamespace(scroll=lambda *a, **k: None)
+        d.on_rotate(m.SCROLL_TICK * 3, 0.0)
+        self.assertGreaterEqual(self.seen.count("step"), 1)
+
+
 class SelfInstaller(unittest.TestCase):
     """scripts/make-installer.sh + the single-file installer, run in a scratch HOME."""
 

@@ -1044,6 +1044,15 @@ Item {
         ChoiceRow {
           visible: root.page === "feel"
           cfg: root.cfg
+          title: "Hints while you learn"
+          help: "Now and then shows a short line about the next thing the dial can do, when what you are doing suggests you are ready. Needs the on-screen display."
+          options: [ { key: true, label: "On" }, { key: false, label: "Off" } ]
+          current: root.cfgValue("guide", true)
+          onPicked: key => root.setConfigKey("guide", key)
+        }
+        ChoiceRow {
+          visible: root.page === "feel"
+          cfg: root.cfg
           title: "Buzz when returning to Volume"
           help: "A short buzz when a tool drops back to Volume."
           options: [ { key: true, label: "On" }, { key: false, label: "Off" } ]
