@@ -3,18 +3,32 @@
 Surface Dial for Omarchy is in **beta**. Version numbers say how close it is; 1.0 means "ready for
 people who are not the author, including people who depend on it to use a computer".
 
-## 0.9.7: first beta (now)
+## 0.8.0: first beta package (done, not sent)
+
+A working build with an installer, an uninstaller and a testing plan. It was first numbered 0.9.7 and
+renumbered on 2026-10-09: by the 1.0 checklist below it is nowhere near done, and 0.9.x is kept for
+the stage when people other than the author use it.
+
+## 0.8.1: first-run experience
+
+The first informal test (2026-10-08) showed that turning the dial for the first time does too little.
+This stage adds a visible response on the first turn and an adaptive, dial-driven introduction that
+teaches turn, press and hold as the person is ready for them. See the design note in the project vault.
+
+## 0.8.2: known bugs
+
+Fixes for anything found in use before a tester gets it, starting with scrolling in terminals.
+
+## 0.9.0: first outside testers
 
 A few people who already run Omarchy and own a Surface Dial install it and use it for ordinary
 work. The aim is to find what the author cannot see: things that are confusing, things that break
 on a different machine, things that feel wrong in a different hand.
 
-## 0.9.8: what the first testers found
+## 0.9.x: what the testers found
 
-Fixes and clarifications from the first round of notes. No new features unless a tester's problem
-needs one. Re-run the full checks, rebuild the package, send it back to the same people.
-
-## 0.9.9: release candidate
+Fixes and clarifications from their notes. No new features unless a tester's problem needs one.
+The release candidate adds:
 
 - The first run of the automated checks on a public repository, with whatever that finds fixed.
 - A decision on splitting the single-file daemon into modules (it changes how updates and

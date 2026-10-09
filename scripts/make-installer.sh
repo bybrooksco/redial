@@ -2,7 +2,7 @@
 # make-installer.sh -- build the single-file installer for a release.
 #
 #   scripts/make-installer.sh <git-ref> <output-file>
-#   e.g. scripts/make-installer.sh v0.9.7 surface-dial-0.9.7-installer.sh
+#   e.g. scripts/make-installer.sh v0.8.0 surface-dial-0.8.0-installer.sh
 #
 # The version is read from that ref's own bin/surface-dial-hypr, so the installer can never
 # disagree with what is inside it. Also writes <output-file>.sha256.

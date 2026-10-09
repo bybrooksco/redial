@@ -5,9 +5,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.9.7] - 2026-10-07 (first beta)
+## [0.8.0] - 2026-10-07 (first beta package)
 
-The first version given to testers. Not yet public; see `docs/ROADMAP.md` for what comes before 1.0.
+The build prepared for the first testers (first numbered 0.9.7, renumbered 0.8.0 on 2026-10-09 to match how far along the project really is). Not yet public; see `docs/ROADMAP.md` for what comes before 1.0.
 
 ### Added
 - **Single-file installer** for testers: `scripts/make-installer.sh <ref> <out>` builds one file (about 220 KB, small enough to email) that contains the whole release. Running it checks its own checksum, shows a plain-language notice, unpacks to `~/.local/share/surface-dial-beta/` and then runs the normal `install.sh`, which asks before every change. The unpacked folder stays so `uninstall.sh` is available. `--extract-only` and `--unattended` for the careful and the scripted.
@@ -55,8 +55,17 @@ The first version given to testers. Not yet public; see `docs/ROADMAP.md` for wh
 - `active_tools` and `tools` changes now apply live, while the dial is idle. No daemon restart.
 - Python sources are ruff-formatted; shell scripts are shellcheck-clean.
 
-## [0.9.0]
+## [0.6.0] - 2026-09-30
 
-Initial layout (never released under this number; renumbered when the beta numbering was chosen): daemon, Quickshell plugin with four faces (Pie Wheel,
+Initial layout as one package (never released; numbered retroactively on 2026-10-09): daemon, Quickshell plugin with four faces (Pie Wheel,
 Gauge, Carousel, Minimal Toast), Surface Pen support, doctor/setup script,
 Rise bar widget installer, udev rules and test suite.
+
+## Earlier stages (numbered retroactively on 2026-10-09; none were released)
+
+- **0.7** (10-02 to 10-03): public-launch polish. Lint and format clean, CI, docs, the Omarchy layout, input thread kept free of subprocesses, Omarchy conventions.
+- **0.5** (09-26): Studio and laptop work merged, pen click settings, the two windows became one.
+- **0.4** (09-19 to 09-22): second machine (Laptop Kit), bar button, Window Size and Brightness, triple-click, the Bluetooth "zombie connect" fix, audit and hardening.
+- **0.3** (09-16 to 09-18): tool library and `active_tools`, Zoom, Arrow Keys, Media, Word Nav, the terminal scroll fix, setup doctor.
+- **0.2** (08-29 to 09-15): first overlay plugin, Classic and Capsule faces, picker window, Scroll.
+- **0.1** (08-20 to 08-28): bring-up. Pairing, HID and haptics reverse-engineering, first daemon.

@@ -79,7 +79,7 @@ settings unless you pass `--purge`, and asks before its one `sudo` step (the ude
 
 ## Status
 
-**Beta (0.9.x), heading for 1.0.** Read `BETA.md` first: it says plainly what has and has not been
+**Beta (0.8.x), heading for 1.0.** Read `BETA.md` first: it says plainly what has and has not been
 tested, what the installer changes, and how to undo it. The plan to 1.0 is in `docs/ROADMAP.md`.
 It runs daily on a Surface Studio (Omarchy); a second machine (a Dell laptop, also Omarchy) has
 run an earlier version as a proof of concept for multi-device use. Config (`~/.config/dial-radial/config.json`) is
