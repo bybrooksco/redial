@@ -5,6 +5,13 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Toward 0.8.1 (first-run experience).
+
+### Added
+- **The dial now answers on screen.** Each volume or brightness step shows Omarchy's own on-screen display with the new level (muted volume shows the muted icon). Before, turning the default tool changed the volume silently.
+- **The first movement after a quiet spell is acknowledged** (3 seconds of stillness, or a connect or wake), even if the turn was too small to complete a step: the overlay shows the active tool, so a gentle first turn is never met with silence. Dead-zone twitches and menu turning do not trigger it.
+- The connect message now says what turning does ("Surface Dial ready: Turn to change volume").
+
 ## [0.8.0] - 2026-10-07 (first beta package)
 
 The build prepared for the first testers (first numbered 0.9.7, renumbered 0.8.0 on 2026-10-09 to match how far along the project really is). Not yet public; see `docs/ROADMAP.md` for what comes before 1.0.

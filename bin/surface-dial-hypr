@@ -217,6 +217,9 @@ DOUBLE_S = 0.25  # second click inside this window = double click
 # possible triple unless "triple" is "none".
 DISARM_S = 6.00  # default: an armed tool reverts to idle after this much stillness
 DISARM_MIN_S, DISARM_MAX_S = 3.0, 300.0  # range of config "auto_return_s"
+# The first movement after this much stillness shows the active tool on screen even if no full
+# step has happened yet, so a gentle first turn is never met with silence.
+ACK_QUIET_S = 3.0
 # A tool that holds a modifier (Zoom's Ctrl) is capped: while it is armed, every key typed elsewhere
 # carries that modifier, so it must never be left armed for long.
 HOLD_MOD_DISARM_CAP_S = 10.0
@@ -973,6 +976,55 @@ def vol(mag, up):
     if up:
         cmd += ["-l", "1.0"]
     run(cmd)
+    show_level("volume")
+
+
+def osd(icon="", message="", progress=None, duration=900):
+    """Put something on screen with Omarchy's own on-screen display; best effort.
+
+    Falls back to a notification where `omarchy-osd` is missing, so the dial is never silent.
+    """
+    exe = shutil.which("omarchy-osd")
+    if not exe:
+        if message:
+            notify(message)
+        return
+    cmd = [exe, "-d", str(duration)]
+    if icon:
+        cmd += ["-i", icon]
+    if progress is not None:
+        cmd += ["-p", str(max(0, min(100, int(progress))))]
+    elif message:
+        cmd += ["-m", message]
+    run(cmd)
+
+
+_level_pending = set()
+
+
+def show_level(kind):
+    """Show the current volume or brightness on screen, once per burst of turning.
+
+    The job reads the level when it runs, not when it was queued, so one waiting job always
+    shows the latest value and a fast spin cannot back the action queue up with overlays.
+    """
+    if kind in _level_pending:
+        return
+    _level_pending.add(kind)
+    ACTIONS.submit(_show_level, kind)
+
+
+def _show_level(kind):
+    _level_pending.discard(kind)
+    if kind == "volume":
+        v = MenuUI._volume()
+        if v is not None:
+            pct, text = v
+            osd(icon="volume-muted" if text == "muted" else "volume", progress=pct)
+    elif kind == "brightness":
+        pct = read_brightness()
+        if pct is not None:
+            osd(icon="brightness", progress=pct)
 
 
 def backlight_device():
@@ -1019,6 +1071,7 @@ def set_brightness(mag, up, step=BRIGHT_STEP, device=None):
     new = max(BRIGHT_MIN, min(100, cur + (delta if up else -delta)))
     if new != cur:
         run(["brightnessctl", "-q", "-d", dev, "set", f"{new}%"])
+    show_level("brightness")
 
 
 def repeat_key(mag, *combo):
@@ -2497,6 +2550,7 @@ class Dial:
         self.rot_events = 0
         self.last_rot_log = 0.0
         self.rot_hist = deque()
+        self.last_ack = -1e9  # last counted turn; the first after a quiet spell is acknowledged
         self.scroll_accum = 0.0
         self.arrow_horizontal = False
 
@@ -2533,6 +2587,11 @@ class Dial:
         speak(t["name"])
         notify(f"{t['icon']}  {t['name']}", prefix or f"click: {t['click_label']}")
 
+    def show_connected(self):
+        """Say the dial is ready, and what turning it does, when it connects or wakes."""
+        t = TOOLS[self.tool]
+        notify(f"{t['icon']}  Surface Dial ready", f"Turn to change {t['name'].lower()}")
+
     def show_menu(self):
         MENU_UI.highlight(self.menu_pick)
         speak(TOOLS[self.menu_pick]["name"])
@@ -2555,6 +2614,7 @@ class Dial:
         self.pending_double = None
         self.double_down = False
         self.accum = 0.0
+        self.last_ack = -1e9  # the first turn after a connect or wake is always acknowledged
 
     def disarm(self, now):
         MENU_STREAM.close()
@@ -2593,6 +2653,7 @@ class Dial:
         value = self.through_deadzone(value, now)
         if not value:
             return  # inside the dead zone: not activity, so a twitch cannot hold a tool armed
+        self._acknowledge(now)
         self._track_speed(value, now)
         if self.menu:
             self._rotate_menu(value, now)
@@ -2600,6 +2661,26 @@ class Dial:
             self._rotate_continuous(value, now)
         else:
             self._rotate_discrete(value, now)
+
+    def _acknowledge(self, now):
+        """Show the active tool when turning starts after a quiet spell.
+
+        A gentle first turn may not complete a step, and a dial that answers nothing reads as
+        broken. The overlay appears on the first counted movement, then stays out of the way.
+        """
+        quiet = now - self.last_ack >= ACK_QUIET_S
+        self.last_ack = now
+        if quiet and not self.menu:
+            ACTIONS.submit(self.show_ack)
+
+    def show_ack(self):
+        t = TOOLS[self.tool]
+        if t["name"] == "Volume":
+            _show_level("volume")
+        elif t["name"] == "Brightness":
+            _show_level("brightness")
+        else:
+            osd(message=f"{t['icon']}  {t['name']}")
 
     def _track_speed(self, value, now):
         """Count the event and update `speed` (counts per second over SPEED_WINDOW)."""
@@ -3061,7 +3142,7 @@ def main():
         dial.reset_gestures()
         dial._arm(IDLE_TOOL, time.monotonic())
         dial.last_action = time.monotonic()
-        dial.show_tool("idle")
+        dial.show_connected()
         try:
             pump(fh, dial)
         except OSError as exc:

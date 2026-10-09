@@ -71,6 +71,16 @@ unittest.TestCase.run = _run_isolated
 
 
 EVENTS = []
+OSDS = []  # what the on-screen display was asked to show
+SHOWN = []  # which level overlays (volume, brightness) were asked for
+
+
+def _level_reset():
+    OSDS.clear()
+    SHOWN.clear()
+    m._level_pending.clear()
+
+
 POSITIONS = []
 
 
@@ -104,6 +114,9 @@ def install_stubs(cfg_path):
     m.key = lambda *k: EVENTS.append("KEY:" + "+".join(k))
     m.dictation_toggle = lambda: EVENTS.append("DICTATION")
     m.notify = lambda *a, **k: None
+    m.osd = lambda **k: OSDS.append(k)
+    m._show_level = lambda kind: SHOWN.append(kind)
+    _level_reset()
     m.run = lambda cmd: EVENTS.append("EXEC:" + " ".join(cmd[:2]))
     m.hypr = lambda lua: EVENTS.append("HYPR:" + lua)
     m.CONFIG_PATH = cfg_path
@@ -366,6 +379,7 @@ class Brightness(unittest.TestCase):
         m.read_brightness = lambda d=None: self.pct
         m.backlight_device = lambda: "intel_backlight"
         m.run = lambda cmd: self.sent.append(cmd)
+        m.show_level = lambda kind: None  # the on-screen display has its own tests
 
     def test_step_and_magnitude(self):
         for mag in (1, 2, 3, 4):
@@ -2767,6 +2781,146 @@ def shutil_which(name):
 
 
 @unittest.skipUnless(_git_checkout_available(), "needs a git checkout to build the installer")
+class FirstTurnFeedback(Base):
+    """R1: the dial answers the first movement, and says so when it connects."""
+
+    def turn(self, d, times, value=1):
+        for t in times:
+            d.on_rotate(value, t)
+
+    def test_the_first_turn_is_acknowledged_before_any_step_completes(self):
+        d = m.Dial()
+        d.on_rotate(1, 1.0)  # far too small to complete a step
+        self.assertEqual(SHOWN, ["volume"])
+
+    def test_steady_turning_is_acknowledged_once_not_every_event(self):
+        d = m.Dial()
+        self.turn(d, [1.0 + 0.5 * i for i in range(20)])
+        self.assertEqual(SHOWN, ["volume"])
+
+    def test_turning_again_after_a_quiet_spell_is_acknowledged_again(self):
+        d = m.Dial()
+        self.turn(d, [1.0, 1.2, 1.4])
+        self.turn(d, [1.4 + m.ACK_QUIET_S + 0.1])
+        self.assertEqual(SHOWN, ["volume", "volume"])
+
+    def test_a_reconnect_resets_it(self):
+        d = m.Dial()
+        self.turn(d, [1.0])
+        d.reset_gestures()
+        self.turn(d, [1.5])
+        self.assertEqual(SHOWN, ["volume", "volume"])
+
+    def test_it_stays_quiet_while_the_tool_menu_is_open(self):
+        d = m.Dial()
+        d.menu = True
+        self.turn(d, [1.0])
+        self.assertEqual(SHOWN, [])
+
+    def test_a_twitch_inside_the_dead_zone_is_not_acknowledged(self):
+        with open(self.cfg, "w") as f:
+            json.dump({"deadzone": 50}, f)
+        m._live.update(mtime=object())
+        d = m.Dial()
+        self.turn(d, [1.0])
+        self.assertEqual(SHOWN, [])
+
+    def test_other_tools_show_their_name(self):
+        d = m.Dial()
+        d.tool = tool_index("Workspaces")
+        self.turn(d, [1.0])
+        self.assertEqual(SHOWN, [])
+        self.assertEqual(len(OSDS), 1)
+        self.assertIn("Workspaces", OSDS[0]["message"])
+
+    def test_brightness_shows_the_brightness_level(self):
+        d = m.Dial()
+        d.tool = tool_index("Brightness")
+        self.turn(d, [1.0])
+        self.assertEqual(SHOWN, ["brightness"])
+
+    def test_connecting_says_what_turning_does(self):
+        seen = []
+        m.notify = lambda title, body="": seen.append((title, body))
+        m.Dial().show_connected()
+        self.assertIn("ready", seen[0][0])
+        self.assertEqual(seen[0][1], "Turn to change volume")
+
+
+class LevelOverlay(Base):
+    """The on-screen display that follows every volume or brightness step."""
+
+    def setUp(self):
+        super().setUp()
+        self.cmds = []
+        m.run = self.cmds.append
+        m.shutil = types.SimpleNamespace(which=lambda name: f"/x/{name}")
+        self.real_show_level = PRISTINE["_show_level"]
+
+    def test_osd_builds_the_omarchy_command_for_a_level(self):
+        PRISTINE["osd"](icon="volume", progress=40)
+        self.assertEqual(self.cmds, [["/x/omarchy-osd", "-d", "900", "-i", "volume", "-p", "40"]])
+
+    def test_osd_clamps_the_progress(self):
+        PRISTINE["osd"](icon="volume", progress=150)
+        PRISTINE["osd"](icon="volume", progress=-5)
+        self.assertEqual([c[-1] for c in self.cmds], ["100", "0"])
+
+    def test_osd_shows_a_message(self):
+        PRISTINE["osd"](message="hello")
+        self.assertEqual(self.cmds, [["/x/omarchy-osd", "-d", "900", "-m", "hello"]])
+
+    def test_without_omarchy_osd_it_falls_back_to_a_notification(self):
+        m.shutil = types.SimpleNamespace(which=lambda name: None)
+        seen = []
+        m.notify = lambda *a, **k: seen.append(a)
+        PRISTINE["osd"](message="hello")
+        self.assertEqual(seen, [("hello",)])
+        self.assertEqual(self.cmds, [])
+
+    def test_a_burst_of_steps_queues_one_overlay_that_shows_the_latest_level(self):
+        jobs = []
+        m.ACTIONS = types.SimpleNamespace(submit=lambda fn, *a: jobs.append((fn, a)))
+        m._show_level = self.real_show_level
+        level = {"v": (10, "10%")}
+        m.MenuUI = types.SimpleNamespace(_volume=lambda: level["v"])
+        for _ in range(5):
+            m.show_level("volume")
+        self.assertEqual(len(jobs), 1)
+        level["v"] = (42, "42%")  # the dial kept turning while the job waited
+        fn, args = jobs.pop()
+        fn(*args)
+        self.assertEqual(OSDS, [{"icon": "volume", "progress": 42}])
+        m.show_level("volume")  # once it has run, the next step may queue another
+        self.assertEqual(len(jobs), 1)
+
+    def test_muted_volume_shows_the_muted_icon_at_zero(self):
+        m.MenuUI = types.SimpleNamespace(_volume=lambda: (0, "muted"))
+        self.real_show_level("volume")
+        self.assertEqual(OSDS, [{"icon": "volume-muted", "progress": 0}])
+
+    def test_unreadable_volume_shows_nothing(self):
+        m.MenuUI = types.SimpleNamespace(_volume=lambda: None)
+        self.real_show_level("volume")
+        self.assertEqual(OSDS, [])
+
+    def test_brightness_level_is_shown(self):
+        m.read_brightness = lambda device=None: 70
+        self.real_show_level("brightness")
+        self.assertEqual(OSDS, [{"icon": "brightness", "progress": 70}])
+
+    def test_a_volume_step_asks_for_the_overlay(self):
+        m.run = lambda cmd: EVENTS.append("EXEC:" + " ".join(cmd[:2]))
+        m.vol(2, True)
+        self.assertEqual(SHOWN, ["volume"])
+        self.assertIn("EXEC:wpctl set-volume", EVENTS)
+
+    def test_a_brightness_step_asks_for_the_overlay(self):
+        m.read_brightness = lambda device=None: 50
+        m.set_brightness(1, True, device="x")
+        self.assertEqual(SHOWN, ["brightness"])
+
+
 class SelfInstaller(unittest.TestCase):
     """scripts/make-installer.sh + the single-file installer, run in a scratch HOME."""
 
