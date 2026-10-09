@@ -1953,7 +1953,7 @@ class DeviceDiscovery(Base):
         fx.set(m, "find_input", lambda name: None)
         self.assertEqual(m.open_input("x"), (None, None))
         fx.set(m, "find_input", lambda name: "/nonexistent/event0")
-        self.assertEqual(m.open_input("x"), (None, None))
+        self.assertEqual(m.open_input("x"), (None, "/nonexistent/event0"))  # listed, not openable
 
     def test_device_name_of_a_non_device_is_empty(self):
         r, w = os.pipe()
@@ -2101,17 +2101,25 @@ class VirtualPointerWrites(Base):
 class MainLoop(Base):
     """main: attach, pump, detach, retry; with the pen and status threads switched off."""
 
-    def run_main(self, fx, opens, sleeps=None):
+    def run_main(self, fx, opens, sleeps=None, waits=None, stop_after_sleeps=1):
+        """Run main over scripted opens; sleeps and device-list waits are recorded, not slept."""
         seq = iter(opens)
+        sleeps = [] if sleeps is None else sleeps
+        waits = [] if waits is None else waits
 
         def open_input(name):
             nxt = next(seq)
             return nxt if nxt is not None else (None, None)
 
         def sleep(secs):
-            if sleeps is not None:
-                sleeps.append(secs)
-            raise StopLoop
+            sleeps.append(secs)
+            if len(sleeps) >= stop_after_sleeps:
+                raise StopLoop
+
+        class Watch:
+            def wait(self, timeout):
+                waits.append(timeout)
+                raise StopLoop
 
         class NoThread:
             def __init__(self, *a, **k):
@@ -2123,6 +2131,7 @@ class MainLoop(Base):
         with open(self.cfg, "w") as f:
             json.dump({"pen": {"enabled": False}}, f)
         fx.set(m, "open_input", open_input)
+        fx.set(m, "DeviceWatch", Watch)
         fx.set(m.time, "sleep", sleep)
         fx.set(m.threading, "Thread", NoThread)
         with self.assertRaises(StopLoop):
@@ -2134,19 +2143,26 @@ class MainLoop(Base):
         self.run_main(fx, [None])
         self.assertFalse(m._status["attached"])  # never claimed to be attached
 
-    def test_it_looks_for_a_returning_dial_several_times_a_second(self):
+    def test_an_absent_dial_is_waited_for_on_the_device_list_not_a_timer(self):
         fx = Fixture(self)
-        sleeps = []
-        self.run_main(fx, [None], sleeps=sleeps)
-        self.assertEqual(sleeps, [m.ATTACH_POLL_S])
-        self.assertLessEqual(m.ATTACH_POLL_S, 0.5)  # waking should feel instant
+        waits, sleeps = [], []
+        self.run_main(fx, [None], waits=waits, sleeps=sleeps)
+        self.assertEqual(waits, [m.WATCH_SAFETY_S])
+        self.assertEqual(sleeps, [])  # no polling sleep
 
-    def test_after_a_detach_it_comes_back_quickly_too(self):
+    def test_a_listed_but_unopenable_dial_is_retried_quickly_then_waited_for(self):
+        fx = Fixture(self)
+        opens = [(None, "/dev/event7")] * (m.OPEN_RETRY_MAX + 1)
+        sleeps, waits = [], []
+        self.run_main(fx, opens, waits=waits, sleeps=sleeps, stop_after_sleeps=99)
+        self.assertEqual(sleeps, [m.OPEN_RETRY_S] * m.OPEN_RETRY_MAX)
+        self.assertEqual(waits, [m.WATCH_SAFETY_S])
+
+    def test_after_a_detach_it_pauses_briefly_before_looking_again(self):
         fx = Fixture(self)
         sleeps = []
-        fh = pipe_with()
-        self.run_main(fx, [(fh, "/dev/event7")], sleeps=sleeps)
-        self.assertEqual(sleeps, [m.ATTACH_POLL_S])
+        self.run_main(fx, [(pipe_with(), "/dev/event7")], sleeps=sleeps)
+        self.assertEqual(sleeps, [m.REATTACH_PAUSE_S])
 
     def test_the_log_says_how_long_the_dial_was_away(self):
         fx = Fixture(self)
@@ -2170,6 +2186,44 @@ class MainLoop(Base):
         self.run_main(fx, [(fh, "/dev/event7")])
         self.assertEqual(seen, [True])  # attached while pumping
         self.assertFalse(m._status["attached"])  # and cleared after
+
+
+class DeviceWatchTests(Base):
+    def test_it_returns_as_soon_as_the_device_list_changes(self):
+        import select as sel
+
+        woke = []
+
+        class FakePoll:
+            def register(self, fd, ev):
+                pass
+
+            def poll(self, ms):
+                woke.append(ms)
+                return []
+
+        fx = Fixture(self)
+        fx.set(m.select, "poll", lambda: FakePoll())
+        w = m.DeviceWatch()
+        w.wait(2.0)
+        self.assertEqual(woke, [0, 2000])  # the initial drain, then the real wait
+        self.assertTrue(hasattr(sel, "poll"))
+
+    def test_it_falls_back_to_a_plain_sleep_where_the_file_cannot_be_polled(self):
+        fx = Fixture(self)
+        slept = []
+        fx.set(m.time, "sleep", slept.append)
+        w = m.DeviceWatch("/nonexistent/devices")
+        w.wait(1.5)
+        self.assertEqual(slept, [1.5])
+
+    def test_on_this_machine_a_change_is_not_lost_and_quiet_means_quiet(self):
+        w = m.DeviceWatch()
+        if w._poll is None:
+            self.skipTest("no pollable /proc/bus/input/devices here")
+        t = time.monotonic()
+        w.wait(0.05)
+        self.assertGreaterEqual(time.monotonic() - t, 0.04)  # nothing changed, so it waited
 
 
 class StatusLoop(Base):

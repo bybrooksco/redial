@@ -220,11 +220,14 @@ DISARM_MIN_S, DISARM_MAX_S = 3.0, 300.0  # range of config "auto_return_s"
 # The first movement after this much stillness shows the active tool on screen even if no full
 # step has happened yet, so a gentle first turn is never met with silence.
 ACK_QUIET_S = 3.0
-# How often to look for the dial's input device while it is away (asleep or disconnected). The
-# device node appears the moment the dial reconnects, and waking it should feel instant, so this
-# bounds the delay between touching the dial and the daemon listening again. One small read of
-# /proc each time.
-ATTACH_POLL_S = 0.25
+# Finding the dial again after it sleeps or drops. The daemon does not poll on a timer: it sleeps
+# until the kernel's input device list changes (DeviceWatch), so a reconnect is noticed at once and
+# an idle daemon wakes only for the slow safety net below. A device that is listed but cannot be
+# opened yet (its permissions are still being applied) is retried a few times in quick succession.
+WATCH_SAFETY_S = 2.0
+OPEN_RETRY_S = 0.1
+OPEN_RETRY_MAX = 10
+REATTACH_PAUSE_S = 0.25  # after a drop, so a device that flaps cannot spin the loop
 # A tool that holds a modifier (Zoom's Ctrl) is capped: while it is armed, every key typed elsewhere
 # carries that modifier, so it must never be left armed for long.
 HOLD_MOD_DISARM_CAP_S = 10.0
@@ -1202,13 +1205,40 @@ def open_input(name):
         fh = open(path, "rb")
     except OSError as exc:
         log(f"cannot open {path} for {name}: {exc}")
-        return None, None
+        return None, path  # listed but not openable (yet): the caller may retry soon
     actual = device_name(fh.fileno())
     if actual != name:
         log(f"REFUSED {path}: expected '{name}', device says '{actual}'")
         fh.close()
         return None, None
     return fh, path
+
+
+class DeviceWatch:
+    """Sleep until the kernel's input device list changes, instead of re-reading it on a timer.
+
+    /proc/bus/input/devices reports readable to poll() whenever a device is added or removed, so a
+    dial that reconnects is noticed at once, and an idle daemon uses no CPU while it waits. A
+    change that lands between a check and the next wait is not lost: poll() reports it
+    immediately. Where the file cannot be polled this degrades to a plain sleep.
+    """
+
+    def __init__(self, path="/proc/bus/input/devices"):
+        self._poll = None
+        try:
+            self._fh = open(path)
+            self._poll = select.poll()
+            self._poll.register(self._fh.fileno(), select.POLLIN)
+            self._poll.poll(0)  # the first poll always says "changed"; take that now
+        except (OSError, AttributeError):
+            self._poll = None
+
+    def wait(self, timeout):
+        """Return when the device list changes or `timeout` seconds pass."""
+        if self._poll is None:
+            time.sleep(timeout)
+        else:
+            self._poll.poll(int(timeout * 1000))
 
 
 class EraserState:
@@ -3133,14 +3163,21 @@ def main():
     threading.Thread(target=status_loop, daemon=True).start()
     dial = Dial()
     waiting = False
+    retries = 0
     lost_at = time.monotonic()
+    watch = DeviceWatch()
     while True:
         fh, path = open_input(DEVICE_NAME)
         if fh is None:
             if not waiting:
                 log("waiting for device")
                 waiting = True
-            time.sleep(ATTACH_POLL_S)
+                retries = 0
+            if path and retries < OPEN_RETRY_MAX:
+                retries += 1
+                time.sleep(OPEN_RETRY_S)
+            else:
+                watch.wait(WATCH_SAFETY_S)
             continue
         waiting = False
         log(f"attached to {path} (away {time.monotonic() - lost_at:.1f}s)")
@@ -3156,7 +3193,7 @@ def main():
         _status["attached"] = False
         dial.reset_gestures()
         lost_at = time.monotonic()
-        time.sleep(ATTACH_POLL_S)
+        time.sleep(REATTACH_PAUSE_S)
 
 
 if __name__ == "__main__":
