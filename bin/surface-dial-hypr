@@ -165,7 +165,7 @@ HOLD_S = 0.40  # press longer than this opens the menu
 # top-left | top-right | bottom-left | bottom-right
 # Config is shared with the overlay plugin; every key is optional and re-read when the menu
 # opens. Env vars win.
-__version__ = "0.8.0"
+__version__ = "0.8.1"
 
 # DIAL_CONFIG_DIR exists so tests can keep importing this file away from the real config.
 CONFIG_PATH = os.path.join(
@@ -225,8 +225,8 @@ ACK_QUIET_S = 3.0
 # an idle daemon wakes only for the slow safety net below. A device that is listed but cannot be
 # opened yet (its permissions are still being applied) is retried a few times in quick succession.
 WATCH_SAFETY_S = 2.0
-OPEN_RETRY_S = 0.1
-OPEN_RETRY_MAX = 10
+OPEN_RETRY_S = 0.02  # udev applies a new node's permissions within a few tens of milliseconds
+OPEN_RETRY_MAX = 50  # so about a second in all, then the safety timeout takes over
 REATTACH_PAUSE_S = 0.25  # after a drop, so a device that flaps cannot spin the loop
 # A tool that holds a modifier (Zoom's Ctrl) is capped: while it is armed, every key typed elsewhere
 # carries that modifier, so it must never be left armed for long.
@@ -910,7 +910,9 @@ class Guide:
         if not ready or self.state["shown"].get(stage["id"], 0) >= GUIDE_MAX_SHOWS:
             return
         now = self.clock()
-        if now - self.last_hint < GUIDE_COOLDOWN_S:
+        # The cooldown spaces out hints the guide volunteers while someone turns; one that answers
+        # something they just did (a menu closed without a choice) is help they asked for.
+        if what == "steps" and now - self.last_hint < GUIDE_COOLDOWN_S:
             return
         text = stage["text"]()
         if not text:
@@ -1268,6 +1270,7 @@ def read_brightness(device=None):
 
 
 _bright_warned = False
+_bright_said = [-1e9]  # when the "no backlight" message was last shown
 
 
 def set_brightness(mag, up, step=BRIGHT_STEP, device=None):
@@ -1279,6 +1282,10 @@ def set_brightness(mag, up, step=BRIGHT_STEP, device=None):
         if not _bright_warned:
             _bright_warned = True
             log("brightness: no readable backlight device on this machine")
+        # Silence reads as a broken dial: say why nothing happened (at most every few seconds).
+        if time.monotonic() - _bright_said[0] > 3.0:
+            _bright_said[0] = time.monotonic()
+            osd(message="No screen backlight on this machine")
         return
     delta = int(step) * max(1, int(mag))
     new = max(BRIGHT_MIN, min(100, cur + (delta if up else -delta)))
@@ -1400,6 +1407,9 @@ DEVICE_OVERRIDES = {
 }
 
 
+_open_failed = {}  # name -> the last "cannot open" message logged for it
+
+
 def open_input(name):
     """Open the named device, verifying we got the right one."""
     forced = DEVICE_OVERRIDES.get(name) or ""
@@ -1409,8 +1419,12 @@ def open_input(name):
     try:
         fh = open(path, "rb")
     except OSError as exc:
-        log(f"cannot open {path} for {name}: {exc}")
+        msg = f"cannot open {path} for {name}: {exc}"
+        if _open_failed.get(name) != msg:  # a retry loop must not repeat one line fifty times
+            log(msg)
+            _open_failed[name] = msg
         return None, path  # listed but not openable (yet): the caller may retry soon
+    _open_failed.pop(name, None)
     actual = device_name(fh.fileno())
     if actual != name:
         log(f"REFUSED {path}: expected '{name}', device says '{actual}'")

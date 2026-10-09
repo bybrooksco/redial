@@ -24,7 +24,7 @@ names and other things you may not want to share.
 Try these, in any order. For each, note **worked / worked but confusing / did not work / skipped**,
 and a few words if it was not "worked".
 
-1. Turn the dial and change the volume.
+1. **Before you open anything or read anything**, turn the dial. What happened on screen? Did you know what it was doing? (If you can, ask yourself this the very first time, then write down what you saw.)
 2. Open the settings: Omarchy menu (`SUPER+SPACE`) > **Setup > Surface Dial**.
 3. Hover a tool in the settings window to read what it does.
 4. Hold the dial's button until a menu appears, turn to pick a different tool (for example Scroll),
@@ -34,6 +34,7 @@ and a few words if it was not "worked".
    feel different straight away?
 7. Click the dial once, twice and three times. Did you know what each one would do?
 8. Close the settings with Escape.
+9. While you use it, short lines of hints may appear on screen (for example "Press the dial: mute"). Did one show up? Was it clear? Was it helpful, too soon, or annoying? You can turn them off on the **Feel** page ("Hints while you learn").
 
 ## 3b. Only if you want to
 

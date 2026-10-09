@@ -9,7 +9,7 @@ A working build with an installer, an uninstaller and a testing plan. It was fir
 renumbered on 2026-10-09: by the 1.0 checklist below it is nowhere near done, and 0.9.x is kept for
 the stage when people other than the author use it.
 
-## 0.8.1: first-run experience
+## 0.8.1: first-run experience (done; this is the build for the first friend)
 
 The first informal test (2026-10-08) showed that turning the dial for the first time does too little.
 This stage adds a visible response on the first turn and an adaptive, dial-driven introduction that

@@ -8,7 +8,7 @@ other than its author, so please read this page before you install. It is short.
 Software that makes a Microsoft Surface Dial (the haptic knob) work as a control for an
 [Omarchy](https://omarchy.org) desktop: turn it for volume, scrolling, zoom, switching windows and
 more; hold the button to pick a tool; click for what you choose. It includes an on-screen display
-and a settings window. It also supports the Surface Pen's buttons and eraser. It is free and MIT
+and a settings window. A new user is also shown a few short hints as they go, one idea at a time, which can be turned off. It also supports the Surface Pen's buttons and eraser. It is free and MIT
 licensed.
 
 ## What you need
@@ -61,6 +61,12 @@ Nothing is sent anywhere: the daemon makes no network connections. It keeps a sm
 which gestures fired, and occasionally an application name (for example the window the pen's
 eraser was used in). It does not record what you type. **Look at the log before sending it to
 anyone.** The optional "Quick assistant" action only runs the command you yourself put in the config.
+
+The hints that teach you the dial keep their progress in `~/.config/dial-radial/progress.json`: which
+hints you have seen and plain counts of how many steps, clicks, menu openings and tool choices you have
+made. It stays on your computer, is never sent anywhere, and is not read by anything but the dial's own
+program. You can turn the hints off ("Hints while you learn" on the Feel page), and `--purge` on the
+uninstaller moves the file to the backup folder with your settings.
 
 ## Things to know before you click
 

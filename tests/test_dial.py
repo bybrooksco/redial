@@ -387,6 +387,16 @@ class Brightness(unittest.TestCase):
             m.set_brightness(mag, False)
             self.assertEqual(self.sent[0][-1], f"{60 - 2 * mag}%")
 
+    def test_with_no_backlight_it_says_so_instead_of_staying_silent(self):
+        said = []
+        m.osd = lambda **k: said.append(k)
+        m._bright_said[0] = -1e9
+        self.pct = None
+        m.set_brightness(1, True)
+        m.set_brightness(1, True)  # a second turn right away does not repeat it
+        self.assertEqual(said, [{"message": "No screen backlight on this machine"}])
+        self.assertEqual(self.sent, [])
+
     def test_device_is_always_named(self):
         m.set_brightness(1, True)
         self.assertEqual(self.sent[0][:4], ["brightnessctl", "-q", "-d", "intel_backlight"])
@@ -407,8 +417,9 @@ class Brightness(unittest.TestCase):
         m.set_brightness(1, True)
         self.assertEqual(self.sent, [])
 
-    def test_no_backlight_does_nothing(self):
+    def test_no_backlight_changes_nothing(self):
         m.read_brightness = lambda d=None: None
+        m.osd = lambda **k: None  # the message has its own test
         m._bright_warned = False
         m.set_brightness(1, True)
         self.assertEqual(self.sent, [])
@@ -2003,6 +2014,25 @@ class DeviceDiscovery(Base):
         fx.set(m, "find_input", lambda name: "/nonexistent/event0")
         self.assertEqual(m.open_input("x"), (None, "/nonexistent/event0"))  # listed, not openable
 
+    def test_a_failure_to_open_is_logged_once_not_on_every_retry(self):
+        fx = Fixture(self)
+        logs = []
+        fx.set(m, "log", logs.append)
+        fx.set(m, "find_input", lambda name: "/nonexistent/event0")
+        m._open_failed.clear()
+        for _ in range(5):
+            m.open_input("x")
+        self.assertEqual(len(logs), 1)
+        r, w = os.pipe()
+        os.close(w)
+        fx.set(m, "find_input", lambda name: f"/proc/self/fd/{r}")
+        fx.set(m, "device_name", lambda fd: "x")
+        m.open_input("x")[0].close()  # it opens: the next failure is news again
+        fx.set(m, "find_input", lambda name: "/nonexistent/event0")
+        m.open_input("x")
+        self.assertEqual(len(logs), 2)
+        os.close(r)
+
     def test_device_name_of_a_non_device_is_empty(self):
         r, w = os.pipe()
         self.addCleanup(os.close, r)
@@ -2905,7 +2935,6 @@ def shutil_which(name):
     return shutil.which(name)
 
 
-@unittest.skipUnless(_git_checkout_available(), "needs a git checkout to build the installer")
 class FirstTurnFeedback(Base):
     """R1: the dial answers the first movement, and says so when it connects."""
 
@@ -3111,6 +3140,15 @@ class GuideTests(Base):
         g.event("menu_same")
         self.assertEqual(self.said, ["Turn to a tool, then click to choose it"])
 
+    def test_the_choosing_hint_answers_at_once_even_right_after_another_hint(self):
+        g = self.guide()
+        g.event("click")
+        self.steps(g, m.GUIDE_STEPS_BEFORE_HINT)  # the hold hint
+        self.assertEqual(self.said, ["Hold the button to choose a tool"])
+        g.event("menu")
+        g.event("menu_same")  # seconds later: they opened the menu and let go
+        self.assertEqual(self.said[-1], "Keep holding, turn to a tool, then let go")
+
     def test_choosing_a_tool_completes_that_stage(self):
         g = self.guide()
         g.event("menu")
@@ -3307,6 +3345,7 @@ class GuideHooks(Base):
         self.assertGreaterEqual(self.seen.count("step"), 1)
 
 
+@unittest.skipUnless(_git_checkout_available(), "needs a git checkout to build the installer")
 class SelfInstaller(unittest.TestCase):
     """scripts/make-installer.sh + the single-file installer, run in a scratch HOME."""
 

@@ -5,7 +5,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Toward 0.8.1 (first-run experience).
+## [0.8.1] - 2026-10-09 (first-run experience)
+
+The first informal test (2026-10-08) showed that turning the dial for the first time did too little and that nobody reads a settings page. This version answers the first turn, teaches by what you do, and wakes faster.
 
 ### Added
 - **The dial now answers on screen.** Each volume or brightness step shows Omarchy's own on-screen display with the new level (muted volume shows the muted icon). Before, turning the default tool changed the volume silently.
@@ -14,6 +16,9 @@ Toward 0.8.1 (first-run experience).
 - **Move Window: click flips between workspaces and positions.** It still carries the focused window to the next or previous workspace; a click now switches to moving it around the current workspace, one position per step, by swapping it with the next or previous window in the workspace's order (so it passes through every position however many windows there are, like the Windows tool does for focus). The on-screen message says which mode you are in. A fresh arm always starts on workspaces.
 - **On-screen display setting** (`osd`, Feel page, default on): the volume or brightness overlay and the first-turn tool name can be turned off for a cleaner screen. They are on by default because they are what makes the dial answer a new user, and they are handy for movies. Applies live.
 - **Hints while you learn (the adaptive introduction, first version).** A small engine watches what the person does (steps, clicks, opening the tool menu, choosing a tool) and, when their behaviour shows they are ready, shows one short line on the on-screen display: press the dial (after ten steps of turning with no press), hold to choose a tool, how to finish choosing (when the menu closes without a change), and finally where the settings are. Each hint shows at most three times and never within 30 seconds of another; doing the thing makes it go away for good. Progress and plain usage counts are kept in `progress.json` next to the config, on this machine only. `guide` (Feel page: Hints while you learn) turns it off; it also stays quiet when the on-screen display is off. `surface-dial-hypr --reset-guide` starts the introduction again. It only watches: it never changes what the dial does.
+- **A sleeping dial is noticed in about 25 ms, not seconds.** (Measured with a virtual dial that disappears and reappears: the daemon is listening again 23 ms after the device returns.) A repeated "cannot open" is logged once, not on every retry.
+- **Brightness with no backlight says so** ("No screen backlight on this machine") instead of doing nothing.
+- The beta notes and feedback sheet describe the hints and the new `progress.json` file.
 - The connect message now says what turning does ("Surface Dial ready: Turn to change volume").
 
 ## [0.8.0] - 2026-10-07 (first beta package)
