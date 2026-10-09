@@ -2101,7 +2101,7 @@ class VirtualPointerWrites(Base):
 class MainLoop(Base):
     """main: attach, pump, detach, retry; with the pen and status threads switched off."""
 
-    def run_main(self, fx, opens):
+    def run_main(self, fx, opens, sleeps=None):
         seq = iter(opens)
 
         def open_input(name):
@@ -2109,6 +2109,8 @@ class MainLoop(Base):
             return nxt if nxt is not None else (None, None)
 
         def sleep(secs):
+            if sleeps is not None:
+                sleeps.append(secs)
             raise StopLoop
 
         class NoThread:
@@ -2131,6 +2133,27 @@ class MainLoop(Base):
         m._status["attached"] = False
         self.run_main(fx, [None])
         self.assertFalse(m._status["attached"])  # never claimed to be attached
+
+    def test_it_looks_for_a_returning_dial_several_times_a_second(self):
+        fx = Fixture(self)
+        sleeps = []
+        self.run_main(fx, [None], sleeps=sleeps)
+        self.assertEqual(sleeps, [m.ATTACH_POLL_S])
+        self.assertLessEqual(m.ATTACH_POLL_S, 0.5)  # waking should feel instant
+
+    def test_after_a_detach_it_comes_back_quickly_too(self):
+        fx = Fixture(self)
+        sleeps = []
+        fh = pipe_with()
+        self.run_main(fx, [(fh, "/dev/event7")], sleeps=sleeps)
+        self.assertEqual(sleeps, [m.ATTACH_POLL_S])
+
+    def test_the_log_says_how_long_the_dial_was_away(self):
+        fx = Fixture(self)
+        logs = []
+        fx.set(m, "log", logs.append)
+        self.run_main(fx, [(pipe_with(), "/dev/event7")])
+        self.assertTrue(any(line.startswith("attached to /dev/event7 (away ") for line in logs))
 
     def test_attach_pump_detach_marks_the_status_both_ways(self):
         fx = Fixture(self)
