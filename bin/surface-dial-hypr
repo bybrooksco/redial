@@ -384,6 +384,27 @@ def write_json_atomic(path, doc, **dump_kw):
     os.replace(tmp, path)
 
 
+def launch(cmd):
+    """Start a program and leave it running; never wait for it or kill it.
+
+    For things the user opens (launchers, the assistant), which may stay open for hours. run()
+    waits for the command and kills it after 5 s, and it holds the one action worker meanwhile,
+    which is right for short commands whose output we check and wrong here.
+    """
+    try:
+        p = subprocess.Popen(
+            cmd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        log(f"{cmd[0]} could not start: {exc}")
+        return
+    threading.Thread(target=p.wait, daemon=True).start()  # reap it when it exits
+
+
 def run(cmd):
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
@@ -1594,6 +1615,8 @@ def hypr_json(what):
 # niri are built from their documented command lines. Anything else gets NoBackend, which says
 # once that window tools are unavailable and leaves everything else working.
 
+FOCUS_CACHE_S = 0.15
+
 TERMINAL_APP_IDS = {
     "alacritty", "kitty", "foot", "footclient", "wezterm", "org.wezfurlong.wezterm", "ghostty",
     "com.mitchellh.ghostty", "xterm", "urxvt", "st", "konsole", "gnome-terminal-server",
@@ -1683,8 +1706,21 @@ class CommandBackend(Backend):
     def active(self):
         return {}
 
+    _seen = (0.0, "")
+
     def focused_class(self):
-        return str(self.active().get("class", ""))
+        """The focused window's class, remembered for 150 ms.
+
+        The Scroll tool asks on every knob event (about 100 a second) and each answer here costs
+        a process spawn, so ask at most a few times a second. The window cannot change faster
+        than a person can alt-tab.
+        """
+        at, cls = self._seen
+        now = time.monotonic()
+        if now - at > FOCUS_CACHE_S:
+            cls = str(self.active().get("class", ""))
+            self._seen = (now, cls)
+        return cls
 
     def focused_is_terminal(self):
         return self.focused_class().lower() in TERMINAL_APP_IDS
@@ -2253,7 +2289,7 @@ def _compile_exec(spec):
     if not _is_string_list(cmd):
         log(f"exec needs a list of strings for cmd: {spec!r}")
         return None
-    return lambda mag, _c=list(cmd): run(_c)
+    return lambda mag, _c=list(cmd): launch(_c)
 
 
 def _compile_hypr(spec):
@@ -2357,15 +2393,15 @@ def _compile_assistant(spec):
     one instead of guessing.
     """
 
-    def launch(mag):
+    def start(mag):
         conf = live_config().get("assistant")
         cmd = conf.get("cmd") if isinstance(conf, dict) else None
         if not cmd or not _is_string_list(cmd):
             notify("Quick assistant", 'Not set up: add an "assistant" command to config.json')
             return
-        run(list(cmd))
+        launch(list(cmd))
 
-    return launch
+    return start
 
 
 def _compile_wheel(spec):
@@ -3423,6 +3459,16 @@ class Dial:
         MENU_UI.highlight(self.menu_pick)
         speak(TOOLS[self.menu_pick]["name"])
 
+    def detach(self):
+        """The dial went away: disarm the tool and forget half-made gestures.
+
+        Disarming matters because Zoom holds Ctrl for as long as it is armed; the auto-return timer
+        runs only while the dial is being read, so without this a dropped link mid-zoom would leave
+        every key on the desktop pressed with Ctrl until the dial came back.
+        """
+        self._arm(IDLE_TOOL, time.monotonic())
+        self.reset_gestures()
+
     def reset_gestures(self):
         """Forget any half-finished click or hold.
 
@@ -3989,7 +4035,7 @@ def main():
         except OSError as exc:
             log(f"detached ({exc})")
         _status["attached"] = False
-        dial.reset_gestures()
+        dial.detach()
         lost_at = time.monotonic()
         time.sleep(REATTACH_PAUSE_S)
 

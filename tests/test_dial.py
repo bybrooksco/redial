@@ -117,7 +117,7 @@ def install_stubs(cfg_path):
     m.osd = lambda **k: OSDS.append(k)
     m._show_level = lambda kind: SHOWN.append(kind)
     _level_reset()
-    m.run = lambda cmd: EVENTS.append("EXEC:" + " ".join(cmd[:2]))
+    m.run = m.launch = lambda cmd: EVENTS.append("EXEC:" + " ".join(cmd[:2]))
     m.hypr = lambda lua: EVENTS.append("HYPR:" + lua)
     m.CONFIG_PATH = cfg_path
     m.ACTIONS.inline = True  # assert straight after a gesture, not after a worker thread
@@ -3760,6 +3760,64 @@ class GuideModes(Base):
         self.assertNotIn("intro", m.tool_lines("No Such Tool"))
 
 
+class LaunchDoesNotWait(unittest.TestCase):
+    def test_a_long_running_program_is_started_and_left_alone(self):
+        t0 = time.monotonic()
+        m.launch(["sleep", "30"])
+        self.assertLess(time.monotonic() - t0, 1.0)
+        pids = subprocess.run(["pgrep", "-xf", "sleep 30"], capture_output=True, text=True)
+        self.assertTrue(pids.stdout.split(), "the program must still be running")
+        subprocess.run(["pkill", "-xf", "sleep 30"])
+
+    def test_a_missing_program_is_logged_not_raised(self):
+        m.launch(["/nonexistent/program"])
+
+    def test_exec_actions_and_the_assistant_use_it(self):
+        started = []
+        real = m.launch
+        m.launch = started.append
+        self.addCleanup(lambda: setattr(m, "launch", real))
+        m._compile_exec({"do": "exec", "cmd": ["obsidian"]})(1)
+        self.assertEqual(started, [["obsidian"]])
+
+
+class FocusLookupIsCached(unittest.TestCase):
+    def test_many_quick_asks_cost_one_lookup(self):
+        calls = []
+        b = m.SwayBackend()
+        b.active = lambda: calls.append(1) or {"class": "foot"}
+        for _ in range(100):
+            self.assertEqual(b.focused_class(), "foot")
+        self.assertEqual(len(calls), 1)
+
+    def test_it_asks_again_after_the_cache_expires(self):
+        calls = []
+        b = m.SwayBackend()
+        b.active = lambda: calls.append(1) or {"class": "foot"}
+        b.focused_class()
+        b._seen = (b._seen[0] - 1.0, b._seen[1])
+        b.focused_class()
+        self.assertEqual(len(calls), 2)
+
+
+class DetachReleasesTheModifier(unittest.TestCase):
+    def test_a_dropped_dial_releases_a_held_ctrl(self):
+        install_stubs(os.path.join(tempfile.mkdtemp(), "config.json"))
+        pressed, released = [], []
+        real = (m.press_mod, m.release_mod)
+        m.press_mod = pressed.append
+        m.release_mod = lambda: released.append(1)
+        self.addCleanup(
+            lambda: (setattr(m, "press_mod", real[0]), setattr(m, "release_mod", real[1]))
+        )
+        d = m.Dial()
+        d._arm(tool_index("Zoom"), 1.0)
+        self.assertEqual(pressed, ["ctrl"])
+        d.detach()
+        self.assertEqual(released, [1])
+        self.assertEqual(d.tool, m.IDLE_TOOL)
+
+
 class AtomicJsonWrites(unittest.TestCase):
     def test_writes_valid_json_and_leaves_no_temp_file(self):
         d = tempfile.mkdtemp()
@@ -3924,6 +3982,7 @@ class WindowManagerBackends(unittest.TestCase):
         b = m.SwayBackend()
         b.active = lambda: {"class": "Alacritty"}
         self.assertTrue(b.focused_is_terminal())
+        b._seen = (0.0, "")
         b.active = lambda: {"class": "firefox"}
         self.assertFalse(b.focused_is_terminal())
 
