@@ -3761,6 +3761,7 @@ class GuideModes(Base):
         self.assertNotIn("intro", m.tool_lines("No Such Tool"))
 
 
+@unittest.skipIf(os.geteuid() == 0, "the installer refuses to run as root, as CI containers do")
 @unittest.skipUnless(_git_checkout_available(), "needs a git checkout to build the installer")
 class SelfInstaller(unittest.TestCase):
     """scripts/make-installer.sh + the single-file installer, run in a scratch HOME."""
