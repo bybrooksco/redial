@@ -3761,6 +3761,157 @@ class GuideModes(Base):
         self.assertNotIn("intro", m.tool_lines("No Such Tool"))
 
 
+class WindowManagerBackends(unittest.TestCase):
+    """Tools say what to do; the backend says how for the running compositor."""
+
+    def setUp(self):
+        self.ran = []
+        self.real_run = m.run
+        m.run = lambda cmd: self.ran.append(list(cmd))
+        self.addCleanup(lambda: setattr(m, "run", self.real_run))
+
+    def detect(self, **env):
+        return m.detect_backend(env)
+
+    def test_detection_follows_the_session(self):
+        self.assertEqual(self.detect(HYPRLAND_INSTANCE_SIGNATURE="x").name, "hyprland")
+        self.assertEqual(self.detect(SWAYSOCK="/run/sway").name, "sway")
+        self.assertEqual(self.detect(I3SOCK="/run/i3").name, "i3")
+        self.assertEqual(self.detect(NIRI_SOCKET="/run/niri").name, "niri")
+
+    def test_hyprland_is_the_default_and_other_desktops_get_the_no_op(self):
+        self.assertEqual(self.detect().name, "hyprland")
+        for de in ("GNOME", "KDE", "ubuntu:GNOME", "XFCE"):
+            b = self.detect(XDG_CURRENT_DESKTOP=de)
+            self.assertFalse(b.supported, de)
+
+    def test_the_override_beats_detection(self):
+        self.assertEqual(self.detect(DIAL_WM="niri", SWAYSOCK="/s").name, "niri")
+        self.assertEqual(self.detect(DIAL_WM="none", SWAYSOCK="/s").name, "none")
+        self.assertEqual(self.detect(DIAL_WM="bogus", SWAYSOCK="/s").name, "sway")
+
+    def test_hyprland_renders_exactly_what_the_tools_always_sent(self):
+        sent = []
+        real = m.hypr
+        m.hypr = sent.append
+        self.addCleanup(lambda: setattr(m, "hypr", real))
+        b = m.HyprlandBackend()
+        b.op("cycle", forward=True)
+        b.op("cycle", forward=False)
+        b.op("focus", dir="l")
+        b.op("workspace", to="previous")
+        b.op("send", to="-1")
+        b.op("swap", forward=False)
+        b.op("maximize")
+        b.op("fullscreen")
+        b.op("float")
+        self.assertEqual(
+            sent,
+            [
+                "hl.dsp.window.cycle_next()",
+                "hl.dsp.window.cycle_next({ next = false })",
+                'hl.dsp.focus({ direction = "l" })',
+                'hl.dsp.focus({ workspace = "previous" })',
+                'hl.dsp.window.move({ workspace = "-1" })',
+                "hl.dsp.window.swap({ prev = true })",
+                'hl.dsp.window.fullscreen({ mode = "maximized" })',
+                'hl.dsp.window.fullscreen({ mode = "fullscreen" })',
+                'hl.dsp.window.float({ action = "toggle" })',
+            ],
+        )
+
+    def test_sway_commands(self):
+        b = m.SwayBackend()
+        b.op("cycle", forward=True)
+        b.op("focus", dir="u")
+        b.op("workspace", to="+1")
+        b.op("workspace", to="previous")
+        b.op("send", to="-1")
+        b.op("float")
+        b.op("resize", axis="y", grow=False, step=40)
+        self.assertEqual(
+            self.ran,
+            [
+                ["swaymsg", "focus", "next"],
+                ["swaymsg", "focus", "up"],
+                ["swaymsg", "workspace", "next_on_output"],
+                ["swaymsg", "workspace", "back_and_forth"],
+                ["swaymsg", "move", "container", "to", "workspace", "prev_on_output"],
+                ["swaymsg", "floating", "toggle"],
+                ["swaymsg", "resize", "shrink", "height", "40", "px"],
+            ],
+        )
+
+    def test_i3_uses_its_own_tool(self):
+        m.SwayBackend("i3-msg").op("float")
+        self.assertEqual(self.ran, [["i3-msg", "floating", "toggle"]])
+
+    def test_niri_commands(self):
+        b = m.NiriBackend()
+        b.op("focus", dir="d")
+        b.op("workspace", to="-1")
+        b.op("send", to="+1")
+        b.op("maximize")
+        b.op("resize", axis="x", grow=True, step=40)
+        self.assertEqual(
+            self.ran,
+            [
+                ["niri", "msg", "action", "focus-window-down"],
+                ["niri", "msg", "action", "focus-workspace-up"],
+                ["niri", "msg", "action", "move-window-to-workspace-down"],
+                ["niri", "msg", "action", "maximize-column"],
+                ["niri", "msg", "action", "set-column-width", "+40"],
+            ],
+        )
+
+    def test_every_op_a_tool_uses_has_an_entry_in_every_backend(self):
+        used = set()
+
+        def walk(x):
+            if isinstance(x, dict):
+                if x.get("do") == "wm":
+                    used.add(x["op"])
+                for v in x.values():
+                    walk(v)
+            elif isinstance(x, list):
+                for v in x:
+                    walk(v)
+
+        walk(m.TOOL_LIBRARY)
+        walk(m.CLICK_ACTIONS if hasattr(m, "CLICK_ACTIONS") else [])
+        used.add("resize")
+        self.assertTrue(used)
+        for b in (m.SwayBackend(), m.NiriBackend()):
+            for op in used:
+                self.assertIn(op, b.table, f"{b.name} lacks {op}")
+
+    def test_the_no_op_backend_logs_and_runs_nothing(self):
+        m.Backend().op("float")
+        self.assertEqual(self.ran, [])
+
+    def test_a_wm_action_without_a_known_op_is_refused_at_load(self):
+        self.assertIsNone(m._compile_wm({"do": "wm", "op": "teleport"}))
+
+    def test_terminal_detection_by_app_id(self):
+        b = m.SwayBackend()
+        b.active = lambda: {"class": "Alacritty"}
+        self.assertTrue(b.focused_is_terminal())
+        b.active = lambda: {"class": "firefox"}
+        self.assertFalse(b.focused_is_terminal())
+
+    def test_sway_tree_walk_finds_the_focused_window(self):
+        tree = {
+            "nodes": [
+                {
+                    "nodes": [{"focused": False}],
+                    "floating_nodes": [{"focused": True, "app_id": "x"}],
+                }
+            ]
+        }
+        self.assertEqual(m._swayish_tree_focused(tree)["app_id"], "x")
+        self.assertEqual(m._swayish_tree_focused({}), {})
+
+
 @unittest.skipIf(os.geteuid() == 0, "the installer refuses to run as root, as CI containers do")
 @unittest.skipUnless(_git_checkout_available(), "needs a git checkout to build the installer")
 class SelfInstaller(unittest.TestCase):

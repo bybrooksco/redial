@@ -1574,24 +1574,306 @@ def hypr_json(what):
     return json.loads(p.stdout or "null")
 
 
+# --- window-manager backends -------------------------------------------------------------
+#
+# Tools say WHAT to do ({"do": "wm", "op": "workspace", "to": "+1"}); a backend says HOW for the
+# compositor that is running. The dial itself (reading the device, haptics, volume, brightness,
+# media, keys and scroll through the virtual input device) does not depend on any of this.
+#
+# Ops: cycle(forward) focus(dir l|r|u|d) workspace(to "+1"|"-1"|"previous") send(to "+1"|"-1")
+#      swap(forward) maximize fullscreen float resize(axis x|y, grow, step)
+# plus two queries: focused_class() and focused_is_terminal().
+#
+# Hyprland is the reference backend and renders exactly what the tools always sent. Sway, i3 and
+# niri are built from their documented command lines. Anything else gets NoBackend, which says
+# once that window tools are unavailable and leaves everything else working.
+
+TERMINAL_APP_IDS = {
+    "alacritty", "kitty", "foot", "footclient", "wezterm", "org.wezfurlong.wezterm", "ghostty",
+    "com.mitchellh.ghostty", "xterm", "urxvt", "st", "konsole", "gnome-terminal-server",
+    "org.gnome.terminal", "terminator", "tilix", "xfce4-terminal", "ptyxis", "org.gnome.ptyxis",
+}  # fmt: skip
+
+
+class Backend:
+    name = "none"
+    supported = False
+
+    def op(self, name, **a):
+        log(f"window tool '{name}' is not available here ({self.name})")
+
+    def focused_class(self):
+        return ""
+
+    def focused_is_terminal(self):
+        return False
+
+
+class HyprlandBackend(Backend):
+    name = "hyprland"
+    supported = True
+
+    def op(self, name, **a):
+        if name == "resize":
+            return resize_active(a["axis"], a["grow"], a.get("step", RESIZE_STEP))
+        lua = {
+            "cycle": lambda: (
+                "hl.dsp.window.cycle_next()"
+                if a["forward"]
+                else "hl.dsp.window.cycle_next({ next = false })"
+            ),
+            "focus": lambda: f'hl.dsp.focus({{ direction = "{a["dir"]}" }})',
+            "workspace": lambda: f'hl.dsp.focus({{ workspace = "{a["to"]}" }})',
+            "send": lambda: f'hl.dsp.window.move({{ workspace = "{a["to"]}" }})',
+            "swap": lambda: (
+                "hl.dsp.window.swap({ next = true })"
+                if a["forward"]
+                else "hl.dsp.window.swap({ prev = true })"
+            ),
+            "maximize": lambda: 'hl.dsp.window.fullscreen({ mode = "maximized" })',
+            "fullscreen": lambda: 'hl.dsp.window.fullscreen({ mode = "fullscreen" })',
+            "float": lambda: 'hl.dsp.window.float({ action = "toggle" })',
+        }.get(name)
+        if lua is None:
+            return log(f"unknown window op {name!r}")
+        hypr(lua())
+
+    def focused_class(self):
+        try:
+            return (hypr_json("activewindow") or {}).get("class", "")
+        except HYPR_ERRORS:
+            return ""
+
+    def focused_is_terminal(self):
+        try:
+            tags = (hypr_json("activewindow") or {}).get("tags") or []
+        except HYPR_ERRORS:
+            return False
+        return any(isinstance(t, str) and t.rstrip("*") == "terminal" for t in tags)
+
+
+class CommandBackend(Backend):
+    """A backend that is a table of ops -> argv lists for the compositor's own command-line tool.
+
+    A table entry may be an argv list, a callable taking the op's arguments and returning one,
+    or None for "this compositor has no such thing".
+    """
+
+    supported = True
+    table = {}
+    tool = ""
+
+    def op(self, name, **a):
+        entry = self.table.get(name)
+        if callable(entry):
+            entry = entry(a)
+        if not entry:
+            return log(f"{self.name}: no equivalent for window tool '{name}'")
+        run([self.tool, *self.prefix(), *entry])
+
+    def prefix(self):
+        return []
+
+    def active(self):
+        return {}
+
+    def focused_class(self):
+        return str(self.active().get("class", ""))
+
+    def focused_is_terminal(self):
+        return self.focused_class().lower() in TERMINAL_APP_IDS
+
+
+def _swayish_resize(a):
+    word = "width" if a["axis"] == "x" else "height"
+    return [
+        "resize",
+        "grow" if a["grow"] else "shrink",
+        word,
+        str(a.get("step", RESIZE_STEP)),
+        "px",
+    ]
+
+
+def _swayish_tree_focused(tree):
+    stack = [tree]
+    while stack:
+        n = stack.pop()
+        if n.get("focused"):
+            return n
+        stack.extend(n.get("nodes") or [])
+        stack.extend(n.get("floating_nodes") or [])
+    return {}
+
+
+class SwayBackend(CommandBackend):
+    """Sway, and i3 with `tool = "i3-msg"`. Both speak the i3 command language."""
+
+    name = "sway"
+    tool = "swaymsg"
+    table = {
+        "cycle": lambda a: ["focus", "next" if a["forward"] else "prev"],
+        "focus": lambda a: ["focus", {"l": "left", "r": "right", "u": "up", "d": "down"}[a["dir"]]],
+        "workspace": lambda a: [
+            "workspace",
+            {"+1": "next_on_output", "-1": "prev_on_output", "previous": "back_and_forth"}[a["to"]],
+        ],
+        "send": lambda a: [
+            "move",
+            "container",
+            "to",
+            "workspace",
+            "next_on_output" if a["to"] == "+1" else "prev_on_output",
+        ],
+        # i3/sway can only swap with a named container, so "swap" moves the window along its row.
+        "swap": lambda a: ["move", "right" if a["forward"] else "left"],
+        # There is no separate "maximize" in this model; fullscreen is the closest.
+        "maximize": ["fullscreen", "toggle"],
+        "fullscreen": ["fullscreen", "toggle"],
+        "float": ["floating", "toggle"],
+        "resize": _swayish_resize,
+    }
+
+    def __init__(self, tool="swaymsg"):
+        self.tool = tool
+        self.name = "sway" if tool == "swaymsg" else "i3"
+
+    def active(self):
+        try:
+            p = subprocess.run(
+                [self.tool, "-t", "get_tree"], capture_output=True, text=True, timeout=2
+            )
+            node = _swayish_tree_focused(json.loads(p.stdout or "{}"))
+        except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
+            return {}
+        props = node.get("window_properties") or {}
+        return {"class": node.get("app_id") or props.get("class") or ""}
+
+
+class NiriBackend(CommandBackend):
+    """niri scrolls windows in columns, so left/right moves between columns, up/down within one."""
+
+    name = "niri"
+    tool = "niri"
+    table = {
+        "cycle": lambda a: [
+            "action",
+            "focus-column-right" if a["forward"] else "focus-column-left",
+        ],
+        "focus": lambda a: [
+            "action",
+            {
+                "l": "focus-column-left",
+                "r": "focus-column-right",
+                "u": "focus-window-up",
+                "d": "focus-window-down",
+            }[a["dir"]],
+        ],
+        "workspace": lambda a: [
+            "action",
+            {
+                "+1": "focus-workspace-down",
+                "-1": "focus-workspace-up",
+                "previous": "focus-workspace-previous",
+            }[a["to"]],
+        ],  # fmt: skip
+        "send": lambda a: [
+            "action",
+            "move-window-to-workspace-down" if a["to"] == "+1" else "move-window-to-workspace-up",
+        ],
+        "swap": lambda a: ["action", "move-column-right" if a["forward"] else "move-column-left"],
+        "maximize": ["action", "maximize-column"],
+        "fullscreen": ["action", "fullscreen-window"],
+        "float": ["action", "toggle-window-floating"],
+        "resize": lambda a: [
+            "action",
+            "set-column-width" if a["axis"] == "x" else "set-window-height",
+            f"{'+' if a['grow'] else '-'}{a.get('step', RESIZE_STEP)}",
+        ],
+    }
+
+    def prefix(self):
+        return ["msg"]
+
+    def active(self):
+        try:
+            p = subprocess.run(
+                ["niri", "msg", "--json", "focused-window"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            w = json.loads(p.stdout or "null") or {}
+        except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
+            return {}
+        return {"class": w.get("app_id") or "" if isinstance(w, dict) else ""}
+
+
+def detect_backend(env=None):
+    """Pick the backend for the running session. DIAL_WM overrides (hyprland|sway|i3|niri|none).
+
+    Hyprland is the default when nothing else is recognised, because that is what this was built
+    on. A desktop that is clearly something else (GNOME, KDE, ...) gets the no-op backend.
+    """
+    env = os.environ if env is None else env
+    forced = env.get("DIAL_WM", "").lower()
+    if forced in ("sway", "i3", "niri", "none", "hyprland"):
+        choice = forced
+    elif env.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        choice = "hyprland"
+    elif env.get("NIRI_SOCKET"):
+        choice = "niri"
+    elif env.get("SWAYSOCK"):
+        choice = "sway"
+    elif env.get("I3SOCK"):
+        choice = "i3"
+    elif any(
+        k in env.get("XDG_CURRENT_DESKTOP", "").upper()
+        for k in ("GNOME", "KDE", "XFCE", "COSMIC", "MATE", "CINNAMON")
+    ):
+        choice = "none"
+    else:
+        choice = "hyprland"
+    return {
+        "hyprland": HyprlandBackend,
+        "sway": SwayBackend,
+        "i3": lambda: SwayBackend("i3-msg"),
+        "niri": NiriBackend,
+        "none": Backend,
+    }[choice]()
+
+
+_backend_cache = {"key": None, "backend": None}
+
+
+def backend():
+    """The current backend; re-detected only if the session's environment changes."""
+    keys = (
+        "DIAL_WM",
+        "HYPRLAND_INSTANCE_SIGNATURE",
+        "NIRI_SOCKET",
+        "SWAYSOCK",
+        "I3SOCK",
+        "XDG_CURRENT_DESKTOP",
+    )
+    key = tuple(os.environ.get(k, "") for k in keys)
+    if _backend_cache["key"] != key:
+        _backend_cache.update(key=key, backend=detect_backend())
+        log(f"window manager backend: {_backend_cache['backend'].name}")
+    return _backend_cache["backend"]
+
+
 def focused_is_terminal():
     """Is the focused window a terminal? Omarchy tags terminals `terminal`; so do we.
 
     In a terminal Ctrl+C is "interrupt" and kills the running program, so copy and paste there use
     Ctrl+Insert and Shift+Insert, exactly as Omarchy's own universal copy and paste do.
     """
-    try:
-        tags = (hypr_json("activewindow") or {}).get("tags") or []
-    except HYPR_ERRORS:
-        return False
-    return any(isinstance(t, str) and t.rstrip("*") == "terminal" for t in tags)
+    return backend().focused_is_terminal()
 
 
 def focused_class():
-    try:
-        return (hypr_json("activewindow") or {}).get("class", "")
-    except HYPR_ERRORS:
-        return ""
+    return backend().focused_class()
 
 
 EVIOCGNAME = 0x81004506  # _IOR('E', 0x06, char[256])
@@ -1895,7 +2177,8 @@ def dictation_toggle():
 # action spec, compiled here into a callable that takes the step magnitude.
 #
 #   {"do": "exec",      "cmd": ["wpctl", "set-mute", "..."]}
-#   {"do": "hypr",      "lua": "hl.dsp.window.cycle_next()"}
+#   {"do": "wm",        "op": "cycle", "forward": true}   - window-manager verb, any compositor
+#   {"do": "hypr",      "lua": "hl.dsp.window.cycle_next()"}   - Hyprland only
 #   {"do": "key",       "keys": ["ctrl", "z"], "repeat": false}
 #                        - optional "terminal_keys": [...] replaces keys when a terminal is focused;
 #                          [] means send nothing there
@@ -1975,6 +2258,18 @@ def _compile_hypr(spec):
     return lambda mag, _l=lua: hypr(_l)
 
 
+WM_OPS = ("cycle", "focus", "workspace", "send", "swap", "maximize", "fullscreen", "float")
+
+
+def _compile_wm(spec):
+    op = spec.get("op")
+    if op not in WM_OPS:
+        log(f"wm needs an op from {WM_OPS}: {spec!r}")
+        return None
+    args = {k: v for k, v in spec.items() if k not in ("do", "op", "label")}
+    return lambda mag, _o=op, _a=args: backend().op(_o, **_a)
+
+
 def _compile_key(spec):
     keys = spec.get("keys")
     if not keys or not _is_string_list(keys):
@@ -2023,7 +2318,7 @@ def _compile_resize(spec):
         return None
     grow = _direction_up(spec, "grow", "shrink")
     step = _spec_number(spec, "step", RESIZE_STEP, int)
-    return lambda mag, _a=axis, _g=grow, _s=step: resize_active(_a, _g, _s)
+    return lambda mag, _a=axis, _g=grow, _s=step: backend().op("resize", axis=_a, grow=_g, step=_s)
 
 
 def _compile_volume(spec):
@@ -2075,6 +2370,7 @@ def _compile_wheel(spec):
 _ACTION_VERBS = {
     "exec": _compile_exec,
     "hypr": _compile_hypr,
+    "wm": _compile_wm,
     "key": _compile_key,
     "brightness": _compile_brightness,
     "seek": _compile_seek,
@@ -2132,12 +2428,12 @@ TOOL_LIBRARY = [
         "description": "Cycle focus through your open windows. Click maximizes the focused window.",
         "icon": "\uf2d0",
         "detent": 150,
-        "cw": {"do": "hypr", "lua": "hl.dsp.window.cycle_next()"},
-        "ccw": {"do": "hypr", "lua": "hl.dsp.window.cycle_next({ next = false })"},
+        "cw": {"do": "wm", "op": "cycle", "forward": True},
+        "ccw": {"do": "wm", "op": "cycle", "forward": False},
         "click": {
-            "do": "hypr",
+            "do": "wm",
             "label": "maximize",
-            "lua": 'hl.dsp.window.fullscreen({ mode = "maximized" })',
+            "op": "maximize",
         },
     },
     {
@@ -2149,12 +2445,13 @@ TOOL_LIBRARY = [
         "detent": 450,
         # Deliberately unscaled by speed: "+1" can create workspaces, so a fast
         # spin under magnitude scaling would fling you into workspace 20.
-        "cw": {"do": "hypr", "lua": 'hl.dsp.focus({ workspace = "+1" })'},
-        "ccw": {"do": "hypr", "lua": 'hl.dsp.focus({ workspace = "-1" })'},
+        "cw": {"do": "wm", "op": "workspace", "to": "+1"},
+        "ccw": {"do": "wm", "op": "workspace", "to": "-1"},
         "click": {
-            "do": "hypr",
+            "do": "wm",
             "label": "last workspace",
-            "lua": 'hl.dsp.focus({ workspace = "previous" })',
+            "op": "workspace",
+            "to": "previous",
         },
     },
     {
@@ -2374,15 +2671,15 @@ TOOL_LIBRARY = [
         "detent": 60,
         "default": False,
         "axis_toggle": True,
-        "cw": {"do": "hypr", "lua": 'hl.dsp.focus({ direction = "r" })'},
-        "ccw": {"do": "hypr", "lua": 'hl.dsp.focus({ direction = "l" })'},
+        "cw": {"do": "wm", "op": "focus", "dir": "r"},
+        "ccw": {"do": "wm", "op": "focus", "dir": "l"},
         "alt": {
             "base_title": "\u2194  Tile Focus",
             "base_subtitle": "left / right",
             "title": "\u2195  Tile Focus",
             "subtitle": "up / down",
-            "cw": {"do": "hypr", "lua": 'hl.dsp.focus({ direction = "d" })'},
-            "ccw": {"do": "hypr", "lua": 'hl.dsp.focus({ direction = "u" })'},
+            "cw": {"do": "wm", "op": "focus", "dir": "d"},
+            "ccw": {"do": "wm", "op": "focus", "dir": "u"},
         },
         "click": {"do": "none", "label": "toggle left-right/up-down"},
     },
@@ -2400,15 +2697,15 @@ TOOL_LIBRARY = [
         "detent": 60,
         "default": False,
         "axis_toggle": True,
-        "cw": {"do": "hypr", "lua": 'hl.dsp.window.move({ workspace = "+1" })'},
-        "ccw": {"do": "hypr", "lua": 'hl.dsp.window.move({ workspace = "-1" })'},
+        "cw": {"do": "wm", "op": "send", "to": "+1"},
+        "ccw": {"do": "wm", "op": "send", "to": "-1"},
         "alt": {
             "base_title": "\u21c4  Move Window",
             "base_subtitle": "to another workspace",
             "title": "\u25a6  Move Window",
             "subtitle": "around this workspace",
-            "cw": {"do": "hypr", "lua": "hl.dsp.window.swap({ next = true })"},
-            "ccw": {"do": "hypr", "lua": "hl.dsp.window.swap({ prev = true })"},
+            "cw": {"do": "wm", "op": "swap", "forward": True},
+            "ccw": {"do": "wm", "op": "swap", "forward": False},
         },
         "click": {"do": "none", "label": "toggle workspaces/tiles"},
     },

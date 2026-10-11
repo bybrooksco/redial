@@ -24,6 +24,14 @@ plus a hint for each tool the first time it is tried.
 
 Fixes for anything found in use before a tester gets it, starting with scrolling in terminals.
 
+## Other compositors (work in progress, branch `compositor-backends`)
+
+Window tools go through a backend: Hyprland (reference), Sway/i3 and niri written, untested on a real
+session. Next: run each in a nested session and fix what that shows; an on-screen display that does not
+need Quickshell (notifications) so GNOME and KDE feel finished; then GNOME/KDE window tools through
+D-Bus. The dial's own input, haptics, volume, brightness, media and key tools do not depend on the
+compositor. See CHANGELOG, Unreleased.
+
 ## 0.9.0: first outside testers
 
 A few people who already run Omarchy and own a Surface Dial install it and use it for ordinary
