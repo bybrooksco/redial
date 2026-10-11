@@ -12,6 +12,10 @@ for _ in $(seq 1 45); do
   [ -n "$MAC" ] && break
   sleep 1
 done
+# Found it (or gave up): stop scanning now rather than waiting out the full 45 s, so pairing starts
+# while the dial is still in pairing mode.
+bluetoothctl scan off >/dev/null 2>&1
+kill $SCAN_PID 2>/dev/null
 wait $SCAN_PID 2>/dev/null
 
 if [ -z "$MAC" ]; then

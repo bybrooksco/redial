@@ -114,8 +114,9 @@ Item {
   // ever step per detent through that path. A socket makes the motion
   // continuous at no meaningful cost.
   SocketServer {
-    active: true
-    path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/dial-radial.sock"
+    // No /tmp fallback: it is shared, so another user could plant a socket there.
+    active: !!Quickshell.env("XDG_RUNTIME_DIR")
+    path: Quickshell.env("XDG_RUNTIME_DIR") + "/dial-radial.sock"
 
     handler: Socket {
       parser: SplitParser {

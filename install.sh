@@ -88,8 +88,6 @@ else
     have notify-send "notify-send (on-screen messages)" \
         "no notifier found -- the dial's on-screen messages won't show (everything else works)"
 fi
-have dbus-monitor "dbus-monitor (Bluetooth auto-recovery on resume)" \
-    "dbus-monitor not found -- the dial won't auto-reconnect after suspend/resume (everything else works)"
 have voxtype "voxtype (double-click dictation)" \
     "voxtype not found -- double-click dictation will do nothing"
 have brightnessctl "brightnessctl (Brightness tool)" \

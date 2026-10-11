@@ -3361,6 +3361,11 @@ class GuideHooks(Base):
         d = m.Dial()
         d.tool = tool_index("Scroll")
         m.POINTER = types.SimpleNamespace(scroll=lambda *a, **k: None)
+        real = m.focused_class
+        m.focused_class = lambda: (
+            ""
+        )  # not the live desktop: some focused windows suppress scrolling
+        self.addCleanup(lambda: setattr(m, "focused_class", real))
         d.on_rotate(m.SCROLL_TICK * 3, 0.0)
         self.assertGreaterEqual(self.seen.count("step"), 1)
 
@@ -3758,6 +3763,51 @@ class GuideModes(Base):
 
     def test_a_tool_the_library_does_not_know_has_no_introduction(self):
         self.assertNotIn("intro", m.tool_lines("No Such Tool"))
+
+
+class PrivateFiles(unittest.TestCase):
+    def test_old_world_readable_files_are_tightened(self):
+        root = tempfile.mkdtemp()
+        state, config = os.path.join(root, "state"), os.path.join(root, "cfg")
+        for d in (state, config):
+            os.makedirs(d, mode=0o755)
+        log_path, cfg_path = os.path.join(state, "daemon.log"), os.path.join(config, "config.json")
+        for f in (log_path, cfg_path):
+            with open(f, "w") as fh:
+                fh.write("x")
+            os.chmod(f, 0o644)
+        old_mask = os.umask(0o022)
+        real = (m.LOG_PATH, m.CONFIG_PATH)
+        m.LOG_PATH, m.CONFIG_PATH = log_path, cfg_path
+        self.addCleanup(
+            lambda: (setattr(m, "LOG_PATH", real[0]), setattr(m, "CONFIG_PATH", real[1]))
+        )
+        self.addCleanup(lambda: os.umask(old_mask))
+        m.make_private()
+        self.assertEqual(os.stat(state).st_mode & 0o777, 0o700)
+        self.assertEqual(os.stat(config).st_mode & 0o777, 0o700)
+        self.assertEqual(os.stat(log_path).st_mode & 0o777, 0o600)
+        self.assertEqual(os.stat(cfg_path).st_mode & 0o777, 0o600)
+
+    def test_new_files_are_private_after_it(self):
+        old_mask = os.umask(0o022)
+        self.addCleanup(lambda: os.umask(old_mask))
+        m.make_private()
+        path = os.path.join(tempfile.mkdtemp(), "new.json")
+        m.write_json_atomic(path, {})
+        self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+
+    def test_the_overlay_socket_has_no_tmp_fallback(self):
+        saved = os.environ.pop("XDG_RUNTIME_DIR", None)
+        self.addCleanup(
+            lambda: saved is not None and os.environ.__setitem__("XDG_RUNTIME_DIR", saved)
+        )
+        src = open(m.__file__ if hasattr(m, "__file__") else "bin/surface-dial-hypr").read()
+        self.assertNotIn('"/tmp"), "dial-radial.sock"', src)
+        stream = m.MenuStream()
+        stream.PATH = None
+        stream.connect()
+        self.assertIsNone(stream.sock)
 
 
 class LaunchDoesNotWait(unittest.TestCase):

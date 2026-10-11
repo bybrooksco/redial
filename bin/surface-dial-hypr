@@ -372,6 +372,30 @@ class Actions:
 ACTIONS = Actions()
 
 
+def make_private():
+    """Keep the daemon's own files readable by this user only.
+
+    The log can name windows and the config can name programs; there is no reason for another
+    account on the machine to read either. New files get 0600 through the umask; files and
+    folders made by earlier versions are tightened once, here. Best effort.
+    """
+    os.umask(0o077)
+    state = os.path.dirname(LOG_PATH)
+    config = os.path.dirname(CONFIG_PATH)
+    for path, mode in [(state, 0o700), (config, 0o700)] + [
+        (os.path.join(d, n), 0o600)
+        for d in (state, config)
+        if os.path.isdir(d)
+        for n in os.listdir(d)
+        if os.path.isfile(os.path.join(d, n))
+    ]:
+        try:
+            if os.path.exists(path):
+                os.chmod(path, mode)
+        except OSError:
+            pass
+
+
 def write_json_atomic(path, doc, **dump_kw):
     """Write `doc` as JSON so a reader (the settings window, the shell) never sees half a file.
 
@@ -657,7 +681,13 @@ class MenuStream:
     just without the continuous needle.
     """
 
-    PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "dial-radial.sock")
+    # No /tmp fallback: that directory is shared, so another local user could plant a socket
+    # there. Without a private runtime directory the continuous needle is simply off.
+    PATH = (
+        os.path.join(os.environ["XDG_RUNTIME_DIR"], "dial-radial.sock")
+        if os.environ.get("XDG_RUNTIME_DIR")
+        else None
+    )
     MIN_INTERVAL = 0.012  # ~80Hz ceiling; the panel cannot use more
 
     def __init__(self):
@@ -666,6 +696,8 @@ class MenuStream:
 
     def connect(self):
         self.close()
+        if not self.PATH:
+            return
         try:
             s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             s.settimeout(0.25)
@@ -3989,6 +4021,7 @@ def pump(fh, dial):
 
 
 def main():
+    make_private()
     # Surface Pen support is a separate feature that happens to live in the
     # same daemon. It stays on by default so existing setups are unchanged, and
     # it costs nothing where no pen exists (the watchers simply find no device),
