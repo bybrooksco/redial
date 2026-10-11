@@ -8,6 +8,17 @@ versions follow [Semantic Versioning](https://semver.org/).
 ### Added
 - **Window-manager backends (branch `compositor-backends`).** Tools now describe window actions as verbs (`{"do": "wm", "op": "workspace", "to": "+1"}`) and a backend carries them out for the running compositor. Hyprland is unchanged (it renders exactly the commands it always did); **Sway and i3** (`swaymsg` / `i3-msg`) and **niri** (`niri msg action`) backends are written from their documented command lines; any other desktop (GNOME, KDE, ...) gets a no-op backend that logs once, so Volume, Brightness, Media, Zoom, Scroll, Undo/Redo and the other key-based tools keep working and only the window tools are unavailable. Detected from the session's environment; `DIAL_WM=hyprland|sway|i3|niri|none` overrides. **Sway, i3 and niri are untested on a real session** until someone runs them there; the Quickshell overlay is still Omarchy-only. The old `{"do": "hypr", "lua": ...}` action still works on Hyprland.
 
+### Fixed
+- **Pen eraser pressed Escape while scrolling.** A scroll with the back of the pen often began with a 30 to 60 ms bounce of contact that counted as a tap. Touches shorter than 100 ms are now ignored, and the Pen settings gain an Eraser section: what a quick tap and a press-and-hold do (including "Nothing"), and how short a touch to ignore (`pen.eraser`, `pen.eraser_tap_min_ms`). Applies live.
+- **Launchers were killed after 5 seconds** and held up the dial while they ran. Programs you open (launchers, the assistant) are now started and left alone.
+- **Ctrl could stay held** if the dial dropped while Zoom was armed.
+- **The settings window could overwrite a hand-edited `config.json`** that was caught mid-edit (a trailing comma), and a reload threw away unsaved tool edits. It now pauses writes with a banner until the file is readable again, and keeps unsaved edits.
+- Scroll on Sway, i3 and niri no longer starts a process per knob event (the focus lookup is cached for 150 ms).
+- The pairing script stops scanning as soon as it finds the dial.
+
+### Security
+- The daemon's files are private to your user (0600, folders 0700). The overlay socket has no `/tmp` fallback. The CI token is read-only. SECURITY.md states the rules for downloaded themes and packs.
+
 ## [0.8.2] - 2026-10-11 (teaching styles)
 
 ### Added
