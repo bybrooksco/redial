@@ -5,7 +5,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-10-11 (renamed to re:dial)
+## [0.8.4] - 2026-10-11 (renamed to re:dial)
 
 ### Changed
 - **The project is now re:dial.** "Surface Dial" and "Surface Pen" remain the names of the hardware it works with; the software, its commands and its files are re:dial.

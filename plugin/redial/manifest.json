@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "redial",
   "name": "re:dial",
-  "version": "0.9.0",
+  "version": "0.8.4",
   "description": "Radial tool menu overlay driven by the re:dial daemon.",
   "kinds": ["panel"],
   "keepLoaded": true,
