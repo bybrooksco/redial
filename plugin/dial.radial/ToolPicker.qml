@@ -1053,6 +1053,16 @@ Item {
         ChoiceRow {
           visible: root.page === "feel"
           cfg: root.cfg
+          title: "How hints teach"
+          help: "Adaptive shows each hint when what you do says you are ready. Discover says almost nothing: a hint to press and one to hold, and tool tips as you try each tool. Guided is a short tour on connect, one gesture at a time. Only applies while hints are on."
+          options: [ { key: "adaptive", label: "Adaptive" }, { key: "discover", label: "Discover" },
+                     { key: "guided", label: "Guided tour" } ]
+          current: root.cfgValue("onboarding_mode", "adaptive")
+          onPicked: key => root.setConfigKey("onboarding_mode", key)
+        }
+        ChoiceRow {
+          visible: root.page === "feel"
+          cfg: root.cfg
           title: "Buzz when returning to Volume"
           help: "A short buzz when a tool drops back to Volume."
           options: [ { key: true, label: "On" }, { key: false, label: "Off" } ]

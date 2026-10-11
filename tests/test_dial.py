@@ -3311,7 +3311,13 @@ class GuideHooks(Base):
     def setUp(self):
         super().setUp()
         self.seen = []
-        m.GUIDE = types.SimpleNamespace(event=self.seen.append, flush=lambda: None)
+        self.armed = []
+        m.GUIDE = types.SimpleNamespace(
+            event=self.seen.append,
+            armed=lambda name, rest=False: self.armed.append((name, rest)),
+            attached=lambda: None,
+            flush=lambda: None,
+        )
 
     def test_a_completed_step_is_reported(self):
         d = m.Dial()
@@ -3337,12 +3343,422 @@ class GuideHooks(Base):
         d.on_release(1.1)
         self.assertEqual(self.seen, ["menu", "pick"])
 
+    def test_choosing_a_tool_reports_it_as_armed_and_going_back_as_the_resting_tool(self):
+        d = m.Dial()
+        d.on_press(0.0)
+        d.tick(1.0)
+        d.menu_pick = 1
+        d.on_release(1.1)
+        self.assertEqual(self.armed, [(m.TOOLS[1]["name"], False)])
+        d.disarm(2.0)
+        self.assertEqual(self.armed[-1], (m.TOOLS[m.IDLE_TOOL]["name"], True))
+
+    def test_arming_the_tool_that_is_already_active_is_not_reported(self):
+        d = m.Dial()
+        d._arm(m.IDLE_TOOL, 0.0)
+        self.assertEqual(self.armed, [])
+
     def test_scrolling_counts_as_steps_too(self):
         d = m.Dial()
         d.tool = tool_index("Scroll")
         m.POINTER = types.SimpleNamespace(scroll=lambda *a, **k: None)
         d.on_rotate(m.SCROLL_TICK * 3, 0.0)
         self.assertGreaterEqual(self.seen.count("step"), 1)
+
+
+class GuideModes(Base):
+    """Discover, guided and the per-tool hints, on top of the adaptive stages."""
+
+    def setUp(self):
+        super().setUp()
+        self.path = os.path.join(self.tmp, "progress.json")
+        self.now = [1000.0]
+        self.said = []
+        self.mode = ["adaptive"]
+        self.on = [True]
+        self.lines = {
+            "Windows": {"intro": "Windows: Cycle focus", "click": "Windows: click to maximize"},
+            "Zoom": {"intro": "Zoom: Ctrl+scroll", "click": "Zoom: click to reset"},
+            "Volume": {"intro": "Volume: turn it up", "click": "Volume: click to mute"},
+        }
+
+    def guide(self):
+        return m.Guide(
+            self.path,
+            self.said.append,
+            clock=lambda: self.now[0],
+            enabled=lambda: self.on[0],
+            mode=lambda: self.mode[0],
+            describe=self.lines.get,
+        )
+
+    def steps(self, g, n):
+        for _ in range(n):
+            g.event("step")
+
+    # --- discover
+    def test_discover_says_nothing_to_begin_with(self):
+        self.mode[0] = "discover"
+        g = self.guide()
+        self.steps(g, m.GUIDE_STEPS_BEFORE_HINT - 1)
+        self.assertEqual(self.said, [])
+
+    def test_discover_offers_press_after_a_while_and_hold_right_after_the_first_press(self):
+        self.mode[0] = "discover"
+        g = self.guide()
+        self.steps(g, m.GUIDE_STEPS_BEFORE_HINT)
+        self.assertEqual(self.said, ["Press the dial: mute"])
+        g.event("click")
+        self.assertEqual(self.said[-1], "Hold the button for the tool ring")
+
+    def test_discover_stops_after_hold_and_never_points_to_settings(self):
+        self.mode[0] = "discover"
+        g = self.guide()
+        g.event("click")
+        g.event("menu")
+        self.said.clear()
+        g.event("pick")
+        self.now[0] += 1000
+        self.steps(g, 100)
+        self.assertEqual(self.said, [])
+
+    def test_discover_with_an_early_press_still_hints_hold_on_that_press(self):
+        self.mode[0] = "discover"
+        g = self.guide()
+        g.event("click")
+        self.assertEqual(self.said, ["Hold the button for the tool ring"])
+
+    def test_discover_does_not_show_the_hold_hint_to_someone_who_already_holds(self):
+        self.mode[0] = "discover"
+        g = self.guide()
+        g.event("menu")
+        g.event("click")
+        self.assertEqual(self.said, [])
+
+    # --- per-tool hints
+    def test_a_tool_is_introduced_the_first_time_it_is_picked_and_not_again(self):
+        g = self.guide()
+        g.armed("Windows")
+        self.assertEqual(self.said, ["Windows: Cycle focus"])
+        g.armed("Windows")
+        g.armed("Volume", rest=True)
+        g.armed("Windows")
+        self.assertEqual(len(self.said), 1)
+        self.assertEqual(g.state["tools"]["Windows"]["intro"], 1)
+
+    def test_the_resting_tool_is_never_introduced(self):
+        g = self.guide()
+        g.armed("Volume", rest=True)
+        self.now[0] += m.GUIDE_COOLDOWN_S + 1
+        g.state["done"] = ["press", "hold", "pick", "own"]
+        self.steps(g, 50)
+        self.assertEqual(self.said, [])
+
+    def test_each_new_tool_gets_its_own_introduction(self):
+        g = self.guide()
+        g.armed("Windows")
+        g.armed("Zoom")
+        self.assertEqual(self.said, ["Windows: Cycle focus", "Zoom: Ctrl+scroll"])
+
+    def test_a_tool_with_no_description_is_picked_silently(self):
+        g = self.guide()
+        g.armed("My Custom Tool")
+        self.assertEqual(self.said, [])
+
+    def test_turning_a_tool_a_while_without_clicking_says_what_its_click_does(self):
+        g = self.guide()
+        g.state["done"] = ["press", "hold", "pick", "own"]
+        g.armed("Windows")
+        self.now[0] += m.GUIDE_COOLDOWN_S + 1
+        self.steps(g, m.GUIDE_STEPS_BEFORE_HINT - 1)
+        self.assertEqual(len(self.said), 1)
+        g.event("step")
+        self.assertEqual(self.said[-1], "Windows: click to maximize")
+
+    def test_clicking_the_tool_ends_its_click_hint(self):
+        g = self.guide()
+        g.state["done"] = ["press", "hold", "pick", "own"]
+        g.armed("Windows")
+        g.event("click")
+        self.now[0] += m.GUIDE_COOLDOWN_S + 1
+        self.steps(g, 50)
+        self.assertNotIn("Windows: click to maximize", self.said)
+        self.assertTrue(g.state["tools"]["Windows"]["clicked"])
+
+    def test_the_click_hint_repeats_for_the_next_tool_you_try(self):
+        g = self.guide()
+        g.state["done"] = ["press", "hold", "pick", "own"]
+        for tool in ("Windows", "Zoom"):
+            g.armed(tool)
+            self.now[0] += m.GUIDE_COOLDOWN_S + 1
+            self.steps(g, m.GUIDE_STEPS_BEFORE_HINT)
+        self.assertIn("Windows: click to maximize", self.said)
+        self.assertIn("Zoom: click to reset", self.said)
+
+    def test_a_click_hint_that_has_not_worked_is_dropped_after_a_few_showings(self):
+        g = self.guide()
+        g.state["done"] = ["press", "hold", "pick", "own"]
+        g.armed("Windows")
+        for _ in range(m.GUIDE_MAX_SHOWS + 3):
+            self.now[0] += m.GUIDE_COOLDOWN_S + 1
+            self.steps(g, m.GUIDE_STEPS_BEFORE_HINT)
+        self.assertEqual(self.said.count("Windows: click to maximize"), m.GUIDE_MAX_SHOWS)
+
+    def test_a_click_hint_waits_for_the_cooldown_after_any_other_hint(self):
+        g = self.guide()
+        g.armed("Windows")  # the introduction counts as a hint
+        self.steps(g, m.GUIDE_STEPS_BEFORE_HINT)
+        self.assertEqual(self.said, ["Windows: Cycle focus"])
+
+    def test_a_global_hint_takes_the_turn_when_both_are_due(self):
+        g = self.guide()
+        g.armed("Windows")
+        self.now[0] += m.GUIDE_COOLDOWN_S + 1
+        self.steps(g, m.GUIDE_STEPS_BEFORE_HINT)
+        self.assertEqual(self.said[-1], "Press the dial: mute")
+
+    def test_discover_also_teaches_tools_as_they_are_tried(self):
+        self.mode[0] = "discover"
+        g = self.guide()
+        g.armed("Windows")
+        self.assertEqual(self.said, ["Windows: Cycle focus"])
+
+    def test_tool_hints_are_silent_when_hints_are_off_but_the_steps_still_count(self):
+        self.on[0] = False
+        g = self.guide()
+        g.armed("Windows")
+        self.steps(g, 30)
+        self.assertEqual(self.said, [])
+        self.assertEqual(g.state["tools"]["Windows"]["steps"], 30)
+        self.assertEqual(g.state["tools"]["Windows"]["intro"], 0)
+
+    def test_a_tool_picked_while_hints_were_off_is_introduced_once_they_are_back(self):
+        self.on[0] = False
+        g = self.guide()
+        g.armed("Windows")
+        self.on[0] = True
+        g.armed("Zoom")
+        self.assertEqual(self.said, ["Zoom: Ctrl+scroll"])
+
+    # --- guided tour
+    def tour(self):
+        self.mode[0] = "guided"
+        return self.guide()
+
+    def test_the_tour_asks_for_the_first_step_when_the_dial_connects(self):
+        g = self.tour()
+        g.attached()
+        self.assertEqual(self.said, ["Turn the dial"])
+
+    def test_the_other_styles_do_not_start_a_tour(self):
+        for mode in ("adaptive", "discover"):
+            self.mode[0] = mode
+            g = self.guide()
+            g.attached()
+        self.assertEqual(self.said, [])
+
+    def test_the_tour_goes_through_every_gesture_in_order(self):
+        g = self.tour()
+        g.attached()
+        self.steps(g, m.TOUR_TURN_STEPS - 1)
+        self.assertEqual(self.said, ["Turn the dial"])
+        g.event("step")
+        g.event("click")
+        g.event("menu")
+        g.event("menu_same")
+        g.event("menu")
+        g.event("pick")
+        self.assertEqual(
+            self.said,
+            [
+                "Turn the dial",
+                "Now press it",
+                "Press and hold to open the tool ring",
+                "Let go to close the ring",
+                "Hold, turn to another tool, then let go",
+                "Too fast or slow? Menu > Setup > Surface Dial > Feel",
+            ],
+        )
+        self.assertTrue(g.state["tour"]["done"])
+
+    def test_the_tour_wording_follows_the_tap_menu_setting(self):
+        self.set_cfg(menu_latch=True)
+        g = self.tour()
+        g.attached()
+        self.steps(g, m.TOUR_TURN_STEPS)
+        g.event("click")
+        g.event("menu")
+        self.assertEqual(self.said[-1], "Click to close the ring")
+        g.event("menu_same")
+        self.assertEqual(self.said[-1], "Hold, turn to another tool, then click to choose it")
+
+    def set_cfg(self, **kv):
+        time.sleep(0.005)
+        with open(self.cfg, "w") as f:
+            json.dump(kv, f)
+
+    def test_a_gesture_done_early_moves_the_tour_past_the_steps_before_it(self):
+        g = self.tour()
+        g.attached()
+        g.event("menu")  # held straight away
+        self.assertEqual(self.said[-1], "Let go to close the ring")
+        self.assertEqual(g.state["tour"]["step"], 3)
+
+    def test_choosing_a_tool_while_closing_the_ring_finishes_both_steps(self):
+        g = self.tour()
+        g.attached()
+        g.event("menu")
+        g.event("pick")
+        self.assertEqual(self.said[-1], "Too fast or slow? Menu > Setup > Surface Dial > Feel")
+
+    def test_a_step_nobody_does_is_asked_again_after_a_pause_not_before(self):
+        g = self.tour()
+        g.attached()
+        g.event("click")  # press at once; now waiting for hold
+        self.assertEqual(self.said[-1], "Press and hold to open the tool ring")
+        n = len(self.said)
+        self.now[0] += m.TOUR_REPROMPT_S - 1
+        g.event("step")
+        self.assertEqual(len(self.said), n)
+        self.now[0] += 2
+        g.event("step")
+        self.assertEqual(self.said[-1], "Press and hold to open the tool ring")
+        self.assertEqual(len(self.said), n + 1)
+
+    def test_a_step_that_is_asked_enough_times_is_skipped_so_the_tour_never_sticks(self):
+        g = self.tour()
+        g.attached()
+        self.steps(g, m.TOUR_TURN_STEPS)  # on to "press"; the person only keeps turning
+        self.assertEqual(self.said[-1], "Now press it")
+        for _ in range(m.TOUR_MAX_PROMPTS - 1):  # the first ask was the advance itself
+            self.now[0] += m.TOUR_REPROMPT_S + 1
+            g.event("step")
+            self.assertEqual(self.said[-1], "Now press it")
+        self.assertEqual(g.state["tour"]["skipped"], [])
+        self.now[0] += m.TOUR_REPROMPT_S + 1
+        g.event("step")
+        self.assertEqual(g.state["tour"]["skipped"], ["press"])
+        self.assertEqual(self.said[-1], "Press and hold to open the tool ring")
+
+    def test_a_finished_tour_stays_finished(self):
+        g = self.tour()
+        g.attached()
+        for kind in ("click", "menu", "pick"):
+            g.event(kind)
+        said = len(self.said)
+        g.attached()
+        self.now[0] += 1000
+        self.steps(g, 50)
+        g.event("click")
+        self.assertEqual(len(self.said), said)
+
+    def test_the_tour_only_runs_while_hints_are_on(self):
+        self.on[0] = False
+        g = self.tour()
+        g.attached()
+        g.event("click")
+        self.assertEqual(self.said, [])
+        self.assertEqual(g.state["tour"]["step"], 0)
+
+    def test_the_tour_does_not_teach_tools_one_by_one(self):
+        g = self.tour()
+        g.state["tour"]["done"] = True
+        g.armed("Windows")
+        self.assertEqual(self.said, [])
+
+    def test_an_unfinished_tour_resumes_where_it_stopped_after_a_restart(self):
+        g = self.tour()
+        g.attached()
+        g.event("click")
+        g.flush()
+        g2 = self.guide()
+        g2.attached()
+        self.assertEqual(self.said[-1], "Press and hold to open the tool ring")
+
+    # --- switching style
+    def test_changing_the_style_keeps_what_was_already_learned(self):
+        g = self.guide()
+        g.event("click")
+        self.mode[0] = "discover"
+        self.steps(g, 3 * m.GUIDE_STEPS_BEFORE_HINT)
+        self.assertNotIn("Press the dial: mute", self.said)
+        self.assertIn("press", g.state["done"])
+
+    def test_changing_to_the_tour_mid_way_asks_for_the_current_step_on_the_next_wake(self):
+        g = self.guide()
+        self.mode[0] = "guided"
+        g.attached()
+        self.assertEqual(self.said, ["Turn the dial"])
+
+    # --- the setting and the saved data
+    def test_the_style_setting_accepts_three_values_and_defaults_to_adaptive(self):
+        for value, expected in (
+            ("discover", "discover"),
+            ("guided", "guided"),
+            ("adaptive", "adaptive"),
+            ("nonsense", "adaptive"),
+            (3, "adaptive"),
+            (None, "adaptive"),
+        ):
+            time.sleep(0.005)
+            with open(self.cfg, "w") as f:
+                json.dump({"onboarding_mode": value}, f)
+            self.assertEqual(m.guide_mode(), expected)
+
+    def test_no_style_set_means_adaptive(self):
+        self.assertEqual(m.guide_mode(), "adaptive")
+
+    def test_tool_progress_and_the_tour_are_saved_and_loaded(self):
+        g = self.guide()
+        g.armed("Windows")
+        g.event("click")
+        self.steps(g, 4)
+        g.flush()
+        g2 = self.guide()
+        self.assertEqual(
+            g2.state["tools"]["Windows"],
+            {"intro": 1, "click_shown": 0, "clicked": True, "steps": 4},
+        )
+
+    def test_damaged_tool_and_tour_data_falls_back_to_a_fresh_start(self):
+        with open(self.path, "w") as f:
+            json.dump(
+                {"tools": {"Windows": {"intro": "x", "clicked": 3}, 7: 1}, "tour": {"step": 99}},
+                f,
+            )
+        g = self.guide()
+        self.assertEqual(g.state["tools"]["Windows"], m.Guide._tool_entry())
+        self.assertEqual(g.state["tour"]["step"], len(m.TOUR_STEPS) - 1)
+
+    def test_old_progress_files_without_the_new_fields_still_load(self):
+        with open(self.path, "w") as f:
+            json.dump({"version": 1, "done": ["press"], "shown": {"press": 1}}, f)
+        g = self.guide()
+        self.assertEqual(g.state["done"], ["press"])
+        self.assertEqual(g.state["tools"], {})
+        self.assertFalse(g.state["tour"]["done"])
+
+    def test_resetting_clears_the_tool_and_tour_progress_too(self):
+        g = self.tour()
+        g.attached()
+        g.armed("Windows")
+        g.reset()
+        self.assertEqual(g.state["tools"], {})
+        self.assertEqual(g.state["tour"]["step"], 0)
+
+    # --- the text for each tool
+    def test_the_tool_lines_come_from_the_tool_library_and_the_active_click(self):
+        lines = m.tool_lines("Windows")
+        self.assertTrue(lines["intro"].startswith("Windows: Cycle focus through your open windows"))
+        self.assertNotIn("Click maximizes", lines["intro"])
+        self.assertEqual(lines["click"], "Windows: click to maximize")
+
+    def test_the_click_line_follows_a_single_click_override(self):
+        self.set_cfg(single_click="dictation")
+        self.assertIn("click to", m.tool_lines("Windows").get("click", "click to"))
+
+    def test_a_tool_the_library_does_not_know_has_no_introduction(self):
+        self.assertNotIn("intro", m.tool_lines("No Such Tool"))
 
 
 @unittest.skipUnless(_git_checkout_available(), "needs a git checkout to build the installer")

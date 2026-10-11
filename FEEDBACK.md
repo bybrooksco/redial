@@ -34,7 +34,7 @@ and a few words if it was not "worked".
    feel different straight away?
 7. Click the dial once, twice and three times. Did you know what each one would do?
 8. Close the settings with Escape.
-9. While you use it, short lines of hints may appear on screen (for example "Press the dial: mute"). Did one show up? Was it clear? Was it helpful, too soon, or annoying? You can turn them off on the **Feel** page ("Hints while you learn").
+9. While you use it, short lines of hints may appear on screen (for example "Press the dial: mute"). Did one show up? Was it clear? Was it helpful, too soon, or annoying? You can turn them off on the **Feel** page ("Hints while you learn"), or change how they teach ("How hints teach": Adaptive, Discover or Guided tour). If you try more than one style, say which felt best.
 
 ## 3b. Only if you want to
 

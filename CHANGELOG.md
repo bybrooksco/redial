@@ -5,6 +5,10 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Three ways of teaching the dial**, chosen with `onboarding_mode` (Feel page, "How hints teach"): `adaptive` (as before), `discover` (a hint to press and one to hold, nothing more) and `guided` (a short tour on connect: turn, press, hold, close the ring, pick a tool, then a pointer to settings; a step nobody does is asked again after 20 s, up to three times, then skipped). All three share one `progress.json`, so changing style keeps what was already learned.
+- **Per-tool hints** in adaptive and discover: the first time a tool is picked, one line about what turning it does; and if it is turned a while without a click, one line about what its click does. Each tool is taught once, only when it is tried, and progress per tool (steps, whether it was clicked) is saved for a later levels view.
+
 ## [0.8.1] - 2026-10-09 (first-run experience)
 
 The first informal test (2026-10-08) showed that turning the dial for the first time did too little and that nobody reads a settings page. This version answers the first turn, teaches by what you do, and wakes faster.
