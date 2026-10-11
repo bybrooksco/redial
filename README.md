@@ -1,6 +1,6 @@
 # re:dial
 
-Surface Dial (and Surface Pen) support for Omarchy.
+Use a Microsoft Surface Dial (and Surface Pen) as a control for your Omarchy desktop.
 
 A haptic knob for your Omarchy desktop. Turn it for volume, scroll, zoom, media
 scrubbing, brightness, window and workspace control; press and hold to pick a tool;
