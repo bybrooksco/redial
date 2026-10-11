@@ -5,6 +5,12 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Upgrading from the Surface Dial beta left the Rise bar widget calling the removed `surface-dial-bar`. `install.sh` now refreshes an already-installed widget.
+
+### Added
+- `docs/BETA-GUIDE.md`: what testers need, hardware basics, what to try, and how to report.
+
 ## [0.8.4] - 2026-10-11 (renamed to re:dial)
 
 ### Changed

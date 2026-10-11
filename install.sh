@@ -227,7 +227,9 @@ echo "-- 6b. re:dial button in the bar (Quickshell Rise) --"
 RISE_TOOL="$HOME/.local/bin/redial-rise-widget"
 if [[ -f "$HOME/.config/quickshell/bar/variants/V2/BarSlot.qml" ]]; then
     if "$RISE_TOOL" --check; then
-        skip "widget already in the Rise bar"
+        # Already patched in: bring an older install (the old name's module and tile label) up to date.
+        "$RISE_TOOL" --install | grep -q "^already installed" \
+            && skip "widget already in the Rise bar" || ok "widget updated to the new name"
     elif confirm "Add the re:dial widget to the Rise bar (patches its V2 files, restarts the bar for a few seconds; switch it on afterwards in the control panel -> WIDGETS)?"; then
         if "$RISE_TOOL" --install; then
             ok "widget installed"
