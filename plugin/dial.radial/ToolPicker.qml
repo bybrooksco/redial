@@ -5,6 +5,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
+import "ConfigText.js" as ConfigText
 
 // Pick and reorder which of the daemon's tools are active, and where the overlay sits.
 //
@@ -32,6 +33,22 @@ Item {
   property var configDoc: ({})  // full parsed config.json, kept intact
   property var selected: []     // ordered active_tools names
   property bool dirty: false
+  // True while config.json exists but cannot be read (caught mid-edit, say). configDoc then keeps
+  // the last good copy and every write is refused, so one click cannot replace a hand-written
+  // config with an almost empty one.
+  property bool configBroken: false
+
+  // Change config.json: copy the last good config, let `mutate` edit the copy, write it, keep it.
+  // Every setting goes through here. Returns false (writing nothing) while the file is unreadable.
+  function writeConfig(mutate) {
+    if (configBroken) return false
+    var out = ({})
+    for (var k in configDoc) out[k] = configDoc[k]
+    mutate(out)
+    configFile.setText(JSON.stringify(out, null, 2))
+    configDoc = out
+    return true
+  }
   property string ringFocus: ""  // ring tool that keeps keyboard focus across a keyboard move
 
   // The window takes keyboard focus when it opens (see DialMenu.qml), Escape closes it, and Tab
@@ -74,11 +91,7 @@ Item {
     return (v === "medium" || v === "small") ? v : "large"
   }
   function setSize(s) {
-    var out = ({})
-    for (var k in configDoc) out[k] = configDoc[k]
-    out.size = s
-    configFile.setText(JSON.stringify(out, null, 2))
-    configDoc = out
+    writeConfig(function (o) { o.size = s })
   }
 
   // Which page of the window is showing: "look" (position, size, appearance, tools) or "feel"
@@ -93,11 +106,7 @@ Item {
   }
   // Write one key back to config.json, keeping every other key as it is.
   function setConfigKey(key, value) {
-    var out = ({})
-    for (var k in configDoc) out[k] = configDoc[k]
-    out[key] = value
-    configFile.setText(JSON.stringify(out, null, 2))
-    configDoc = out
+    writeConfig(function (o) { o[key] = value })
   }
 
   readonly property var helpTopics: [
@@ -202,12 +211,10 @@ Item {
     return (f === "pie" || f === "gauge" || f === "capsule") ? f : "classic"
   }
   function setAppearance(opt) {
-    var out = ({})
-    for (var k in configDoc) out[k] = configDoc[k]
-    out.layout = opt.layout
-    if (opt.face) out.face = opt.face
-    configFile.setText(JSON.stringify(out, null, 2))
-    configDoc = out
+    writeConfig(function (o) {
+      o.layout = opt.layout
+      if (opt.face) o.face = opt.face
+    })
   }
 
   // Click gestures. Options come from clicks.json / pen_clicks.json (written by the daemon at
@@ -265,24 +272,21 @@ Item {
     setClick(group, kind, opts[(at + step + opts.length) % opts.length].name)
   }
   function setClick(group, kind, name) {
-    var out = ({})
-    for (var k in configDoc) out[k] = configDoc[k]
     if (group === "pentail") {
-      var pen = ({})
-      if (configDoc && configDoc.pen) for (var p in configDoc.pen) pen[p] = configDoc.pen[p]
-      var tail = ({})
-      if (pen.tail_clicks) for (var t in pen.tail_clicks) tail[t] = pen.tail_clicks[t]
-      tail[kind] = name
-      pen.tail_clicks = tail
-      out.pen = pen
+      writePen(function (pen) {
+        var tail = ({})
+        if (pen.tail_clicks) for (var t in pen.tail_clicks) tail[t] = pen.tail_clicks[t]
+        tail[kind] = name
+        pen.tail_clicks = tail
+      })
     } else {
-      var clicks = ({})
-      if (configDoc && configDoc.clicks) for (var c in configDoc.clicks) clicks[c] = configDoc.clicks[c]
-      clicks[kind] = name
-      out.clicks = clicks
+      writeConfig(function (o) {
+        var clicks = ({})
+        if (o.clicks) for (var c in o.clicks) clicks[c] = o.clicks[c]
+        clicks[kind] = name
+        o.clicks = clicks
+      })
     }
-    configFile.setText(JSON.stringify(out, null, 2))
-    configDoc = out
   }
 
   // Pen enable + barrel button: one action plus an enable toggle each, not a
@@ -308,14 +312,12 @@ Item {
   // hands the caller a mutable copy of "pen" to edit, writes, reassigns --
   // same immediate-write pattern as setAnchor/setSize above.
   function writePen(mutate) {
-    var out = ({})
-    for (var k in configDoc) out[k] = configDoc[k]
-    var pen = ({})
-    if (configDoc && configDoc.pen) for (var p in configDoc.pen) pen[p] = configDoc.pen[p]
-    mutate(pen)
-    out.pen = pen
-    configFile.setText(JSON.stringify(out, null, 2))
-    configDoc = out
+    writeConfig(function (o) {
+      var pen = ({})
+      if (o.pen) for (var p in o.pen) pen[p] = o.pen[p]
+      mutate(pen)
+      o.pen = pen
+    })
   }
   function setBarrelAction(name) {
     writePen(function (pen) {
@@ -339,11 +341,7 @@ Item {
 
   // Writes through immediately. Never assigns root.anchor directly: it's a binding off configDoc.
   function setAnchor(a) {
-    var out = ({})
-    for (var k in configDoc) out[k] = configDoc[k]
-    out.anchor = a
-    configFile.setText(JSON.stringify(out, null, 2))
-    configDoc = out
+    writeConfig(function (o) { o.anchor = a })
   }
 
   // Hover / focus descriptions for tools. One shared tooltip, shown after a short pause over a
@@ -437,30 +435,24 @@ Item {
   }
 
   function applyConfigText(raw) {
-    var text = String(raw || "").trim()
-    var doc = ({})
-    if (text !== "") {
-      try {
-        var parsed = JSON.parse(text)
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) doc = parsed
-      } catch (e) {
-        console.warn("[dial.radial] tool picker: config is not valid JSON, treating as empty:", e)
-      }
+    var r = ConfigText.parse(raw)
+    if (!r.ok) {
+      console.warn("[dial.radial] config.json cannot be read; keeping the last good copy and pausing writes")
+      configBroken = true
+      return
     }
-    configDoc = doc
-    var act = doc.active_tools
+    configBroken = false
+    configDoc = r.doc
+    // Unsaved tool edits survive a reload: every setting on the other pages rewrites the file, and
+    // the watcher's reload used to reset the list under the person's hands.
+    if (dirty) return
+    var act = r.doc.active_tools
     selected = (Array.isArray(act) && act.length) ? act.slice()
                                                    : manifest.map(function (m) { return m.name })
-    dirty = false
   }
 
   function save() {
-    var out = ({})
-    for (var k in configDoc) out[k] = configDoc[k]
-    out.active_tools = selected
-    configFile.setText(JSON.stringify(out, null, 2))
-    configDoc = out
-    dirty = false
+    if (writeConfig(function (o) { o.active_tools = selected })) dirty = false
   }
 
   FileView {
@@ -698,6 +690,27 @@ Item {
             id: restartText
             anchors.centerIn: parent
             text: restartProc.running ? "Restarting…" : "Restart dial service"
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            color: root.cfg.lineColor
+          }
+        }
+
+        // Shown instead of silently overwriting: config.json could not be read.
+        Rectangle {
+          visible: root.configBroken
+          width: parent.width
+          height: brokenText.implicitHeight + Style.space(20)
+          radius: Style.space(8)
+          color: Util.alpha(root.cfg.accentColor, 0.12)
+          border.width: Math.max(1, Style.space(1.5))
+          border.color: root.cfg.accentColor
+          Text {
+            id: brokenText
+            anchors.fill: parent
+            anchors.margins: Style.space(10)
+            text: "config.json has a mistake in it, so changes here are paused to protect what you wrote. Fix the file (or restore a backup) and this clears by itself."
+            wrapMode: Text.WordWrap
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             color: root.cfg.lineColor

@@ -104,7 +104,7 @@ Item {
     // Only auto-closes the "popped up because the dial is turning" case --
     // a manual peek at Live from Settings (mode flips, liveDriven doesn't)
     // sits there like Settings itself does, no timeout.
-    onTriggered: if (root.mode === "live" && root.liveDriven) root.opened = false
+    onTriggered: if (root.mode === "live" && root.liveDriven) root.close()  // close() also clears `live`
   }
 
   onOpenedChanged: if (opened) watchdog.restart(); else watchdog.stop()
@@ -326,6 +326,7 @@ Item {
                 Text {
                   anchors.horizontalCenter: parent.horizontalCenter
                   text: modelData.name || ""
+                  textFormat: Text.PlainText  // a tool named "<b>x" must not render as markup
                   font.family: Style.font.family
                   font.pixelSize: Style.font.body
                   font.bold: true
@@ -579,6 +580,7 @@ Item {
             width: parent.width
             elide: Text.ElideRight
             text: toast.activeTool ? (toast.activeTool.name || "") : ""
+            textFormat: Text.PlainText  // a tool named "<b>x" must not render as markup
             font.family: Style.font.family
             font.pixelSize: Style.font.body
             font.bold: true
@@ -658,6 +660,7 @@ Item {
           required property var modelData
           visible: false
           text: modelData.name || ""
+          textFormat: Text.PlainText  // a tool named "<b>x" must not render as markup
           font.family: Style.font.family
           font.bold: true
           font.pixelSize: Style.font.title
@@ -957,6 +960,7 @@ Item {
           width: parent.width
           elide: Text.ElideRight
           text: root.tools.length > root.index ? (root.tools[root.index].name || "") : ""
+          textFormat: Text.PlainText  // a tool named "<b>x" must not render as markup
           font.family: Style.font.family
           font.pixelSize: Style.font.body
           font.bold: true
