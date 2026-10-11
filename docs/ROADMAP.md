@@ -9,13 +9,18 @@ A working build with an installer, an uninstaller and a testing plan. It was fir
 renumbered on 2026-10-09: by the 1.0 checklist below it is nowhere near done, and 0.9.x is kept for
 the stage when people other than the author use it.
 
-## 0.8.1: first-run experience (done; this is the build for the first friend)
+## 0.8.1: first-run experience (done)
 
 The first informal test (2026-10-08) showed that turning the dial for the first time does too little.
 This stage adds a visible response on the first turn and an adaptive, dial-driven introduction that
 teaches turn, press and hold as the person is ready for them. See the design note in the project vault.
 
-## 0.8.2: known bugs
+## 0.8.2: teaching styles (done; this is the build for the first friend)
+
+Three ways of teaching the dial, switchable in Settings (adaptive by default, discover, guided tour),
+plus a hint for each tool the first time it is tried.
+
+## 0.8.3: known bugs
 
 Fixes for anything found in use before a tester gets it, starting with scrolling in terminals.
 

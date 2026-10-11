@@ -3,7 +3,7 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.8.2] - 2026-10-11 (teaching styles)
 
 ### Added
 - **Three ways of teaching the dial**, chosen with `onboarding_mode` (Feel page, "How hints teach"): `adaptive` (as before), `discover` (a hint to press and one to hold, nothing more) and `guided` (a short tour on connect: turn, press, hold, close the ring, pick a tool, then a pointer to settings; a step nobody does is asked again after 20 s, up to three times, then skipped). All three share one `progress.json`, so changing style keeps what was already learned.

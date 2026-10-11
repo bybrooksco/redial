@@ -165,7 +165,7 @@ HOLD_S = 0.40  # press longer than this opens the menu
 # top-left | top-right | bottom-left | bottom-right
 # Config is shared with the overlay plugin; every key is optional and re-read when the menu
 # opens. Env vars win.
-__version__ = "0.8.1"
+__version__ = "0.8.2"
 
 # DIAL_CONFIG_DIR exists so tests can keep importing this file away from the real config.
 CONFIG_PATH = os.path.join(
