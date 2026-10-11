@@ -11,7 +11,7 @@ import qs.Ui
 // rotation slides the rail. A dial is a 1-D control, so a 1-D rail reads more honestly than
 // a ring, and stays legible when parked along a screen edge.
 //
-// Driven over IPC by ~/.local/bin/surface-dial-hypr:
+// Driven over IPC by ~/.local/bin/redial-hypr:
 //   omarchy-shell dialmenu open '{"tools":[{"icon":"♫","name":"Volume","hint":"mute"}],
 //                                 "index":0,"anchor":"bottom"}'
 //   omarchy-shell dialmenu highlight 2
@@ -116,7 +116,7 @@ Item {
   SocketServer {
     // No /tmp fallback: it is shared, so another user could plant a socket there.
     active: !!Quickshell.env("XDG_RUNTIME_DIR")
-    path: Quickshell.env("XDG_RUNTIME_DIR") + "/dial-radial.sock"
+    path: Quickshell.env("XDG_RUNTIME_DIR") + "/redial.sock"
 
     handler: Socket {
       parser: SplitParser {

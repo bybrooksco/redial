@@ -13,13 +13,13 @@ import json
 import os
 import sys
 
-ID = "setup.surface-dial"
+ID = "setup.redial"
 ROW = (
     "  // Surface Dial: added by its install.sh\n"
-    '  "setup.surface-dial": {"icon":"\\uf192","label":"Surface Dial",'
+    '  "setup.redial": {"icon":"\\uf192","label":"Surface Dial",'
     '"aliases":["dial","surface dial"],'
     '"description":"Tools, size, clicks and appearance",'
-    '"when":"[[ -x $HOME/.local/bin/surface-dial-hypr ]]",'
+    '"when":"[[ -x $HOME/.local/bin/redial-hypr ]]",'
     '"action":"omarchy-shell dialtools toggle"}\n'
 )
 DEFAULT = os.path.expanduser("~/.config/omarchy/extensions/omarchy-menu.jsonc")

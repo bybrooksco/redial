@@ -10,7 +10,7 @@ indent_style = space
 [*.{py,qml,json,lua,yml,yaml}]
 indent_size = 4
 
-[{install.sh,bin/surface-dial-setup,bin/surface-dial-bar,scripts/*.sh}]
+[{install.sh,bin/redial-setup,bin/redial-bar,scripts/*.sh}]
 indent_size = 4
 
 [*.md]

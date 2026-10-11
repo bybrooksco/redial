@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# surface-dial-bar -- status + actions behind the Surface Dial button in the
+# redial-bar -- status + actions behind the Surface Dial button in the
 # Omarchy bar. The bar runs this as a `type: "command"` module (see the "Custom
 # user modules" section of the bar README), so there is no QML here: a plugin
 # `bar-widget` entry point on a local plugin was tried on 2026-09-16 and failed
 # to load, the command module is the documented route that doesn't depend on it.
 #
-#   surface-dial-bar            print one line of Waybar-style JSON for the bar
-#   surface-dial-bar restart    restart the dial daemon (applies active_tools)
+#   redial-bar            print one line of Waybar-style JSON for the bar
+#   redial-bar restart    restart the dial daemon (applies active_tools)
 #
-# Installed into the bar by `surface-dial-setup --install-bar`.
+# Installed into the bar by `redial-setup --install-bar`.
 set -uo pipefail
 
 ICON=$''   # Font Awesome "dot-circle-o": reads as a dial/knob
-DAEMON="$HOME/.local/bin/surface-dial-hypr"
-LOG=/tmp/surface-dial-hypr.log
+DAEMON="$HOME/.local/bin/redial-hypr"
+LOG=/tmp/redial-hypr.log
 # Anchored on ^python3 so this script, the bar's `bash -lc` wrapper and a
 # user's `pgrep -f` never match themselves.
-DAEMON_RE='^python3 .*surface-dial-hypr'
+DAEMON_RE='^python3 .*redial-hypr'
 
 case "${1:-status}" in
 restart)
@@ -61,8 +61,8 @@ hint='Left-click: tool settings\nRight-click: restart dial daemon (applies tool 
 # rest are for bars that draw their own widget (the Quickshell Rise bar).
 # What single/double/triple click currently do, as labels (null if the daemon hasn't
 # published clicks.json yet -- restart it once).
-clicks=$(jq -c -n --slurpfile c "$HOME/.config/dial-radial/config.json" \
-    --slurpfile m "$HOME/.config/dial-radial/clicks.json" '
+clicks=$(jq -c -n --slurpfile c "$HOME/.config/redial/config.json" \
+    --slurpfile m "$HOME/.config/redial/clicks.json" '
     ($m[0].defaults // {}) as $d | ($c[0].clicks // {}) as $u | ($m[0].actions // []) as $a
     | ["single","double","triple"] | map(. as $k | ($u[$k] // $d[$k]) as $n
         | {($k): (($a | map(select(.name == $n)) | first | .label) // $n)}) | add' 2>/dev/null) || clicks=null

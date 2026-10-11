@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""surface-dial-rise-widget -- add the Surface Dial button to the Quickshell Rise bar.
+"""redial-rise-widget -- add the Surface Dial button to the Quickshell Rise bar.
 
 Rise is the custom bar at ~/.config/quickshell/bar (variants V1/V2; V2 is the live
 one). Its widgets are registered by group id, so adding one touches four places:
@@ -10,8 +10,8 @@ one). Its widgets are registered by group id, so adding one touches four places:
 It is OFF until switched on there. Left-click opens the dial's tool settings (the
 same window as SUPER+SHIFT+CTRL+D); right-click restarts the dial daemon.
 
-  surface-dial-rise-widget --check      exit 0 if fully installed
-  surface-dial-rise-widget --install    idempotent; backs up, patches, restarts the bar,
+  redial-rise-widget --check      exit 0 if fully installed
+  redial-rise-widget --install    idempotent; backs up, patches, restarts the bar,
                                         and rolls back if the bar doesn't come back
     --root DIR       Rise variant dir (default ~/.config/quickshell/bar/variants/V2)
     --no-restart     patch files only (used for testing)
@@ -34,10 +34,10 @@ import Quickshell.Io
 // Surface Dial button (G19). Off by default; turn it on in the control panel's
 // WIDGETS grid. Left-click opens the dial's tool settings -- the same panel as
 // the SUPER+SHIFT+CTRL+D hotkey (`omarchy-shell dialtools toggle`, served by the
-// dial.radial plugin). Right-click restarts the dial daemon, which is what
+// redial plugin). Right-click restarts the dial daemon, which is what
 // applies a changed tool list.
 //
-// State comes from ~/.local/bin/surface-dial-bar (one line of JSON). It is
+// State comes from ~/.local/bin/redial-bar (one line of JSON). It is
 // polled only while the widget is switched on, so it costs nothing when off.
 Item {
     id: rootMod
@@ -110,7 +110,7 @@ Item {
 
     Process {
         id: statusProc
-        command: ["bash", "-c", "$HOME/.local/bin/surface-dial-bar"]
+        command: ["bash", "-c", "$HOME/.local/bin/redial-bar"]
         stdout: StdioCollector {
             waitForEnd: true
             onStreamFinished: rootMod.apply(this.text)
@@ -126,7 +126,7 @@ Item {
     }
 
     Process { id: settingsProc; command: ["bash", "-c", "omarchy-shell dialtools toggle"] }
-    Process { id: restartProc;  command: ["bash", "-c", "$HOME/.local/bin/surface-dial-bar restart"] }
+    Process { id: restartProc;  command: ["bash", "-c", "$HOME/.local/bin/redial-bar restart"] }
 
     TooltipMixin { id: tip; root: rootMod.root; owner: rootMod; text: rootMod.tooltipText }
 
@@ -310,7 +310,7 @@ def compute(root):
         n = len(re.findall(pat, s, flags=re.M)) if rx else s.count(pat)
         if n != 1:
             sys.exit(
-                f"surface-dial-rise-widget: '{name}' in {f} matched {n} times (need exactly 1) -- "
+                f"redial-rise-widget: '{name}' in {f} matched {n} times (need exactly 1) -- "
                 "these Rise files differ from the version this was written against. Nothing was changed."
             )
         out[f] = (
@@ -348,7 +348,7 @@ def main():
         return
     new = compute(root)  # exits without writing if any anchor is off
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    bk = os.path.expanduser(f"~/.local/share/dial-kit-backups/{stamp}-rise-widget")
+    bk = os.path.expanduser(f"~/.local/share/redial-backups/{stamp}-rise-widget")
     for f in FILES:
         os.makedirs(os.path.dirname(os.path.join(bk, f)) or bk, exist_ok=True)
         shutil.copy2(os.path.join(root, f), os.path.join(bk, f))

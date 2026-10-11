@@ -282,11 +282,11 @@ Changed because of it:
 - **Installs like any other Omarchy plugin.** `omarchy plugin add <git-url>` clones the
   whole repo into `~/.config/omarchy/plugins/<id>/` and requires `manifest.json` at the
   repo root; this repo had it one folder down, so that command would have failed. A root
-  `manifest.json` now points its `panel` entry point at `plugin/dial.radial/DialMenu.qml`,
+  `manifest.json` now points its `panel` entry point at `plugin/redial/DialMenu.qml`,
   so nothing moved. Checked with Omarchy's `omarchy-plugin-validate`, with a real
   `omarchy plugin add` in a scratch `HOME`, and by loading the nested layout in the
   running shell (overlay, Gauge face and settings window all rendered). The older layout
-  (a copy of `plugin/dial.radial` alone) still validates and is what `install.sh` makes
+  (a copy of `plugin/redial` alone) still validates and is what `install.sh` makes
   when run from a plain clone. The validator forbids symlinks inside the plugin folder,
   and a test keeps it that way. `omarchy plugin update` is a `git pull`, so updating the
   plugin is one command too.
@@ -314,7 +314,7 @@ in Omarchy's base package list.
 
 Left for the maintainer, because they are taste or need a decision:
 
-- **Names.** `surface-dial-hypr` leaks an implementation detail; Omarchy's own commands
+- **Names.** `redial-hypr` leaks an implementation detail; Omarchy's own commands
   read `omarchy-<noun>-<verb>`. Renaming breaks every existing install and autostart line.
 - **The Rise installer** patches another project's files by exact-match anchors. It works,
   but it is the most fragile code here and serves a third-party bar. It belongs in

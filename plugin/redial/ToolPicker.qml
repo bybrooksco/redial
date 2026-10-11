@@ -10,7 +10,7 @@ import "ConfigText.js" as ConfigText
 // Pick and reorder which of the daemon's tools are active, and where the overlay sits.
 //
 // A settings screen: real mouse input, no rotation socket; it only reads and writes files in
-// ~/.config/dial-radial/:
+// ~/.config/redial/:
 //   tools.json   - written by the daemon at startup: [{name, icon}] for every tool it can
 //                  build, so a tool added to TOOL_LIBRARY just shows up here.
 //   status.json  - written by the daemon every few seconds ({state, battery, updated, ...});
@@ -60,7 +60,7 @@ Item {
   property bool everLoadedConfig: false
 
   readonly property string dir:
-    (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/dial-radial"
+    (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/redial"
   readonly property string manifestPath: dir + "/tools.json"
   readonly property string configPath: dir + "/config.json"
 
@@ -117,7 +117,7 @@ Item {
     { title: "Too jumpy or too slow", body: "Sensitivity changes how far you turn for each step. Ignore small turns filters out a bump or a tremor. Hold and double-click speed can both be relaxed." },
     { title: "Keyboard", body: "Tab moves between controls, Enter or Space presses one, Shift+Enter goes back through a list of choices, Escape closes this window." },
     { title: "About", body: "Surface Dial " + (status.version || "(unknown version)") + ", beta. Please mention this number when you report a problem." },
-    { title: "Something wrong?", body: "The line under the title says whether the dial is connected. If it says the service is not running, press Restart dial service. If that does not help, run surface-dial-setup in a terminal; it checks everything and says what to fix." }
+    { title: "Something wrong?", body: "The line under the title says whether the dial is connected. If it says the service is not running, press Restart dial service. If that does not help, run redial-setup in a terminal; it checks everything and says what to fix." }
   ]
 
   // One labelled row of choice chips. `current` is the stored value; if it matches none of the
@@ -458,7 +458,7 @@ Item {
   function applyConfigText(raw) {
     var r = ConfigText.parse(raw)
     if (!r.ok) {
-      console.warn("[dial.radial] config.json cannot be read; keeping the last good copy and pausing writes")
+      console.warn("[redial] config.json cannot be read; keeping the last good copy and pausing writes")
       configBroken = true
       return
     }
@@ -508,10 +508,10 @@ Item {
     return "Looking for the dial…"
   }
   readonly property bool statusGood: statusFresh && status.state === "ready"
-  // "Restart dial service": runs bin/surface-dial-restart (installed beside the daemon).
+  // "Restart dial service": runs bin/redial-restart (installed beside the daemon).
   Process {
     id: restartProc
-    command: [Quickshell.env("HOME") + "/.local/bin/surface-dial-restart"]
+    command: [Quickshell.env("HOME") + "/.local/bin/redial-restart"]
   }
   property bool introSeen: cfgValue("intro_seen", false) === true
   Timer {

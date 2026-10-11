@@ -1,7 +1,7 @@
 # Surface Dial radial menu
 
 An on-screen tool menu for the Microsoft Surface Dial, as an Omarchy shell
-plugin. Driven over IPC and a socket by the `surface-dial-hypr` daemon.
+plugin. Driven over IPC and a socket by the `redial-hypr` daemon.
 
 Four layouts, same data and same IPC — pick one from the settings window's
 **Appearance** section (applies immediately, no restart), or set `layout`
@@ -68,19 +68,19 @@ Four layouts, same data and same IPC — pick one from the settings window's
 
 ## Install
 
-**New machine, or pairing a new dial?** Run `surface-dial-setup` first (no
+**New machine, or pairing a new dial?** Run `redial-setup` first (no
 arguments gives a doctor-style report; it prompts before changing anything).
 It checks the pieces this README doesn't otherwise cover: `input` group
-membership, the `70-surface-dial.rules` udev rule (hidraw + uinput
+membership, the `70-redial.rules` udev rule (hidraw + uinput
 permissions), Bluetooth pairing, the daemon's Hyprland autostart entry, and
 whether this plugin is enabled — all four of hidraw, uinput, BLE pairing, and
 group membership have independently caused silent, hard-to-diagnose failures
 on this project before, which is the whole reason the
 script exists rather than leaving this as tribal knowledge.
 
-Copy this directory to `~/.config/omarchy/plugins/dial.radial/`, then:
+Copy this directory to `~/.config/omarchy/plugins/redial/`, then:
 
-    omarchy-shell shell setPluginEnabled dial.radial true
+    omarchy-shell shell setPluginEnabled redial true
 
 User plugins are disabled by default, so a plugin can be *discovered and
 listed* while its IPC target does not exist yet. If `omarchy-shell dialmenu
@@ -91,8 +91,8 @@ deliberately, so **editing the QML requires `omarchy-restart-shell`** — a plug
 rescan will not re-instantiate a `keepLoaded` panel. Handy check: the layer-shell
 namespace (`hyprctl layers`) tells you which revision is actually live.
 
-The daemon itself (`~/.local/bin/surface-dial-hypr`) is a separate file, not
-part of this plugin directory; `surface-dial-setup` checks for it but does not
+The daemon itself (`~/.local/bin/redial-hypr`) is a separate file, not
+part of this plugin directory; `redial-setup` checks for it but does not
 install it. Licensed MIT — see `LICENSE`.
 
 ## Configuration
@@ -100,7 +100,7 @@ install it. Licensed MIT — see `LICENSE`.
 Optional. Every value has a default in code, so the plugin runs correctly with
 no config file at all.
 
-    ~/.config/dial-radial/config.json
+    ~/.config/redial/config.json
 
 See `config.example.json` for the full document with defaults. The file is
 watched, so edits apply live — no restart. A malformed file logs a warning and
@@ -156,7 +156,7 @@ helpers rather than copying them again.
 ## Tools
 
 The tool set is data, not code, and lives in the daemon's `TOOL_LIBRARY`
-(`~/.local/bin/surface-dial-hypr`) — eleven tools as shipped:
+(`~/.local/bin/redial-hypr`) — eleven tools as shipped:
 
 | Tool | Rotate | Click |
 |---|---|---|
@@ -210,16 +210,16 @@ isn't the bar on machines running Quickshell Rise anyway (it hides the stock bar
 button is a Rise widget instead -- group `G19`, off by default, switched on under the
 control panel's WIDGETS grid. Left-click opens this tool-settings window (same as the
 hotkey); right-click restarts the dial daemon.
-It is installed by `surface-dial-rise-widget` (the kit installer and `surface-dial-setup`
+It is installed by `redial-rise-widget` (the kit installer and `redial-setup`
 both run it), which patches Rise's V2 files with exact-match edits and refuses to write
-anything if they don't match. Its status line comes from `surface-dial-bar`.
+anything if they don't match. Its status line comes from `redial-bar`.
 
 Active tools sit on a ring in their real dial order, drag one around the
 circumference to reorder; the center is deliberately empty, matching the
 actual dial's click/dictation zone rather than implying a tool slot that
 doesn't exist. Inactive tools sit below as tap-to-add chips. It reads the
 library itself from
-`~/.config/dial-radial/tools.json`, which the daemon regenerates on every
+`~/.config/redial/tools.json`, which the daemon regenerates on every
 startup — a tool added to `TOOL_LIBRARY` shows up in the picker automatically,
 nothing to keep in sync by hand. With no `active_tools` key, every library
 tool is active, in library order — unchanged from before this existed.
@@ -282,7 +282,7 @@ and every number is clamped to a safe range (text or true/false means the defaul
 | `sensitivity` | How much you turn for each step. Higher = less turning. Scales tool steps, the tool menu and Scroll/Zoom gain. | `1` | 0.5 to 2 |
 | `auto_return_s` | Seconds a tool stays armed after you stop turning, before it drops back to Volume. | `6` | 3 to 300 |
 | `osd` | Show the volume or brightness level, or the tool name, on screen as you turn (Omarchy's own on-screen display). Handy while learning the dial and for movies; turn it off for a cleaner screen. | `true` | true / false |
-| `guide` | Hints while you learn: a short line about the next thing the dial can do (press, hold to choose a tool, then settings), shown when what you are doing suggests you are ready. At most three showings of each, at least 30 seconds apart. Needs `osd`. Progress is kept in `progress.json` next to `config.json` (usage counts, on this machine only); to start the introduction again, stop the service, run `surface-dial-hypr --reset-guide`, and start it. | `true` | true / false |
+| `guide` | Hints while you learn: a short line about the next thing the dial can do (press, hold to choose a tool, then settings), shown when what you are doing suggests you are ready. At most three showings of each, at least 30 seconds apart. Needs `osd`. Progress is kept in `progress.json` next to `config.json` (usage counts, on this machine only); to start the introduction again, stop the service, run `redial-hypr --reset-guide`, and start it. | `true` | true / false |
 | `onboarding_mode` | How the hints teach. `adaptive` shows each hint (press, hold, choosing, settings) when what you do says you are ready. `discover` says almost nothing: one hint to press, one to hold, then nothing more. `guided` is a short tour on connect: turn, press, hold, close the ring, pick a tool, then a pointer to the Feel page; a step nobody does is asked again after 20 s, up to three times, then skipped. Adaptive and discover also tell you what each tool does the first time you pick it, and what its click does if you turn it a while without clicking. Anything else counts as `adaptive`. Only applies while `guide` and `osd` are on. | `"adaptive"` | adaptive / discover / guided |
 | `return_buzz` | Whether the dial buzzes when a tool drops back to Volume. | `true` | true / false |
 | `double_click_ms` | How long a second (or third) press can take and still count as a double (or triple) click. | `250` | 150 to 600 |
@@ -340,7 +340,7 @@ dictation click action and you can speak the question. With no command set it sa
 ```
 
 `cmd` is always a list, never a shell string. The list comes from the daemon
-(`~/.config/dial-radial/clicks.json`, written at every start), so the settings window
+(`~/.config/redial/clicks.json`, written at every start), so the settings window
 never hardcodes it. Pick them in the settings window's **Clicks** section — click a chip
 to cycle, right-click to go back.
 
@@ -399,7 +399,7 @@ its own, not from dial rotation:
 
 `open`/`close` go over IPC, but rotation does not: the dial emits ~100 events a
 second and every `omarchy-shell` call spawns a process. The plugin instead hosts
-a socket at `$XDG_RUNTIME_DIR/dial-radial.sock` and the daemon streams:
+a socket at `$XDG_RUNTIME_DIR/redial.sock` and the daemon streams:
 
     pos <float>\n
 
@@ -445,7 +445,7 @@ rather than a fix aimed at one application.
 
 ## Prior art
 
-Microsoft discontinued the Surface Dial. [daniel5151/surface-dial-linux]
-(https://github.com/daniel5151/surface-dial-linux) is the existing Linux
+Microsoft discontinued the Surface Dial. [daniel5151/redial-linux]
+(https://github.com/daniel5151/redial-linux) is the existing Linux
 userspace daemon, in maintenance mode per its author. This is an independent
 implementation and shares no code with it.

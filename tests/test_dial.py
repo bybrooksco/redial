@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Regression tests for the Surface Dial daemon's logic -- no dial, no display needed.
 
-    python3 test_dial.py                      # tests ../bin/surface-dial-hypr (the kit's copy)
-    DIAL_DAEMON=~/.local/bin/surface-dial-hypr python3 test_dial.py   # the live install
+    python3 test_dial.py                      # tests ../bin/redial-hypr (the kit's copy)
+    DIAL_DAEMON=~/.local/bin/redial-hypr python3 test_dial.py   # the live install
 
 Every side effect (keys, hyprctl, playerctl, brightnessctl, notifications, haptics) is
 replaced with a recorder, and the click gestures are driven through a real temporary
@@ -31,7 +31,7 @@ os.environ["DIAL_CONFIG_DIR"] = tempfile.mkdtemp()
 os.environ["DIAL_LOG_PATH"] = os.path.join(tempfile.mkdtemp(), "daemon.log")  # likewise for its log
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DAEMON = os.environ.get("DIAL_DAEMON") or os.path.join(HERE, "..", "bin", "surface-dial-hypr")
+DAEMON = os.environ.get("DIAL_DAEMON") or os.path.join(HERE, "..", "bin", "redial-hypr")
 
 
 def load_daemon():
@@ -850,7 +850,7 @@ class PluginManifest(unittest.TestCase):
         self.assertEqual(links, [])
 
     def test_both_manifests_and_the_daemon_agree_on_identity_and_version(self):
-        root, nested = self.manifest(), self.manifest("plugin", "dial.radial")
+        root, nested = self.manifest(), self.manifest("plugin", "redial")
         self.assertEqual(root["id"], nested["id"])
         self.assertEqual(root["version"], nested["version"])
         self.assertEqual(root["version"], m.__version__)
@@ -1868,10 +1868,10 @@ class AxisToggle(Base):
 
 
 class RestartScript(unittest.TestCase):
-    """bin/surface-dial-restart: stop the old daemon, start a new one through Hyprland."""
+    """bin/redial-restart: stop the old daemon, start a new one through Hyprland."""
 
     SCRIPT = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "bin", "surface-dial-restart"
+        os.path.dirname(os.path.abspath(__file__)), "..", "bin", "redial-restart"
     )
 
     def setUp(self):
@@ -1888,7 +1888,7 @@ class RestartScript(unittest.TestCase):
 
     def run_script(self, daemon=True, running=True):
         if daemon:
-            d = os.path.join(self.home, ".local", "bin", "surface-dial-hypr")
+            d = os.path.join(self.home, ".local", "bin", "redial-hypr")
             open(d, "w").write("#!/bin/sh\n")
             os.chmod(d, 0o755)
         self.stub("pgrep", "exit 0" if running else "exit 1")
@@ -1906,7 +1906,7 @@ class RestartScript(unittest.TestCase):
         self.assertTrue(any(c.startswith("pkill -TERM") for c in calls), calls)
         start = [c for c in calls if c.startswith("hyprctl dispatch")]
         self.assertEqual(len(start), 1, calls)
-        self.assertIn("uwsm-app -- " + self.home + "/.local/bin/surface-dial-hypr", start[0])
+        self.assertIn("uwsm-app -- " + self.home + "/.local/bin/redial-hypr", start[0])
         self.assertLess(
             next(i for i, c in enumerate(calls) if c.startswith("pkill")),
             next(i for i, c in enumerate(calls) if c.startswith("hyprctl")),
@@ -2617,7 +2617,7 @@ class PointerTools(Base):
             os.path.dirname(os.path.abspath(__file__)),
             "..",
             "plugin",
-            "dial.radial",
+            "redial",
             "config.example.json",
         )
         with open(path) as f:
@@ -2827,43 +2827,43 @@ class UninstallScript(unittest.TestCase):
 
     def test_install_then_uninstall_leaves_your_files_as_they_were(self):
         self.install()
-        self.assertTrue(self.exists(".local/bin/surface-dial-hypr"))
-        self.assertTrue(self.exists(".config/omarchy/plugins/dial.radial/DialMenu.qml"))
-        self.assertIn("surface-dial-hypr", self.read(".config/hypr/autostart.lua"))
+        self.assertTrue(self.exists(".local/bin/redial-hypr"))
+        self.assertTrue(self.exists(".config/omarchy/plugins/redial/DialMenu.qml"))
+        self.assertIn("redial-hypr", self.read(".config/hypr/autostart.lua"))
         r = self.sh("uninstall.sh", "-y")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         for f in (
-            "surface-dial-hypr",
-            "surface-dial-setup",
-            "surface-dial-restart",
-            "surface-dial-bar",
-            "surface-dial-rise-widget",
+            "redial-hypr",
+            "redial-setup",
+            "redial-restart",
+            "redial-bar",
+            "redial-rise-widget",
         ):
             self.assertFalse(self.exists(f".local/bin/{f}"), f)
-        self.assertFalse(self.exists(".config/omarchy/plugins/dial.radial"))
+        self.assertFalse(self.exists(".config/omarchy/plugins/redial"))
         self.assertEqual(self.read(".config/hypr/autostart.lua"), self.AUTOSTART)
         self.assertEqual(self.read(".config/omarchy/extensions/omarchy-menu.jsonc"), self.MENU)
 
     def test_settings_are_kept_unless_purged(self):
         self.install()
-        self.put(".config/dial-radial/config.json", '{"sensitivity": 1.5}')
-        self.put(".local/state/surface-dial/daemon.log", "log\n")
+        self.put(".config/redial/config.json", '{"sensitivity": 1.5}')
+        self.put(".local/state/redial/daemon.log", "log\n")
         self.assertEqual(self.sh("uninstall.sh", "-y").returncode, 0)
-        self.assertEqual(self.read(".config/dial-radial/config.json"), '{"sensitivity": 1.5}')
+        self.assertEqual(self.read(".config/redial/config.json"), '{"sensitivity": 1.5}')
         self.assertEqual(self.sh("uninstall.sh", "-y", "--purge").returncode, 0)
-        self.assertFalse(self.exists(".config/dial-radial"))
-        self.assertFalse(self.exists(".local/state/surface-dial"))
+        self.assertFalse(self.exists(".config/redial"))
+        self.assertFalse(self.exists(".local/state/redial"))
 
     def test_nothing_is_deleted_outright_it_all_goes_to_a_backup(self):
         self.install()
-        self.put(".config/dial-radial/config.json", "{}")
+        self.put(".config/redial/config.json", "{}")
         self.assertEqual(self.sh("uninstall.sh", "-y", "--purge").returncode, 0)
-        base = os.path.join(self.home, ".local/share/dial-kit-backups")
+        base = os.path.join(self.home, ".local/share/redial-backups")
         found = []
         for root, _, files in os.walk(base):
             if "uninstall-" in root:
                 found += files
-        for name in ("surface-dial-hypr", "DialMenu.qml", "config.json", "autostart.lua"):
+        for name in ("redial-hypr", "DialMenu.qml", "config.json", "autostart.lua"):
             self.assertIn(name, found, name)
 
     def test_a_second_run_is_harmless(self):
@@ -2881,7 +2881,7 @@ class UninstallScript(unittest.TestCase):
 
     def test_dash_y_never_uses_sudo_and_says_how_to_remove_the_udev_rule(self):
         self.install()
-        udev = "/etc/udev/rules.d/70-surface-dial.rules"
+        udev = "/etc/udev/rules.d/70-redial.rules"
         r = self.sh("uninstall.sh", "-y")
         self.assertFalse(any(c.startswith("sudo") for c in self.calls() if "rm -f" in c), r.stdout)
         if os.path.exists(udev):  # only on a machine that really has the rule
@@ -2904,12 +2904,12 @@ class UninstallScript(unittest.TestCase):
         r = self.run_with_input("n\n")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("Nothing changed", r.stdout)
-        self.assertTrue(self.exists(".local/bin/surface-dial-hypr"))
-        self.assertTrue(self.exists(".config/omarchy/plugins/dial.radial"))
+        self.assertTrue(self.exists(".local/bin/redial-hypr"))
+        self.assertTrue(self.exists(".config/omarchy/plugins/redial"))
 
     def test_the_udev_rule_is_removed_with_sudo_only_when_you_say_yes(self):
         self.install()
-        rule = os.path.join(self.home, "70-surface-dial.rules")
+        rule = os.path.join(self.home, "70-redial.rules")
         open(rule, "w").write("x\n")
         open(self.log, "w").close()
         r = self.run_with_input("y\nn\n", udev=rule)  # go ahead; but keep the udev rule
@@ -2943,7 +2943,7 @@ class UninstallScript(unittest.TestCase):
         r = self.sh("uninstall.sh", "-y")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.read(path), text)
-        self.assertIn("setup.surface-dial", r.stdout)
+        self.assertIn("setup.redial", r.stdout)
 
     def test_unknown_options_are_refused(self):
         r = self.sh("uninstall.sh", "--nuke")
@@ -3861,8 +3861,8 @@ class PrivateFiles(unittest.TestCase):
         self.addCleanup(
             lambda: saved is not None and os.environ.__setitem__("XDG_RUNTIME_DIR", saved)
         )
-        src = open(m.__file__ if hasattr(m, "__file__") else "bin/surface-dial-hypr").read()
-        self.assertNotIn('"/tmp"), "dial-radial.sock"', src)
+        src = open(m.__file__ if hasattr(m, "__file__") else "bin/redial-hypr").read()
+        self.assertNotIn('"/tmp"), "redial.sock"', src)
         stream = m.MenuStream()
         stream.PATH = None
         stream.connect()
@@ -4151,7 +4151,7 @@ class SelfInstaller(unittest.TestCase):
             f.write("-- mine\n")
         self.env = {"HOME": self.home, "PATH": self.stubs + ":/usr/bin:/bin", "USER": "tester"}
         self.target = os.path.join(
-            self.home, ".local/share/surface-dial-beta", f"surface-dial-{self.version}"
+            self.home, ".local/share/redial-beta", f"redial-{self.version}"
         )
 
     def run_installer(self, *args, text="", path=None, installer=None):
@@ -4190,8 +4190,8 @@ class SelfInstaller(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         for f in ("install.sh", "uninstall.sh", "BETA.md", "FEEDBACK.md", "SECURITY.md", "LICENSE"):
             self.assertTrue(os.path.exists(os.path.join(self.target, f)), f)
-        self.assertFalse(self.exists(".local/bin/surface-dial-hypr"))
-        self.assertFalse(self.exists(".config/omarchy/plugins/dial.radial"))
+        self.assertFalse(self.exists(".local/bin/redial-hypr"))
+        self.assertFalse(self.exists(".config/omarchy/plugins/redial"))
         self.assertIn("Unpacked only", r.stdout)
         self.assertNotIn("Before you continue", r.stdout)  # it stopped before the notice
 
@@ -4208,7 +4208,7 @@ class SelfInstaller(unittest.TestCase):
         r = self.run_installer(text="n\nn\n")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("Nothing was installed", r.stdout)
-        self.assertFalse(self.exists(".local/bin/surface-dial-hypr"))
+        self.assertFalse(self.exists(".local/bin/redial-hypr"))
         self.assertTrue(os.path.exists(os.path.join(self.target, "install.sh")))
 
     def test_the_notice_names_the_real_risks(self):
@@ -4219,8 +4219,8 @@ class SelfInstaller(unittest.TestCase):
     def test_yes_runs_the_installer_which_still_asks_its_own_questions(self):
         r = self.run_installer(text="n\ny\n" + "y\n" * 40)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertTrue(self.exists(".local/bin/surface-dial-hypr"))
-        self.assertTrue(self.exists(".config/omarchy/plugins/dial.radial/DialMenu.qml"))
+        self.assertTrue(self.exists(".local/bin/redial-hypr"))
+        self.assertTrue(self.exists(".config/omarchy/plugins/redial/DialMenu.qml"))
         # install.sh ran with its own plan and questions (not silently with -y)
         self.assertIn("For your user only, no sudo", r.stdout)
         self.assertIn("uninstall.sh", r.stdout)
@@ -4229,7 +4229,7 @@ class SelfInstaller(unittest.TestCase):
     def test_unattended_installs_without_the_notice(self):
         r = self.run_installer("--unattended")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertTrue(self.exists(".local/bin/surface-dial-hypr"))
+        self.assertTrue(self.exists(".local/bin/redial-hypr"))
         self.assertNotIn("I have read this", r.stdout)
 
     def test_the_kept_uninstaller_removes_what_the_installer_added(self):
@@ -4242,7 +4242,7 @@ class SelfInstaller(unittest.TestCase):
             input="",
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertFalse(self.exists(".local/bin/surface-dial-hypr"))
+        self.assertFalse(self.exists(".local/bin/redial-hypr"))
         with open(os.path.join(self.home, ".config/hypr/autostart.lua")) as f:
             self.assertEqual(f.read(), "-- mine\n")
 

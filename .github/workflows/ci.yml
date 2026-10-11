@@ -19,18 +19,18 @@ jobs:
       - name: Let git read the checkout (the container runs as a different user)
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Python lint
-        run: ruff check bin/surface-dial-hypr bin/surface-dial-rise-widget scripts/add-menu-entry.py tests
+        run: ruff check bin/redial-hypr bin/redial-rise-widget scripts/add-menu-entry.py tests
       - name: Python format
-        run: ruff format --check bin/surface-dial-hypr bin/surface-dial-rise-widget scripts/add-menu-entry.py tests
+        run: ruff format --check bin/redial-hypr bin/redial-rise-widget scripts/add-menu-entry.py tests
       - name: Shell lint
-        run: shellcheck install.sh uninstall.sh scripts/make-installer.sh scripts/installer-template.sh bin/surface-dial-setup bin/surface-dial-restart bin/surface-dial-bar scripts/pair-dial.sh
+        run: shellcheck install.sh uninstall.sh scripts/make-installer.sh scripts/installer-template.sh bin/redial-setup bin/redial-restart bin/redial-bar scripts/pair-dial.sh
       - name: Tests (with a coverage floor)
         run: |
-          coverage run --include=bin/surface-dial-hypr tests/test_dial.py
+          coverage run --include=bin/redial-hypr tests/test_dial.py
           coverage report --fail-under=75
       - name: QML component tests
         run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml
       - name: QML lint (informational)
         # Quickshell's modules aren't installable in CI, so import warnings are expected.
         continue-on-error: true
-        run: qmllint plugin/dial.radial/*.qml
+        run: qmllint plugin/redial/*.qml

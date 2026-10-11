@@ -4,7 +4,7 @@
 # One file. It contains the whole release (not Omarchy itself, which you need first:
 # https://omarchy.org); run it with:   bash <this file>
 # It does nothing until you have read a short notice and said yes, then it unpacks the release to
-#   ~/.local/share/surface-dial-beta/surface-dial-__VERSION__/
+#   ~/.local/share/redial-beta/redial-__VERSION__/
 # and runs that folder's install.sh, which shows its own plan and asks before every change.
 # The unpacked folder stays so you can run its uninstall.sh later.
 #
@@ -16,7 +16,7 @@ set -u
 
 VERSION="__VERSION__"
 PAYLOAD_SHA256="__SHA256__"
-DEST_ROOT="$HOME/.local/share/surface-dial-beta"
+DEST_ROOT="$HOME/.local/share/redial-beta"
 EXTRACT_ONLY=0
 UNATTENDED=0
 for a in "$@"; do
@@ -34,7 +34,7 @@ if [[ "$(id -u)" == 0 ]]; then
     exit 1
 fi
 if [[ ! -r "$0" || "$0" == bash || "$0" == -bash ]]; then
-    echo "Please save this file and run it as:  bash surface-dial-$VERSION-installer.sh" >&2
+    echo "Please save this file and run it as:  bash redial-$VERSION-installer.sh" >&2
     exit 1
 fi
 for tool in tar base64 sha256sum awk; do
@@ -66,9 +66,9 @@ fi
 echo "  [OK]   file is intact"
 
 mkdir -p "$DEST_ROOT"
-TARGET="$DEST_ROOT/surface-dial-$VERSION"
+TARGET="$DEST_ROOT/redial-$VERSION"
 if [[ -d "$TARGET" ]]; then
-    mv "$TARGET" "$DEST_ROOT/surface-dial-$VERSION.old-$(date +%Y%m%d-%H%M%S)"
+    mv "$TARGET" "$DEST_ROOT/redial-$VERSION.old-$(date +%Y%m%d-%H%M%S)"
 fi
 tar -xzf "$WORK/release.tar.gz" -C "$DEST_ROOT" || { echo "could not unpack" >&2; exit 1; }
 [[ -f "$TARGET/install.sh" ]] || { echo "unexpected package layout; nothing installed" >&2; exit 1; }

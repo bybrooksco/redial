@@ -7,9 +7,9 @@ about: Something doesn't work
 
 **Environment**
 - Omarchy / Hyprland version:
-- `surface-dial-hypr --version`:
+- `redial-hypr --version`:
 - Dial connected over Bluetooth? Pen in use?
 
-**Output of `surface-dial-setup`**
+**Output of `redial-setup`**
 
-**Daemon log**: the last lines of `~/.local/state/surface-dial/daemon.log`
+**Daemon log**: the last lines of `~/.local/state/redial/daemon.log`

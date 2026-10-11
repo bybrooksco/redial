@@ -2,8 +2,8 @@
 # config/autostart.snippet.lua). Use this instead if you want the daemon
 # restarted automatically when it crashes:
 #
-#   cp systemd/surface-dial.service ~/.config/systemd/user/
-#   systemctl --user enable --now surface-dial.service
+#   cp systemd/redial.service ~/.config/systemd/user/
+#   systemctl --user enable --now redial.service
 #
 # Remove the launch_on_start line from autostart.lua first, or two copies run.
 [Unit]
@@ -12,7 +12,7 @@ PartOf=graphical-session.target
 After=graphical-session.target
 
 [Service]
-ExecStart=%h/.local/bin/surface-dial-hypr
+ExecStart=%h/.local/bin/redial-hypr
 Restart=on-failure
 RestartSec=3
 

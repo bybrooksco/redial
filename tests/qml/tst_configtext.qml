@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../plugin/dial.radial/ConfigText.js" as ConfigText
+import "../../plugin/redial/ConfigText.js" as ConfigText
 
 // The settings window must never write over a config it could not read.
 // Run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml

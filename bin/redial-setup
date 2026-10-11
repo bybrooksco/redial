@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# surface-dial-setup -- checks/repairs the machine-level setup surface-dial-hypr
+# redial-setup -- checks/repairs the machine-level setup redial-hypr
 # needs, on a new machine or when pairing a new physical dial. Idempotent and
 # safe to re-run: every change is behind its own y/N prompt, nothing silent.
 #
@@ -8,16 +8,16 @@
 # for a read-only report.
 set -uo pipefail
 
-# Matches surface-dial-hypr's own find_node(): a loose case-insensitive
+# Matches redial-hypr's own find_node(): a loose case-insensitive
 # substring check against the hidraw uevent, not an exact VID:PID parse --
 # the BLE uhid HID_ID field is zero-padded ("0005:0000045E:0000091B") in a
 # way that varies, so matching a literal padded/unpadded string is fragile.
 HID_ID_SUBSTRING="091B"
 DEVICE_NAME="Surface Dial System Multi Axis"
-UDEV_RULE_PATH="/etc/udev/rules.d/70-surface-dial.rules"
-DAEMON_PATH="$HOME/.local/bin/surface-dial-hypr"
+UDEV_RULE_PATH="/etc/udev/rules.d/70-redial.rules"
+DAEMON_PATH="$HOME/.local/bin/redial-hypr"
 AUTOSTART_PATH="$HOME/.config/hypr/autostart.lua"
-PLUGIN_DIR="$HOME/.config/omarchy/plugins/dial.radial"
+PLUGIN_DIR="$HOME/.config/omarchy/plugins/redial"
 
 pass=0
 fail=0
@@ -60,7 +60,7 @@ else
 #
 # Write access is needed to send haptic output reports -- the dial has no
 # mechanical detents, so the clicks are a motor driven from userspace by
-# surface-dial-hypr.
+# redial-hypr.
 KERNEL=="hidraw*", KERNELS=="0005:045E:091B.*", MODE="0660", GROUP="input"
 
 # Virtual pointer/keyboard creation, for true wheel events (scroll that
@@ -109,18 +109,18 @@ echo "-- Daemon + Omarchy integration --"
 if [[ -x "$DAEMON_PATH" ]]; then
     ok "daemon present at $DAEMON_PATH"
 else
-    bad "daemon not found at $DAEMON_PATH -- surface-dial-setup only checks for it, it doesn't install it"
+    bad "daemon not found at $DAEMON_PATH -- redial-setup only checks for it, it doesn't install it"
 fi
 
-if [[ -f "$AUTOSTART_PATH" ]] && grep -q 'launch_on_start("surface-dial-hypr")' "$AUTOSTART_PATH"; then
+if [[ -f "$AUTOSTART_PATH" ]] && grep -q 'launch_on_start("redial-hypr")' "$AUTOSTART_PATH"; then
     ok "Hyprland autostart entry present ($AUTOSTART_PATH)"
 else
     warn "no autostart entry found -- add this line to $AUTOSTART_PATH:"
-    warn '  o.launch_on_start("surface-dial-hypr")'
+    warn '  o.launch_on_start("redial-hypr")'
 fi
 
 if [[ -f "$PLUGIN_DIR/manifest.json" ]]; then
-    ok "dial.radial plugin files present ($PLUGIN_DIR)"
+    ok "redial plugin files present ($PLUGIN_DIR)"
     if command -v omarchy-shell >/dev/null 2>&1; then
         # No -q here on purpose: -q swallows the reply along with errors, and
         # the reply is the thing being checked.
@@ -128,7 +128,7 @@ if [[ -f "$PLUGIN_DIR/manifest.json" ]]; then
         if [[ "$state" == "ok" ]]; then
             ok "plugin is enabled and responding to IPC"
         else
-            warn "plugin not responding -- run: omarchy-shell shell setPluginEnabled dial.radial true"
+            warn "plugin not responding -- run: omarchy-shell shell setPluginEnabled redial true"
         fi
     fi
 else
@@ -158,13 +158,13 @@ else
     warn "dial event device not found -- is it connected?"
 fi
 
-if pgrep -f "surface-dial-hypr" >/dev/null 2>&1; then
+if pgrep -f "redial-hypr" >/dev/null 2>&1; then
     ok "daemon process is running"
 else
     warn "daemon process not running"
 fi
 
-DAEMON_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/surface-dial/daemon.log"
+DAEMON_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/redial/daemon.log"
 if [[ -f "$DAEMON_LOG" ]]; then
     ok "daemon log: $DAEMON_LOG (last line: $(tail -n 1 "$DAEMON_LOG" | cut -c1-70))"
 else

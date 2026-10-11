@@ -8,15 +8,15 @@ No build step. Clone, then:
 
 ```
 python3 tests/test_dial.py        # no dial or display needed
-coverage run --include=bin/surface-dial-hypr tests/test_dial.py && coverage report --fail-under=75   # CI's floor (currently 81%)
+coverage run --include=bin/redial-hypr tests/test_dial.py && coverage report --fail-under=75   # CI's floor (currently 81%)
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml   # keyboard/accessibility of Pressable; headless (note: /usr/bin/qmltestrunner is the Qt 5 one)
-ruff check bin/surface-dial-hypr bin/surface-dial-rise-widget scripts/add-menu-entry.py tests
-ruff format --check bin/surface-dial-hypr bin/surface-dial-rise-widget scripts/add-menu-entry.py tests
-shellcheck install.sh uninstall.sh scripts/make-installer.sh scripts/installer-template.sh bin/surface-dial-setup bin/surface-dial-restart bin/surface-dial-bar scripts/pair-dial.sh
+ruff check bin/redial-hypr bin/redial-rise-widget scripts/add-menu-entry.py tests
+ruff format --check bin/redial-hypr bin/redial-rise-widget scripts/add-menu-entry.py tests
+shellcheck install.sh uninstall.sh scripts/make-installer.sh scripts/installer-template.sh bin/redial-setup bin/redial-restart bin/redial-bar scripts/pair-dial.sh
 ```
 
 These are exactly what CI runs. (`ruff check .` alone would skip the daemon: ruff only
-walks `.py` files, and `bin/surface-dial-hypr` has no extension.) Install `ruff` and
+walks `.py` files, and `bin/redial-hypr` has no extension.) Install `ruff` and
 `shellcheck` from your package manager or `pip`.
 
 ## Debugging
@@ -40,15 +40,15 @@ worked when it didn't. Drive the overlay without a dial with
   tested without hardware; add a test next to the existing ones. Feel on the real
   dial can't be tested, so say how you checked it by hand.
 - **Per-machine config stays per-machine.** Nothing in this repo may overwrite
-  `~/.config/dial-radial/config.json` once it exists.
+  `~/.config/redial/config.json` once it exists.
 - **Keep installs non-destructive.** Anything that edits a file outside this repo
   asks first and backs the original up.
 - **Small and plain over clever.** Prefer a short function to a new abstraction.
 
 ## Reporting bugs
 
-Open an issue with your Omarchy/Hyprland version, `surface-dial-hypr --version`,
+Open an issue with your Omarchy/Hyprland version, `redial-hypr --version`,
 and the daemon log. For permission or "dial not found" problems, run
-`surface-dial-setup` first and paste its output.
+`redial-setup` first and paste its output.
 
 By contributing you agree your work is released under the MIT license.

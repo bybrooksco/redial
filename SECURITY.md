@@ -10,7 +10,7 @@ before installing.
   including your keyboard. In practice that is keylogger-equivalent access for any
   process you run. Many Linux desktop tools ask for this; it is still a real
   trade-off, and `install.sh` asks before adding you.
-- **Write access to `/dev/uinput`** (rule in `udev/70-surface-dial.rules`). This
+- **Write access to `/dev/uinput`** (rule in `udev/70-redial.rules`). This
   lets the daemon create virtual keyboards and mice to send scroll and key events.
   It also lets any `input`-group process inject keystrokes.
 - **Write access to the dial's `hidraw` node**, scoped by the rule to the Surface

@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../plugin/dial.radial"
+import "../../plugin/redial"
 
 // Every installed Omarchy theme's background, foreground and accent (copied from
 // /usr/share/omarchy/themes/*/colors.toml): the helper must make each text style legible on all.

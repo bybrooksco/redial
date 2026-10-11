@@ -10,6 +10,6 @@ ignore = ["B023"]
 
 [tool.ruff.lint.per-file-ignores]
 # Verbatim anchor and patch text for another project's files; wrapping would change it.
-"bin/surface-dial-rise-widget" = ["E501"]
+"bin/redial-rise-widget" = ["E501"]
 # The tests load the daemon by path, so imports follow the loader.
 "tests/test_dial.py" = ["E402"]

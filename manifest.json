@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "id": "dial.radial",
+  "id": "redial",
   "name": "Surface Dial radial menu",
   "version": "0.8.3",
   "description": "Radial tool menu overlay driven by the Surface Dial daemon.",
   "kinds": ["panel"],
   "keepLoaded": true,
-  "entryPoints": { "panel": "plugin/dial.radial/DialMenu.qml" }
+  "entryPoints": { "panel": "plugin/redial/DialMenu.qml" }
 }

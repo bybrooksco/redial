@@ -16,7 +16,7 @@ licensed.
 - Linux with **Omarchy** (Hyprland and its Quickshell shell). Omarchy is a separate project and is *not*
   included in this download; get it from <https://omarchy.org> first. Arch-based; the installer uses `pacman`
   through Omarchy's own helper.
-- A **Surface Dial**, paired over Bluetooth. The installer does not pair it for you; `surface-dial-setup` tells you if none is paired and explains how, and `scripts/pair-dial.sh` does the pairing.
+- A **Surface Dial**, paired over Bluetooth. The installer does not pair it for you; `redial-setup` tells you if none is paired and explains how, and `scripts/pair-dial.sh` does the pairing.
 - About ten minutes, and willingness to restart your shell once.
 
 It is not for other Linux desktops, and it is not a Windows or macOS program.
@@ -42,8 +42,8 @@ If something does not work, that is exactly what this beta is for. You are not d
 
 For your user only, after showing you a plan and asking once:
 
-- puts programs in `~/.local/bin` (`surface-dial-hypr` and a few helpers);
-- puts the plugin in `~/.config/omarchy/plugins/dial.radial`;
+- puts programs in `~/.local/bin` (`redial-hypr` and a few helpers);
+- puts the plugin in `~/.config/omarchy/plugins/redial`;
 - adds one line to start the daemon at login in `~/.config/hypr/autostart.lua`;
 - adds **Setup > Surface Dial** to your Omarchy menu;
 - installs one small package, `playerctl` (for the Media tool), through Omarchy's package helper if it is missing, and tells you about other optional tools it did not find (for example `voxtype` for dictation, `brightnessctl` for the Brightness tool);
@@ -52,17 +52,17 @@ For your user only, after showing you a plan and asking once:
 It asks separately before using `sudo`, for two things: a udev rule so the dial can be read, and
 adding you to the `input` group. **Read `SECURITY.md` for what those permissions mean**: anything in
 the `input` group can read every input device on the machine. Anything it replaces is copied to
-`~/.local/share/dial-kit-backups/` first.
+`~/.local/share/redial-backups/` first.
 
 ## Privacy
 
 Nothing is sent anywhere: the daemon makes no network connections. It keeps a small log at
-`~/.local/state/surface-dial/daemon.log` (256 KB, one rotation). It records connections, errors and
+`~/.local/state/redial/daemon.log` (256 KB, one rotation). It records connections, errors and
 which gestures fired, and occasionally an application name (for example the window the pen's
 eraser was used in). It does not record what you type. **Look at the log before sending it to
 anyone.** The optional "Quick assistant" action only runs the command you yourself put in the config.
 
-The hints that teach you the dial keep their progress in `~/.config/dial-radial/progress.json`: which
+The hints that teach you the dial keep their progress in `~/.config/redial/progress.json`: which
 hints you have seen and plain counts of how many steps, clicks, menu openings and tool choices you have
 made. It stays on your computer, is never sent anywhere, and is not read by anything but the dial's own
 program. You can turn the hints off ("Hints while you learn" on the Feel page), and `--purge` on the
@@ -92,9 +92,9 @@ you out of the `input` group, because other things may need it.
 The most useful notes are specific and small: what you did, what you expected, what happened.
 Please include:
 
-1. the version (it is on the settings window's **Help** page, or run `surface-dial-hypr --version`);
-2. the output of `surface-dial-setup` (it checks everything and says what to fix);
-3. anything from `~/.local/state/surface-dial/daemon.log` that looks relevant, after reading it.
+1. the version (it is on the settings window's **Help** page, or run `redial-hypr --version`);
+2. the output of `redial-setup` (it checks everything and says what to fix);
+3. anything from `~/.local/state/redial/daemon.log` that looks relevant, after reading it.
 
 `FEEDBACK.md` is a short sheet you can copy into an email: setup, a few things to try on the first day,
 and questions for after a few days. Use it or not, as you like.

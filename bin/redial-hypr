@@ -173,7 +173,7 @@ __version__ = "0.8.3"
 CONFIG_PATH = os.path.join(
     os.environ.get("DIAL_CONFIG_DIR")
     or os.path.join(
-        os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "dial-radial"
+        os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "redial"
     ),
     "config.json",
 )
@@ -301,7 +301,7 @@ BRIGHT_MIN = 1
 # record of connects, disconnects and errors. One rotation: daemon.log and daemon.log.1.
 LOG_PATH = os.environ.get("DIAL_LOG_PATH") or os.path.join(
     os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"),
-    "surface-dial",
+    "redial",
     "daemon.log",
 )
 LOG_MAX_BYTES = 256 * 1024
@@ -324,7 +324,7 @@ def _append_log(line):
 
 
 def log(msg):
-    print(f"surface-dial: {msg}", file=sys.stderr, flush=True)
+    print(f"redial: {msg}", file=sys.stderr, flush=True)
     _append_log(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}")
 
 
@@ -585,7 +585,7 @@ signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
 
 
 class MenuUI:
-    """Drives the dial.radial Quickshell dashboard over Omarchy's shell IPC.
+    """Drives the redial Quickshell dashboard over Omarchy's shell IPC.
 
     Best-effort by design: the dial must keep working headless if the shell is
     restarting or the plugin is disabled, so every call is fire-and-forget and
@@ -688,7 +688,7 @@ class MenuStream:
     # No /tmp fallback: that directory is shared, so another local user could plant a socket
     # there. Without a private runtime directory the continuous needle is simply off.
     PATH = (
-        os.path.join(os.environ["XDG_RUNTIME_DIR"], "dial-radial.sock")
+        os.path.join(os.environ["XDG_RUNTIME_DIR"], "redial.sock")
         if os.environ.get("XDG_RUNTIME_DIR")
         else None
     )
@@ -771,7 +771,7 @@ def _notify_sync(title, body=""):
             "-t",
             "1100",
             "-h",
-            "string:x-canonical-private-synchronous:surface-dial",
+            "string:x-canonical-private-synchronous:redial",
             title,
             body,
         ]
@@ -3420,9 +3420,9 @@ def load_tools():
 
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(
-        prog="surface-dial-hypr",
+        prog="redial-hypr",
         description="Surface Dial and Surface Pen control daemon for Hyprland/Omarchy.",
-        epilog=f"Config: {CONFIG_PATH}. Docs: plugin/dial.radial/README.md",
+        epilog=f"Config: {CONFIG_PATH}. Docs: plugin/redial/README.md",
     )
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     ap.add_argument(
@@ -3441,7 +3441,7 @@ def reset_guide_file(path, running):
     if running:
         return (
             1,
-            "The dial service is running. Stop it first (pkill -f surface-dial-hypr), then retry.",
+            "The dial service is running. Stop it first (pkill -f redial-hypr), then retry.",
         )
     try:
         os.remove(path)
@@ -3449,7 +3449,7 @@ def reset_guide_file(path, running):
         return 0, "Nothing to reset: the introduction has not started yet."
     except OSError as exc:
         return 1, f"Could not remove {path}: {exc}"
-    return 0, "The introduction will start again. Start the dial service (surface-dial-restart)."
+    return 0, "The introduction will start again. Start the dial service (redial-restart)."
 
 
 if __name__ == "__main__":
@@ -3457,7 +3457,7 @@ if __name__ == "__main__":
     if _args.reset_guide:
         _running = (
             subprocess.run(
-                ["pgrep", "-f", "^python3 .*surface-dial-hypr$"], capture_output=True
+                ["pgrep", "-f", "^python3 .*redial-hypr$"], capture_output=True
             ).returncode
             == 0
         )

@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../plugin/dial.radial"
+import "../../plugin/redial"
 
 // Run headless: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml
 // The keys here go to a window inside the test process only, never to the desktop.
@@ -87,7 +87,7 @@ TestCase {
   }
 
   function test_never_smaller_than_the_minimum_target() {
-    var p = createTemporaryObject(Qt.createComponent(Qt.resolvedUrl("../../plugin/dial.radial/Pressable.qml")), tc)
+    var p = createTemporaryObject(Qt.createComponent(Qt.resolvedUrl("../../plugin/redial/Pressable.qml")), tc)
     verify(p.implicitWidth >= 32)
     verify(p.implicitHeight >= 32)
   }

@@ -11,28 +11,28 @@ Hyprland + [Omarchy](https://omarchy.org) (a separate project; install it first)
 because its maker moved on.
 
 Microsoft discontinued the Surface Dial.
-[daniel5151/surface-dial-linux](https://github.com/daniel5151/surface-dial-linux)
+[daniel5151/redial-linux](https://github.com/daniel5151/redial-linux)
 is the existing Linux userspace daemon, in maintenance mode per its author.
 This is an independent implementation and shares no code with it.
 
 ## What's here
 
-- `bin/surface-dial-hypr` — the daemon (Python): rotation, clicks, haptics,
+- `bin/redial-hypr` — the daemon (Python): rotation, clicks, haptics,
   the tool library, and the Surface Pen's tail button / barrel button /
   eraser drag-scroll.
-- `bin/surface-dial-setup` — doctor/setup script: permissions, udev rule,
+- `bin/redial-setup` — doctor/setup script: permissions, udev rule,
   Bluetooth pairing, autostart, plugin status. Safe to re-run any time.
-- `bin/surface-dial-bar`, `bin/surface-dial-rise-widget` — status line and
+- `bin/redial-bar`, `bin/redial-rise-widget` — status line and
   installer for a "Surface Dial" tile on the Quickshell **Rise** bar.
-- `plugin/dial.radial/` — the Quickshell/Omarchy plugin: the live tool
+- `plugin/redial/` — the Quickshell/Omarchy plugin: the live tool
   overlay and the settings window (tools, position/size, click gestures for
   both the dial and the pen). See **its own README** for the full design,
   configuration reference, IPC, and action vocabulary — this file is just
   the install/overview layer.
-- `udev/70-surface-dial.rules` — hidraw + uinput permissions.
+- `udev/70-redial.rules` — hidraw + uinput permissions.
 - `scripts/pair-dial.sh` — scan, pair, trust, and connect over Bluetooth.
 - `tests/test_dial.py` — daemon regression suite. `python3 tests/test_dial.py`
-  tests the copy in this repo; `DIAL_DAEMON=~/.local/bin/surface-dial-hypr
+  tests the copy in this repo; `DIAL_DAEMON=~/.local/bin/redial-hypr
   python3 tests/test_dial.py` tests a live install.
 - `manifest.json` — makes this repo a plugin `omarchy plugin add` accepts.
 - `scripts/add-menu-entry.py` — adds Setup > Surface Dial to the Omarchy menu.
@@ -47,14 +47,14 @@ This is an independent implementation and shares no code with it.
 On Omarchy, two commands (replace the URL with this repo's):
 
 ```
-omarchy plugin add https://github.com/bybrooksco/surface-dial.git --enable
-~/.config/omarchy/plugins/dial.radial/install.sh
+omarchy plugin add https://github.com/bybrooksco/redial.git --enable
+~/.config/omarchy/plugins/redial/install.sh
 ```
 
 The first is Omarchy's own plugin installer and puts the overlay in place. The second
 installs the daemon, starts it at login, adds **Setup > Surface Dial** to the Omarchy menu,
 and handles the permissions the dial needs. Update later with
-`omarchy plugin update dial.radial`.
+`omarchy plugin update redial`.
 
 Or clone it anywhere and run `bash install.sh`, which does the same without
 `omarchy plugin add`.
@@ -68,7 +68,7 @@ Open the settings from the Omarchy menu (`SUPER+SPACE` > Setup > Surface Dial). 
 them with a key instead, bind `omarchy-shell dialtools toggle` in
 `~/.config/hypr/bindings.lua`.
 
-Once it's running, see `plugin/dial.radial/README.md` for configuration —
+Once it's running, see `plugin/redial/README.md` for configuration —
 tool selection, click gestures (dial and pen), position/size, colors.
 
 ### Uninstall
@@ -82,7 +82,7 @@ settings unless you pass `--purge`, and asks before its one `sudo` step (the ude
 **Beta (0.8.x), heading for 1.0.** Read `BETA.md` first: it says plainly what has and has not been
 tested, what the installer changes, and how to undo it. The plan to 1.0 is in `docs/ROADMAP.md`.
 It runs daily on a Surface Studio (Omarchy); a second machine (a Dell laptop, also Omarchy) has
-run an earlier version as a proof of concept for multi-device use. Config (`~/.config/dial-radial/config.json`) is
+run an earlier version as a proof of concept for multi-device use. Config (`~/.config/redial/config.json`) is
 deliberately per-machine — `active_tools`, `pen`, `clicks`, `size` — and
 never something this repo or `install.sh` overwrites once it exists.
 

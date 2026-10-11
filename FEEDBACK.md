@@ -9,7 +9,7 @@ names and other things you may not want to share.
 
 ## 1. About your setup
 
-- Version (the settings window's **Help** page, or run `surface-dial-hypr --version`):
+- Version (the settings window's **Help** page, or run `redial-hypr --version`):
 - Computer and Omarchy version (roughly):
 - Was your Surface Dial already paired with this computer?  yes / no / not sure
 
@@ -39,7 +39,7 @@ and a few words if it was not "worked".
 ## 3b. Only if you want to
 
 - Add a tool you do not have yet (for example Pointer or Focus) on the **Look** page, and try it.
-- Set up the **Quick assistant** click action to open the AI or chat you use (see `plugin/dial.radial/README.md`).
+- Set up the **Quick assistant** click action to open the AI or chat you use (see `plugin/redial/README.md`).
 - Try a different appearance on the **Look** page.
 
 ## 4. After a few days

@@ -11,7 +11,7 @@ import qs.Commons
 //
 // The file is watched, so edits apply live without restarting the shell.
 //
-//   ~/.config/dial-radial/config.json
+//   ~/.config/redial/config.json
 //
 // The path is deliberately tool-owned rather than under ~/.config/omarchy:
 // it survives Omarchy updates, and it is the same file the daemon reads, so
@@ -20,7 +20,7 @@ Item {
   id: cfg
 
   readonly property string dir:
-    (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/dial-radial"
+    (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/redial"
   readonly property string path: dir + "/config.json"
 
   // Parsed user document. Empty object until a valid file loads.
@@ -212,7 +212,7 @@ Item {
       doc = (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? parsed : ({})
     } catch (e) {
       // A syntax error must not take the overlay down with it.
-      console.warn("[dial.radial] config is not valid JSON, using defaults:", e)
+      console.warn("[redial] config is not valid JSON, using defaults:", e)
       doc = ({})
     }
     changed()
