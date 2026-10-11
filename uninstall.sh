@@ -50,7 +50,7 @@ MENU_EXT="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 UNIT="$HOME/.config/systemd/user/redial.service"
 UDEV="${DIAL_UDEV_RULE:-/etc/udev/rules.d/70-redial.rules}"  # the override is for tests
 
-echo "== Surface Dial uninstall ($(hostname), $STAMP) =="
+echo "== re:dial uninstall ($(hostname), $STAMP) =="
 cat <<PLAN
 
 This will, for your user only (no sudo):
@@ -58,7 +58,7 @@ This will, for your user only (no sudo):
   * remove ${BINS[*]// /, } from ~/.local/bin
   * remove the plugin folder ~/.config/omarchy/plugins/redial
   * remove the start-at-login lines from ~/.config/hypr/autostart.lua
-  * remove Setup > Surface Dial from the Omarchy menu
+  * remove Setup > re:dial from the Omarchy menu
 Everything removed is moved to $BACKUP first.
 Your settings (~/.config/redial) are $( ((PURGE)) && echo "moved to the backup too (--purge)" || echo "kept; pass --purge to remove them as well" ).
 The udev rule and 'input' group (system-wide) are asked about separately.
@@ -119,7 +119,7 @@ if grep -q 'launch_on_start("redial-hypr")' "$AUTOSTART" 2>/dev/null; then
         {
             if (held) {
                 held = 0
-                if (index($0, "-- Surface Dial control daemon. Source:") == 1) next
+                if (index($0, "-- re:dial daemon. Source:") == 1) next
                 print ""
             }
             if (index($0, "launch_on_start(\"redial-hypr\")")) next

@@ -25,7 +25,7 @@ Try these, in any order. For each, note **worked / worked but confusing / did no
 and a few words if it was not "worked".
 
 1. **Before you open anything or read anything**, turn the dial. What happened on screen? Did you know what it was doing? (If you can, ask yourself this the very first time, then write down what you saw.)
-2. Open the settings: Omarchy menu (`SUPER+SPACE`) > **Setup > Surface Dial**.
+2. Open the settings: Omarchy menu (`SUPER+SPACE`) > **Setup > re:dial**.
 3. Hover a tool in the settings window to read what it does.
 4. Hold the dial's button until a menu appears, turn to pick a different tool (for example Scroll),
    and let go. Use it to scroll a long page.

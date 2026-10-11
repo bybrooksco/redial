@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Surface Dial -> Omarchy/Hyprland control daemon.
+"""re:dial -- Surface Dial -> Omarchy/Hyprland control daemon.
 
 Interaction model
 -----------------
@@ -167,14 +167,12 @@ HOLD_S = 0.40  # press longer than this opens the menu
 # top-left | top-right | bottom-left | bottom-right
 # Config is shared with the overlay plugin; every key is optional and re-read when the menu
 # opens. Env vars win.
-__version__ = "0.8.3"
+__version__ = "0.9.0"
 
 # DIAL_CONFIG_DIR exists so tests can keep importing this file away from the real config.
 CONFIG_PATH = os.path.join(
     os.environ.get("DIAL_CONFIG_DIR")
-    or os.path.join(
-        os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "redial"
-    ),
+    or os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "redial"),
     "config.json",
 )
 
@@ -750,7 +748,7 @@ def _notify_sync(title, body=""):
     """
     global _notify_id
     if shutil.which("omarchy-notification-send"):
-        cmd = ["omarchy-notification-send", "--app-name", "Surface Dial", "-t", "1100", "-p"]
+        cmd = ["omarchy-notification-send", "--app-name", "re:dial", "-t", "1100", "-p"]
         if _notify_id:
             cmd += ["-r", _notify_id]
         cmd += [title, body] if body else [title]
@@ -767,7 +765,7 @@ def _notify_sync(title, body=""):
         [
             "notify-send",
             "-a",
-            "Surface Dial",
+            "re:dial",
             "-t",
             "1100",
             "-h",
@@ -875,7 +873,7 @@ GUIDE_STAGES = [
         "id": "own",
         "done": None,
         "when": ("steps", 3 * GUIDE_STEPS_BEFORE_HINT),
-        "text": lambda: "Make it yours: Menu > Setup > Surface Dial",
+        "text": lambda: "Make it yours: Menu > Setup > re:dial",
     },
 ]
 
@@ -920,7 +918,7 @@ TOUR_STEPS = [
         "id": "feel",
         "done": (),
         "need": 1,
-        "text": lambda: "Too fast or slow? Menu > Setup > Surface Dial > Feel",
+        "text": lambda: "Too fast or slow? Menu > Setup > re:dial > Feel",
     },
 ]
 
@@ -1409,7 +1407,7 @@ class VirtualPointer:
                 self.REL_HWHEEL_HI_RES,
             ):
                 fcntl.ioctl(fd, self.UI_SET_RELBIT, r)
-            name = b"Surface Dial Virtual Pointer".ljust(80, b"\0")
+            name = b"re:dial Virtual Pointer".ljust(80, b"\0")
             dev = (
                 name
                 + struct.pack("HHHH", 0x0003, 0x045E, 0x091B, 1)
@@ -3421,7 +3419,7 @@ def load_tools():
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(
         prog="redial-hypr",
-        description="Surface Dial and Surface Pen control daemon for Hyprland/Omarchy.",
+        description="re:dial: Surface Dial and Surface Pen control daemon for Hyprland/Omarchy.",
         epilog=f"Config: {CONFIG_PATH}. Docs: plugin/redial/README.md",
     )
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -3542,7 +3540,7 @@ class Dial:
     def show_connected(self):
         """Say the dial is ready, and what turning it does, when it connects or wakes."""
         t = TOOLS[self.tool]
-        notify(f"{t['icon']}  Surface Dial ready", f"Turn to change {t['name'].lower()}")
+        notify(f"{t['icon']}  re:dial ready", f"Turn to change {t['name'].lower()}")
 
     def show_menu(self):
         MENU_UI.highlight(self.menu_pick)

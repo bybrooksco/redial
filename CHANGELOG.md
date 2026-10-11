@@ -5,6 +5,19 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-11 (renamed to re:dial)
+
+### Changed
+- **The project is now re:dial.** "Surface Dial" and "Surface Pen" remain the names of the hardware it works with; the software, its commands and its files are re:dial.
+  - Commands: `surface-dial-hypr`, `-setup`, `-restart`, `-bar`, `-rise-widget` are now `redial-hypr`, `redial-setup`, `redial-restart`, `redial-bar`, `redial-rise-widget`.
+  - Plugin: `dial.radial` is now `redial` (`~/.config/omarchy/plugins/redial`). Settings live in `~/.config/redial/`, logs in `~/.local/state/redial/`, backups in `~/.local/share/redial-backups/`.
+  - Menu: Setup > re:dial. Udev rule: `70-redial.rules`. Systemd unit: `redial.service`.
+  - Repository: `bybrooksco/redial`.
+  - The kernel device names of the hardware (`Surface Dial System Multi Axis`, `Surface Touch Device Stylus`) are unchanged, and so are the Omarchy shell IPC targets (`dialmenu`, `dialtools`).
+
+### Added
+- **Upgrading from the Surface Dial beta (0.8.3 and earlier) is automatic.** `install.sh` stops the old daemon, moves your settings and learning progress to the new locations, backs up and removes the old commands and plugin, swaps the autostart line and menu entry, refreshes the Rise bar widget, and offers to replace the old udev rule. Nothing is deleted; old files go to `~/.local/share/redial-backups/`.
+
 ## [0.8.3] - 2026-10-11 (fixes and window-manager backends)
 
 ### Added

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# redial-restart -- restart the Surface Dial daemon.
+# redial-restart -- restart the re:dial daemon.
 #
 # Stops a running redial-hypr (if any) and starts it again the way Omarchy does at
 # login, through Hyprland, so it gets the session's real environment. The settings window's

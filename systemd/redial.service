@@ -7,7 +7,7 @@
 #
 # Remove the launch_on_start line from autostart.lua first, or two copies run.
 [Unit]
-Description=Surface Dial and Surface Pen daemon
+Description=re:dial (Surface Dial and Surface Pen daemon)
 PartOf=graphical-session.target
 After=graphical-session.target
 

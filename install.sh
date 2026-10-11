@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install.sh -- install the Surface Dial (and Surface Pen) daemon and the
+# install.sh -- install the re:dial (Surface Dial and Surface Pen) daemon and the
 # redial Quickshell plugin from this repo.
 #
 # Run it yourself, in a terminal INSIDE your Hyprland session (it needs the
@@ -41,7 +41,7 @@ backup() {
     mv "$t" "$BACKUP$t" && printf '         backed up old %s -> %s\n' "$t" "$BACKUP$t"
 }
 
-echo "== Surface Dial install ($(hostname), $STAMP) =="
+echo "== re:dial install ($(hostname), $STAMP) =="
 echo "   repo: $R"
 echo
 
@@ -55,7 +55,9 @@ For your user only, no sudo:
   * the daemon and helper scripts      -> ~/.local/bin
   * the redial plugin             -> ~/.config/omarchy/plugins (already there if you used 'omarchy plugin add')
   * start the daemon at login          -> one line in ~/.config/hypr/autostart.lua
-  * a "Surface Dial" menu entry        -> Omarchy menu > Setup
+  * a "re:dial" menu entry        -> Omarchy menu > Setup
+If the Surface Dial beta (before the rename to re:dial) is installed, it is moved to the new
+name: settings and learning progress are kept, the old files are backed up, nothing is lost.
 Asked about separately: enabling the plugin (restarts the shell for a few seconds), the udev
 rule and 'input' group (sudo), and the Rise bar widget if you use that bar.
 Anything overwritten is copied to $BACKUP first.
@@ -63,6 +65,51 @@ Anything overwritten is copied to $BACKUP first.
 PLAN
 confirm "Go ahead?" || { echo "Nothing changed."; exit 0; }
 echo
+
+echo "-- 0. Moving from the old name (the Surface Dial beta, up to 0.8.3) --"
+OLD_AUTOSTART='launch_on_start("surface-dial-hypr")'
+OLD_PLUGIN="$HOME/.config/omarchy/plugins/dial.radial"
+OLD_FOUND=0
+for f in "$HOME"/.local/bin/surface-dial-*; do [[ -e "$f" ]] && OLD_FOUND=1; done
+[[ -d "$OLD_PLUGIN" || -d "$HOME/.config/dial-radial" || -d "$HOME/.local/state/surface-dial" ]] && OLD_FOUND=1
+grep -q "$OLD_AUTOSTART" "$HOME/.config/hypr/autostart.lua" 2>/dev/null && OLD_FOUND=1
+if (( ! OLD_FOUND )); then
+    skip "nothing from the old name found"
+else
+    # The old daemon holds the dial; two daemons would fight over it.
+    if pgrep -f '^python3 .*surface-dial-hypr' >/dev/null; then
+        pkill -TERM -f '^python3 .*surface-dial-hypr'
+        for _ in $(seq 1 15); do pgrep -f '^python3 .*surface-dial-hypr' >/dev/null || break; sleep 0.2; done
+        ok "stopped the old daemon"
+    fi
+    for f in "$HOME"/.local/bin/surface-dial-*; do
+        [[ -e "$f" ]] && backup "$f"
+    done
+    # Settings and learning progress move across; the old name stays only as a backup.
+    for pair in "$HOME/.config/dial-radial:$HOME/.config/redial" \
+                "$HOME/.local/state/surface-dial:$HOME/.local/state/redial"; do
+        old="${pair%%:*}"; new="${pair##*:}"
+        [[ -d "$old" ]] || continue
+        if [[ -e "$new" ]]; then
+            warn "$new already exists -- left $old in place; merge by hand if you want it"
+        else
+            mv "$old" "$new" && ok "moved $old -> $new"
+        fi
+    done
+    if [[ -d "$OLD_PLUGIN" ]]; then
+        command -v omarchy-shell >/dev/null && omarchy-shell shell setPluginEnabled dial.radial false >/dev/null 2>&1
+        backup "$OLD_PLUGIN" && CHANGED_PLUGIN=1
+    fi
+    if grep -q "$OLD_AUTOSTART" "$HOME/.config/hypr/autostart.lua" 2>/dev/null; then
+        mkdir -p "$BACKUP$HOME/.config/hypr" && cp -a "$HOME/.config/hypr/autostart.lua" "$BACKUP$HOME/.config/hypr/autostart.lua"
+        sed -i -e "/$(printf '%s' "$OLD_AUTOSTART" | sed 's/[][\\.*^$/]/\\&/g')/d" \
+               -e '/^-- Surface Dial control daemon\. Source:/d' "$HOME/.config/hypr/autostart.lua" \
+            && ok "removed the old autostart line (the new one is added in step 5)"
+    fi
+    [[ -f "$HOME/.config/systemd/user/surface-dial.service" ]] \
+        && warn "the old systemd unit ~/.config/systemd/user/surface-dial.service is still there; disable it, or two daemons run"
+    ok "old name moved; backups are under $BACKUP"
+fi
 
 echo "-- 1. Dependencies --"
 if command -v playerctl >/dev/null; then
@@ -146,7 +193,7 @@ if grep -q '"setup.redial"' "$MENU_EXT" 2>/dev/null; then
 else
     backup_copy="$BACKUP$MENU_EXT"; mkdir -p "$(dirname "$backup_copy")"; cp -a "$MENU_EXT" "$backup_copy" 2>/dev/null
     if python3 "$R/scripts/add-menu-entry.py" "$MENU_EXT"; then
-        ok "added Setup > Surface Dial to the Omarchy menu"
+        ok "added Setup > re:dial to the Omarchy menu"
     else
         warn "could not edit $MENU_EXT -- your file was left untouched; open settings with: omarchy-shell dialtools toggle"
     fi
@@ -176,12 +223,12 @@ if command -v omarchy-shell >/dev/null; then
 fi
 
 echo
-echo "-- 6b. Surface Dial button in the bar (Quickshell Rise) --"
+echo "-- 6b. re:dial button in the bar (Quickshell Rise) --"
 RISE_TOOL="$HOME/.local/bin/redial-rise-widget"
 if [[ -f "$HOME/.config/quickshell/bar/variants/V2/BarSlot.qml" ]]; then
     if "$RISE_TOOL" --check; then
         skip "widget already in the Rise bar"
-    elif confirm "Add the Surface Dial widget to the Rise bar (patches its V2 files, restarts the bar for a few seconds; switch it on afterwards in the control panel -> WIDGETS)?"; then
+    elif confirm "Add the re:dial widget to the Rise bar (patches its V2 files, restarts the bar for a few seconds; switch it on afterwards in the control panel -> WIDGETS)?"; then
         if "$RISE_TOOL" --install; then
             ok "widget installed"
         else
@@ -189,7 +236,7 @@ if [[ -f "$HOME/.config/quickshell/bar/variants/V2/BarSlot.qml" ]]; then
         fi
     fi
 else
-    skip "no Quickshell Rise bar here -- open settings from the Omarchy menu: Setup > Surface Dial"
+    skip "no Quickshell Rise bar here -- open settings from the Omarchy menu: Setup > re:dial"
 fi
 
 echo
@@ -200,6 +247,10 @@ if cmp -s "$R/udev/70-redial.rules" "$UDEV" 2>/dev/null; then
 elif confirm "Install udev rule (sudo)?"; then
     sudo install -m 644 "$R/udev/70-redial.rules" "$UDEV" \
         && sudo udevadm control --reload-rules && sudo udevadm trigger && ok "udev rule installed"
+fi
+OLD_UDEV=/etc/udev/rules.d/70-surface-dial.rules
+if [[ -e "$OLD_UDEV" ]] && confirm "Remove the old udev rule $OLD_UDEV, now replaced (sudo)?"; then
+    sudo rm "$OLD_UDEV" && sudo udevadm control --reload-rules && ok "old udev rule removed"
 fi
 if id -nG "$USER" | tr ' ' '\n' | grep -qx input; then
     ok "already in 'input' group (in this session)"
@@ -260,7 +311,7 @@ echo "-- 8. Doctor report --"
 
 cat <<EOF
 
-== Done. Open the settings: Omarchy menu (SUPER+SPACE) > Setup > Surface Dial ==
+== Done. Open the settings: Omarchy menu (SUPER+SPACE) > Setup > re:dial ==
 Remaining by hand:
   * If the 'input' group was just added: log out/in (or reboot) FIRST.
   * Pair the dial: hold its button ~5-7s (LED flashes), then run

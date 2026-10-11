@@ -1,6 +1,6 @@
 # Roadmap to 1.0
 
-Surface Dial for Omarchy is in **beta**. Version numbers say how close it is; 1.0 means "ready for
+re:dial for Omarchy is in **beta**. Version numbers say how close it is; 1.0 means "ready for
 people who are not the author, including people who depend on it to use a computer".
 
 ## 0.8.0: first beta package (done, not sent)

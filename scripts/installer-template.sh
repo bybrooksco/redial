@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Surface Dial for Omarchy __VERSION__ (beta): self-extracting installer.
+# re:dial for Omarchy __VERSION__ (beta): self-extracting installer.
 #
 # One file. It contains the whole release (not Omarchy itself, which you need first:
 # https://omarchy.org); run it with:   bash <this file>
@@ -41,7 +41,7 @@ for tool in tar base64 sha256sum awk; do
     command -v "$tool" >/dev/null || { echo "missing required tool: $tool" >&2; exit 1; }
 done
 
-echo "== Surface Dial for Omarchy $VERSION (beta) =="
+echo "== re:dial for Omarchy $VERSION (beta) =="
 echo
 if ! command -v hyprctl >/dev/null || ! command -v omarchy-shell >/dev/null; then
     echo "  NOTE: this does not look like an Omarchy (Hyprland) session: hyprctl or omarchy-shell is"
@@ -119,7 +119,7 @@ fi
 rc=$?
 echo
 if (( rc == 0 )); then
-    echo "== Installed. Open the Omarchy menu (SUPER+SPACE) > Setup > Surface Dial. =="
+    echo "== Installed. Open the Omarchy menu (SUPER+SPACE) > Setup > re:dial. =="
 else
     echo "== The installer stopped with an error (code $rc). Nothing is half-installed that it did not tell you about. =="
 fi

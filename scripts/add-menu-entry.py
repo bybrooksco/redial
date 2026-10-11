@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add a "Surface Dial" row to the Omarchy menu (Setup -> Surface Dial).
+"""Add a "re:dial" row to the Omarchy menu (Setup -> re:dial).
 
 Omarchy reads user menu rows from ~/.config/omarchy/extensions/omarchy-menu.jsonc, a JSON
 file that may contain comments. This inserts one row without disturbing anything else in
@@ -15,11 +15,21 @@ import sys
 
 ID = "setup.redial"
 ROW = (
-    "  // Surface Dial: added by its install.sh\n"
-    '  "setup.redial": {"icon":"\\uf192","label":"Surface Dial",'
+    "  // re:dial: added by its install.sh\n"
+    '  "setup.redial": {"icon":"\\uf192","label":"re:dial",'
     '"aliases":["dial","surface dial"],'
     '"description":"Tools, size, clicks and appearance",'
     '"when":"[[ -x $HOME/.local/bin/redial-hypr ]]",'
+    '"action":"omarchy-shell dialtools toggle"}\n'
+)
+# The row written by the Surface Dial beta (up to 0.8.3), before the project was renamed.
+LEGACY_ID = "setup.surface-dial"
+LEGACY_ROW = (
+    "  // Surface Dial: added by its install.sh\n"
+    '  "setup.surface-dial": {"icon":"\\uf192","label":"Surface Dial",'
+    '"aliases":["dial","surface dial"],'
+    '"description":"Tools, size, clicks and appearance",'
+    '"when":"[[ -x $HOME/.local/bin/surface-dial-hypr ]]",'
     '"action":"omarchy-shell dialtools toggle"}\n'
 )
 DEFAULT = os.path.expanduser("~/.config/omarchy/extensions/omarchy-menu.jsonc")
@@ -66,9 +76,14 @@ def parse_jsonc(text):
 
 
 def add_row(text):
-    """Return `text` with the row inserted before the final brace; None if already there."""
+    """Return `text` with the row inserted before the final brace; None if already there.
+
+    A row left by the pre-rename beta is replaced in place, so an upgrade keeps one entry.
+    """
     if f'"{ID}"' in text:
         return None
+    if LEGACY_ROW in text:
+        return text.replace(LEGACY_ROW, ROW, 1)
     sig = list(structure(text))
     if not sig or sig[-1][1] != "}":
         raise ValueError("expected a JSON object ending in }")
@@ -91,23 +106,27 @@ def remove_row(text):
     alone (the caller says so), and any comma that was added after the previous entry stays,
     which the menu file's format allows.
     """
-    return text.replace(ROW, "", 1) if ROW in text else None
+    for row in (ROW, LEGACY_ROW):
+        if row in text:
+            return text.replace(row, "", 1)
+    return None
 
 
 def remove(path):
-    """Take the Surface Dial row out of the menu file. Returns a process exit code."""
+    """Take the re:dial row out of the menu file. Returns a process exit code."""
     if not os.path.exists(path):
         print("no menu file; nothing to remove")
         return 0
     original = open(path, encoding="utf-8").read()
-    if f'"{ID}"' not in original:
+    if f'"{ID}"' not in original and f'"{LEGACY_ID}"' not in original:
         print("menu entry not present")
         return 0
     new = remove_row(original)
     try:
         if new is None:
             raise ValueError("the entry was edited after install, so it was not touched")
-        if ID in parse_jsonc(new):
+        left = parse_jsonc(new)
+        if ID in left or LEGACY_ID in left:
             raise ValueError("entry still present after removal")
     except Exception as exc:
         print(f"add-menu-entry: left {path} untouched ({exc})", file=sys.stderr)
@@ -116,7 +135,7 @@ def remove(path):
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write(new)
     os.replace(tmp, path)
-    print(f"removed 'Surface Dial' from {path}")
+    print(f"removed 're:dial' from {path}")
     return 0
 
 
@@ -140,7 +159,7 @@ def main(argv):
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write(new)
     os.replace(tmp, path)
-    print(f"added 'Surface Dial' to {path}")
+    print(f"added 're:dial' to {path}")
     return 0
 
 

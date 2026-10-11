@@ -293,7 +293,7 @@ Changed because of it:
 - **Settings live in the Omarchy menu, not on a chord.** Omarchy has a menu-extension
   file for exactly this. Its own default bindings use at most two modifiers plus ALT or
   CTRL; the old `SUPER+SHIFT+CTRL+D` came from a personal hub mapping. `install.sh` now
-  adds Setup > Surface Dial through `scripts/add-menu-entry.py`, which edits the user's
+  adds Setup > re:dial through `scripts/add-menu-entry.py`, which edits the user's
   JSONC file without disturbing it, checks that the result still parses, and leaves the
   file untouched if not. A key is one line in `bindings.lua`, documented in the README.
 - **Notifications go through `omarchy-notification-send`**, which 45 of Omarchy's own

@@ -116,7 +116,7 @@ Item {
     { title: "Coming back", body: "A tool you picked drops back to Volume after a few seconds without turning, so nothing stays armed by accident. Change how long on the Feel page." },
     { title: "Too jumpy or too slow", body: "Sensitivity changes how far you turn for each step. Ignore small turns filters out a bump or a tremor. Hold and double-click speed can both be relaxed." },
     { title: "Keyboard", body: "Tab moves between controls, Enter or Space presses one, Shift+Enter goes back through a list of choices, Escape closes this window." },
-    { title: "About", body: "Surface Dial " + (status.version || "(unknown version)") + ", beta. Please mention this number when you report a problem." },
+    { title: "About", body: "re:dial " + (status.version || "(unknown version)") + ", beta. Please mention this number when you report a problem." },
     { title: "Something wrong?", body: "The line under the title says whether the dial is connected. If it says the service is not running, press Restart dial service. If that does not help, run redial-setup in a terminal; it checks everything and says what to fix." }
   ]
 
@@ -658,7 +658,7 @@ Item {
             id: titleText
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            text: "Surface Dial"
+            text: "re:dial"
             font.family: Style.font.family
             font.pixelSize: Style.font.body
             font.bold: true

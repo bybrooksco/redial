@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# redial-bar -- status + actions behind the Surface Dial button in the
+# redial-bar -- status + actions behind the re:dial button in the
 # Omarchy bar. The bar runs this as a `type: "command"` module (see the "Custom
 # user modules" section of the bar README), so there is no QML here: a plugin
 # `bar-widget` entry point on a local plugin was tried on 2026-09-16 and failed
@@ -23,7 +23,7 @@ restart)
     pkill -f "$DAEMON_RE"
     for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -f "$DAEMON_RE" >/dev/null || break; sleep 0.2; done
     setsid nohup python3 "$DAEMON" >>"$LOG" 2>&1 </dev/null &
-    notify-send -a "Surface Dial" "Dial daemon restarted" "Tool changes are now applied."
+    notify-send -a "re:dial" "Dial daemon restarted" "Tool changes are now applied."
     exit 0
     ;;
 status) ;;
@@ -68,7 +68,7 @@ clicks=$(jq -c -n --slurpfile c "$HOME/.config/redial/config.json" \
         | {($k): (($a | map(select(.name == $n)) | first | .label) // $n)}) | add' 2>/dev/null) || clicks=null
 [[ -n "$clicks" ]] || clicks=null
 
-printf '{"text":"%s","tooltip":"Surface Dial: %s\\n%s","class":"%s","paired":%s,"connected":%s,"daemon":%s,"battery":%s,"clicks":%s}\n' \
+printf '{"text":"%s","tooltip":"re:dial: %s\\n%s","class":"%s","paired":%s,"connected":%s,"daemon":%s,"battery":%s,"clicks":%s}\n' \
     "$text" "$line" "$hint" "$klass" \
     "$([[ -n "$mac" ]] && echo true || echo false)" \
     "$( ((connected)) && echo true || echo false)" \

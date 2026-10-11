@@ -5,7 +5,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 
-// Surface Dial tool dashboard.
+// re:dial tool dashboard.
 //
 // A card rail: the active tool sits at full size in the centre, neighbours dimmed, and
 // rotation slides the rail. A dial is a 1-D control, so a 1-D rail reads more honestly than
@@ -165,7 +165,7 @@ Item {
   }
 
   // Settings tab of the same shared window (bar widget left-click,
-  // Omarchy menu > Setup > Surface Dial). Moved here from ToolPicker.qml when the two windows
+  // Omarchy menu > Setup > re:dial). Moved here from ToolPicker.qml when the two windows
   // merged (see docs/DESIGN.md#overlay-window).
   IpcHandler {
     target: "dialtools"
@@ -259,7 +259,7 @@ Item {
 
         Text {
           anchors.verticalCenter: parent.verticalCenter
-          text: "Surface Dial"
+          text: "re:dial"
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.bold: true

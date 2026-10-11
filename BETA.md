@@ -1,4 +1,4 @@
-# Surface Dial for Omarchy: beta notes
+# re:dial for Omarchy: beta notes
 
 Thank you for trying this. It is an early version, and you are among the first people to run it
 other than its author, so please read this page before you install. It is short.
@@ -45,7 +45,7 @@ For your user only, after showing you a plan and asking once:
 - puts programs in `~/.local/bin` (`redial-hypr` and a few helpers);
 - puts the plugin in `~/.config/omarchy/plugins/redial`;
 - adds one line to start the daemon at login in `~/.config/hypr/autostart.lua`;
-- adds **Setup > Surface Dial** to your Omarchy menu;
+- adds **Setup > re:dial** to your Omarchy menu;
 - installs one small package, `playerctl` (for the Media tool), through Omarchy's package helper if it is missing, and tells you about other optional tools it did not find (for example `voxtype` for dictation, `brightnessctl` for the Brightness tool);
 - restarts the daemon and the shell if you agree.
 

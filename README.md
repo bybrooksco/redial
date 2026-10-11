@@ -1,4 +1,6 @@
-# Surface Dial (+ Surface Pen)
+# re:dial
+
+Surface Dial (and Surface Pen) support for Omarchy.
 
 A haptic knob for your Omarchy desktop. Turn it for volume, scroll, zoom, media
 scrubbing, brightness, window and workspace control; press and hold to pick a tool;
@@ -11,7 +13,7 @@ Hyprland + [Omarchy](https://omarchy.org) (a separate project; install it first)
 because its maker moved on.
 
 Microsoft discontinued the Surface Dial.
-[daniel5151/redial-linux](https://github.com/daniel5151/redial-linux)
+[daniel5151/surface-dial-linux](https://github.com/daniel5151/surface-dial-linux)
 is the existing Linux userspace daemon, in maintenance mode per its author.
 This is an independent implementation and shares no code with it.
 
@@ -23,7 +25,7 @@ This is an independent implementation and shares no code with it.
 - `bin/redial-setup` — doctor/setup script: permissions, udev rule,
   Bluetooth pairing, autostart, plugin status. Safe to re-run any time.
 - `bin/redial-bar`, `bin/redial-rise-widget` — status line and
-  installer for a "Surface Dial" tile on the Quickshell **Rise** bar.
+  installer for a "re:dial" tile on the Quickshell **Rise** bar.
 - `plugin/redial/` — the Quickshell/Omarchy plugin: the live tool
   overlay and the settings window (tools, position/size, click gestures for
   both the dial and the pen). See **its own README** for the full design,
@@ -35,7 +37,7 @@ This is an independent implementation and shares no code with it.
   tests the copy in this repo; `DIAL_DAEMON=~/.local/bin/redial-hypr
   python3 tests/test_dial.py` tests a live install.
 - `manifest.json` — makes this repo a plugin `omarchy plugin add` accepts.
-- `scripts/add-menu-entry.py` — adds Setup > Surface Dial to the Omarchy menu.
+- `scripts/add-menu-entry.py` — adds Setup > re:dial to the Omarchy menu.
 - `scripts/make-installer.sh` — builds the single-file installer for a release (see `docs/RELEASING.md`).
 - `uninstall.sh` — removes what `install.sh` added (backs it up first; keeps your settings).
 - `install.sh` — installs all of the above. Idempotent, shows its plan and asks once
@@ -52,7 +54,7 @@ omarchy plugin add https://github.com/bybrooksco/redial.git --enable
 ```
 
 The first is Omarchy's own plugin installer and puts the overlay in place. The second
-installs the daemon, starts it at login, adds **Setup > Surface Dial** to the Omarchy menu,
+installs the daemon, starts it at login, adds **Setup > re:dial** to the Omarchy menu,
 and handles the permissions the dial needs. Update later with
 `omarchy plugin update redial`.
 
@@ -64,7 +66,7 @@ Run it inside your own Hyprland session — it needs that environment for
 (the udev rule, adding yourself to the `input` group). Nothing is ever run
 with sudo on your behalf silently. See `SECURITY.md` for what those permissions mean.
 
-Open the settings from the Omarchy menu (`SUPER+SPACE` > Setup > Surface Dial). To open
+Open the settings from the Omarchy menu (`SUPER+SPACE` > Setup > re:dial). To open
 them with a key instead, bind `omarchy-shell dialtools toggle` in
 `~/.config/hypr/bindings.lua`.
 

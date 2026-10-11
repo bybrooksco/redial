@@ -31,7 +31,7 @@ confirm() {
     [[ "$ans" =~ ^[Yy] ]]
 }
 
-echo "== Surface Dial setup / doctor =="
+echo "== re:dial setup / doctor =="
 echo
 
 echo "-- Permissions --"

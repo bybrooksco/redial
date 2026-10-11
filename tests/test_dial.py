@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression tests for the Surface Dial daemon's logic -- no dial, no display needed.
+"""Regression tests for the re:dial daemon's logic -- no dial, no display needed.
 
     python3 test_dial.py                      # tests ../bin/redial-hypr (the kit's copy)
     DIAL_DAEMON=~/.local/bin/redial-hypr python3 test_dial.py   # the live install
@@ -1870,9 +1870,7 @@ class AxisToggle(Base):
 class RestartScript(unittest.TestCase):
     """bin/redial-restart: stop the old daemon, start a new one through Hyprland."""
 
-    SCRIPT = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "bin", "redial-restart"
-    )
+    SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "bin", "redial-restart")
 
     def setUp(self):
         self.home = tempfile.mkdtemp()
@@ -2745,7 +2743,7 @@ class MenuEntryRemoval(unittest.TestCase):
             self.assertIn("keep me" if "keep me" in text else "", back)
 
     def test_remove_refuses_an_edited_row(self):
-        added = self.am.add_row("{\n}\n").replace("Surface Dial", "Mine")
+        added = self.am.add_row("{\n}\n").replace("re:dial", "Mine")
         self.assertIsNone(self.am.remove_row(added))
 
     def test_remove_on_a_file_without_the_row_is_a_noop(self):
@@ -2761,6 +2759,15 @@ class MenuEntryRemoval(unittest.TestCase):
             doc = self.am.parse_jsonc(f.read())
         self.assertEqual(list(doc), ["a"])
         self.assertEqual(self.am.main(["x", "--remove", path]), 0)  # again: nothing to do
+
+
+def _load_add_menu_entry():
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(here, "..", "scripts", "add-menu-entry.py")
+    spec = importlib.util.spec_from_file_location("add_menu_entry", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 class UninstallScript(unittest.TestCase):
@@ -2843,6 +2850,56 @@ class UninstallScript(unittest.TestCase):
         self.assertFalse(self.exists(".config/omarchy/plugins/redial"))
         self.assertEqual(self.read(".config/hypr/autostart.lua"), self.AUTOSTART)
         self.assertEqual(self.read(".config/omarchy/extensions/omarchy-menu.jsonc"), self.MENU)
+
+    def test_upgrading_from_the_surface_dial_beta_moves_everything_to_the_new_name(self):
+        am = _load_add_menu_entry()
+        self.put(".local/bin/surface-dial-hypr", "#!/bin/sh\n")
+        self.put(".local/bin/surface-dial-setup", "#!/bin/sh\n")
+        self.put(".config/dial-radial/config.json", '{"sensitivity": 1.5}')
+        self.put(".config/dial-radial/progress.json", '{"steps": 7}')
+        self.put(".local/state/surface-dial/daemon.log", "log\n")
+        self.put(".config/omarchy/plugins/dial.radial/DialMenu.qml", "old")
+        self.put(
+            ".config/hypr/autostart.lua",
+            self.AUTOSTART
+            + "\n-- Surface Dial control daemon. Source: ~/.local/bin/surface-dial-hypr\n"
+            + 'o.launch_on_start("surface-dial-hypr")\n',
+        )
+        self.put(".config/omarchy/extensions/omarchy-menu.jsonc", "{\n" + am.LEGACY_ROW + "}\n")
+        self.install()
+        # settings and learning progress came across; the old names are gone
+        self.assertEqual(self.read(".config/redial/config.json"), '{"sensitivity": 1.5}')
+        self.assertEqual(self.read(".config/redial/progress.json"), '{"steps": 7}')
+        self.assertTrue(self.exists(".local/state/redial/daemon.log"))
+        for gone in (
+            ".config/dial-radial",
+            ".local/state/surface-dial",
+            ".local/bin/surface-dial-hypr",
+            ".local/bin/surface-dial-setup",
+            ".config/omarchy/plugins/dial.radial",
+        ):
+            self.assertFalse(self.exists(gone), gone)
+        self.assertTrue(self.exists(".local/bin/redial-hypr"))
+        self.assertTrue(self.exists(".config/omarchy/plugins/redial/DialMenu.qml"))
+        # exactly one autostart line, the new one, and your own lines untouched
+        lua = self.read(".config/hypr/autostart.lua")
+        self.assertNotIn("surface-dial", lua)
+        self.assertEqual(lua.count('launch_on_start("redial-hypr")'), 1)
+        self.assertIn("-- my own line", lua)
+        menu = self.read(".config/omarchy/extensions/omarchy-menu.jsonc")
+        self.assertNotIn("setup.surface-dial", menu)
+        self.assertEqual(menu.count('"setup.redial"'), 1)
+        # the old files were backed up, not deleted
+        found = []
+        for _, _, files in os.walk(os.path.join(self.home, ".local/share/redial-backups")):
+            found += files
+        for name in ("surface-dial-hypr", "DialMenu.qml"):
+            self.assertIn(name, found, name)
+
+    def test_a_clean_machine_has_nothing_to_migrate(self):
+        r = self.sh("install.sh", "-y")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("nothing from the old name found", r.stdout)
 
     def test_settings_are_kept_unless_purged(self):
         self.install()
@@ -3220,7 +3277,7 @@ class GuideTests(Base):
         for kind in ("click", "menu", "pick"):
             g.event(kind)
         self.steps(g, 3 * m.GUIDE_STEPS_BEFORE_HINT)
-        self.assertEqual(self.said, ["Make it yours: Menu > Setup > Surface Dial"])
+        self.assertEqual(self.said, ["Make it yours: Menu > Setup > re:dial"])
         self.now[0] += 1000
         self.steps(g, 100)
         self.assertEqual(len(self.said), 1)  # showing it was the lesson
@@ -3639,7 +3696,7 @@ class GuideModes(Base):
                 "Press and hold to open the tool ring",
                 "Let go to close the ring",
                 "Hold, turn to another tool, then let go",
-                "Too fast or slow? Menu > Setup > Surface Dial > Feel",
+                "Too fast or slow? Menu > Setup > re:dial > Feel",
             ],
         )
         self.assertTrue(g.state["tour"]["done"])
@@ -3672,7 +3729,7 @@ class GuideModes(Base):
         g.attached()
         g.event("menu")
         g.event("pick")
-        self.assertEqual(self.said[-1], "Too fast or slow? Menu > Setup > Surface Dial > Feel")
+        self.assertEqual(self.said[-1], "Too fast or slow? Menu > Setup > re:dial > Feel")
 
     def test_a_step_nobody_does_is_asked_again_after_a_pause_not_before(self):
         g = self.tour()
@@ -4150,9 +4207,7 @@ class SelfInstaller(unittest.TestCase):
         with open(os.path.join(self.home, ".config", "hypr", "autostart.lua"), "w") as f:
             f.write("-- mine\n")
         self.env = {"HOME": self.home, "PATH": self.stubs + ":/usr/bin:/bin", "USER": "tester"}
-        self.target = os.path.join(
-            self.home, ".local/share/redial-beta", f"redial-{self.version}"
-        )
+        self.target = os.path.join(self.home, ".local/share/redial-beta", f"redial-{self.version}")
 
     def run_installer(self, *args, text="", path=None, installer=None):
         env = dict(self.env)

@@ -3,7 +3,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 
-// Configuration for the Surface Dial overlay.
+// Configuration for the re:dial overlay.
 //
 // Every value has a default in code, so the overlay behaves correctly with no
 // config file at all - that is the shipped behaviour, and a missing, empty or

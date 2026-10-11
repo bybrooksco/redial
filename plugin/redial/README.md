@@ -1,4 +1,4 @@
-# Surface Dial radial menu
+# re:dial radial menu
 
 An on-screen tool menu for the Microsoft Surface Dial, as an Omarchy shell
 plugin. Driven over IPC and a socket by the `redial-hypr` daemon.
@@ -201,7 +201,7 @@ Two ways to choose tools in `config.json`, checked in this order:
 
 Pick and reorder from the built-in library by name — this is what the
 **tool picker** panel writes. Open it from the Omarchy menu
-(`SUPER+SPACE` > Setup > Surface Dial), or bind `omarchy-shell dialtools toggle` to any key
+(`SUPER+SPACE` > Setup > re:dial), or bind `omarchy-shell dialtools toggle` to any key
 you like in `~/.config/hypr/bindings.lua`.
 
 **Bar button.** A `bar-widget` entry point on this (local) plugin failed to load with a
@@ -445,7 +445,7 @@ rather than a fix aimed at one application.
 
 ## Prior art
 
-Microsoft discontinued the Surface Dial. [daniel5151/redial-linux]
-(https://github.com/daniel5151/redial-linux) is the existing Linux
+Microsoft discontinued the Surface Dial. [daniel5151/surface-dial-linux]
+(https://github.com/daniel5151/surface-dial-linux) is the existing Linux
 userspace daemon, in maintenance mode per its author. This is an independent
 implementation and shares no code with it.
