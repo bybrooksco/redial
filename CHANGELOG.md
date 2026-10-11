@@ -8,7 +8,11 @@ versions follow [Semantic Versioning](https://semver.org/).
 ### Fixed
 - Upgrading from the Surface Dial beta left the Rise bar widget calling the removed `surface-dial-bar`. `install.sh` now refreshes an already-installed widget.
 
+### Changed
+- `.coverage` is no longer tracked. The roadmap and BETA.md now describe the rename and the in-place upgrade.
+
 ### Added
+- A test that an old-name Rise widget is renamed on upgrade.
 - `docs/BETA-GUIDE.md`: what testers need, hardware basics, what to try, and how to report.
 
 ## [0.8.4] - 2026-10-11 (renamed to re:dial)

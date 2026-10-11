@@ -48,6 +48,7 @@ For your user only, after showing you a plan and asking once:
 - adds **Setup > re:dial** to your Omarchy menu;
 - installs one small package, `playerctl` (for the Media tool), through Omarchy's package helper if it is missing, and tells you about other optional tools it did not find (for example `voxtype` for dictation, `brightnessctl` for the Brightness tool);
 - restarts the daemon and the shell if you agree.
+- **If you installed the earlier Surface Dial beta (0.8.3 or before), it is upgraded in place:** your settings and learning progress move to `~/.config/redial`, the old commands, plugin, autostart line and menu entry are replaced, and an old bar widget is renamed. Everything it replaces is backed up first, and the old udev rule is offered for removal (with `sudo`).
 
 It asks separately before using `sudo`, for two things: a udev rule so the dial can be read, and
 adding you to the `input` group. **Read `SECURITY.md` for what those permissions mean**: anything in

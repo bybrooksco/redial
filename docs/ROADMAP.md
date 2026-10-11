@@ -15,24 +15,26 @@ The first informal test (2026-10-08) showed that turning the dial for the first 
 This stage adds a visible response on the first turn and an adaptive, dial-driven introduction that
 teaches turn, press and hold as the person is ready for them. See the design note in the project vault.
 
-## 0.8.2: teaching styles (done; this is the build for the first friend)
+## 0.8.2: teaching styles (done)
 
 Three ways of teaching the dial, switchable in Settings (adaptive by default, discover, guided tour),
 plus a hint for each tool the first time it is tried.
 
-## 0.8.3: known bugs
+## 0.8.3 and 0.8.4: fixes, backends and the rename (done)
 
-Fixes for anything found in use before a tester gets it, starting with scrolling in terminals.
+0.8.3: the pen-eraser fix, launchers no longer killed, safer settings writes, and window-manager
+backends for Sway, i3 and niri. 0.8.4: the project became re:dial, and installing it upgrades an
+earlier Surface Dial beta in place.
 
-## Other compositors (work in progress, branch `compositor-backends`)
+## Other compositors (merged in 0.8.3; Sway, i3 and niri still untested)
 
 Window tools go through a backend: Hyprland (reference), Sway/i3 and niri written, untested on a real
 session. Next: run each in a nested session and fix what that shows; an on-screen display that does not
 need Quickshell (notifications) so GNOME and KDE feel finished; then GNOME/KDE window tools through
 D-Bus. The dial's own input, haptics, volume, brightness, media and key tools do not depend on the
-compositor. See CHANGELOG, Unreleased.
+compositor. See CHANGELOG.
 
-## 0.9.0: first outside testers
+## 0.9.0: first outside testers (under way)
 
 A few people who already run Omarchy and own a Surface Dial install it and use it for ordinary
 work. The aim is to find what the author cannot see: things that are confusing, things that break

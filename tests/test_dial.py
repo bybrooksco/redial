@@ -2770,6 +2770,57 @@ def _load_add_menu_entry():
     return mod
 
 
+class RiseWidgetUpgrade(unittest.TestCase):
+    """An install under the old name is brought up to date, not left calling a removed command."""
+
+    TOOL = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "bin", "redial-rise-widget"
+    )
+    TILE = (
+        'WidgetStateTile { gid: "G19"; width: root.evenW((wwCol.width - 4) / 2); '
+        'label: "Surface Dial"; shown: root.modDial }\n'
+    )
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp()
+        self.root = os.path.join(self.home, "V2")
+        files = {
+            "BarSlot.qml": "compDial\n",
+            "Theme.qml": "modDial\n",
+            "panels/ControlPanel.qml": self.TILE,
+            "modules/DialWidget.qml": "command: $HOME/.local/bin/surface-dial-bar\n",
+        }
+        for rel, text in files.items():
+            path = os.path.join(self.root, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write(text)
+
+    def install(self):
+        return subprocess.run(
+            [sys.executable, self.TOOL, "--install", "--no-restart", "--root", self.root],
+            env={"HOME": self.home, "PATH": os.environ["PATH"]},
+            capture_output=True,
+            text=True,
+        )
+
+    def read(self, rel):
+        with open(os.path.join(self.root, rel)) as f:
+            return f.read()
+
+    def test_an_old_widget_is_renamed_and_points_at_the_new_command(self):
+        r = self.install()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("surface-dial", self.read("modules/DialWidget.qml"))
+        self.assertIn("redial-bar", self.read("modules/DialWidget.qml"))
+        self.assertIn('label: "re:dial"', self.read("panels/ControlPanel.qml"))
+
+    def test_a_second_run_changes_nothing(self):
+        self.install()
+        again = self.install()
+        self.assertIn("already installed", again.stdout)
+
+
 class UninstallScript(unittest.TestCase):
     """uninstall.sh undoes install.sh in a scratch HOME, keeping settings and your own lines."""
 

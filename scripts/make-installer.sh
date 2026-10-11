@@ -2,7 +2,7 @@
 # make-installer.sh -- build the single-file installer for a release.
 #
 #   scripts/make-installer.sh <git-ref> <output-file>
-#   e.g. scripts/make-installer.sh v0.8.1 redial-0.8.1-installer.sh
+#   e.g. scripts/make-installer.sh v0.8.4 redial-0.8.4-installer.sh
 #
 # The version is read from that ref's own bin/redial-hypr, so the installer can never
 # disagree with what is inside it. Also writes <output-file>.sha256.
