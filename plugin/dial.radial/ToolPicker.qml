@@ -225,6 +225,8 @@ Item {
   property var penTailActions: []    // [{name, label, description}] -- pen tail button
   property var penTailDefaults: ({ "single": "space", "double": "enter", "hold": "menu" })
   property var penBarrelActions: []  // [{name, label, description}] -- pen barrel button
+  property var penEraserActions: []  // [{name, label, description}] -- back of the pen: tap, hold
+  property var penEraserDefaults: ({ "tap": "escape", "hold": "delete_word" })
   property string penBarrelDefault: "right_click"
   property bool everLoadedClicks: false
   property bool everLoadedPenClicks: false
@@ -239,15 +241,27 @@ Item {
   // events -- there is no raw click counter, so a real triple-tap isn't
   // something to detect, only these three slots to make configurable.
   readonly property var tailKinds: [
-    { key: "single", title: "Single click" },
-    { key: "double", title: "Double click" },
-    { key: "hold", title: "Press & hold" }
+    { group: "pentail", key: "single", title: "Single click" },
+    { group: "pentail", key: "double", title: "Double click" },
+    { group: "pentail", key: "hold", title: "Press & hold" }
   ]
-  function groupActions(group) { return group === "pentail" ? penTailActions : clickActions }
-  function groupDefaults(group) { return group === "pentail" ? penTailDefaults : clickDefaults }
+  // The back of the pen. A scroll that starts with a light touch used to count as a tap and
+  // press Escape, so each of these can be set to "Nothing".
+  readonly property var eraserKinds: [
+    { group: "eraser", key: "tap", title: "Quick tap" },
+    { group: "eraser", key: "hold", title: "Press & hold" }
+  ]
+  function groupActions(group) {
+    return group === "pentail" ? penTailActions : group === "eraser" ? penEraserActions : clickActions
+  }
+  function groupDefaults(group) {
+    return group === "pentail" ? penTailDefaults : group === "eraser" ? penEraserDefaults : clickDefaults
+  }
   function groupChoice(group) {
     if (group === "pentail")
       return (configDoc && configDoc.pen && configDoc.pen.tail_clicks) ? configDoc.pen.tail_clicks : {}
+    if (group === "eraser")
+      return (configDoc && configDoc.pen && configDoc.pen.eraser) ? configDoc.pen.eraser : {}
     return (configDoc && configDoc.clicks) ? configDoc.clicks : {}
   }
   // "tool" (the armed tool's own click) is dial-specific and single-click only.
@@ -272,7 +286,14 @@ Item {
     setClick(group, kind, opts[(at + step + opts.length) % opts.length].name)
   }
   function setClick(group, kind, name) {
-    if (group === "pentail") {
+    if (group === "eraser") {
+      writePen(function (pen) {
+        var er = ({})
+        if (pen.eraser) for (var e in pen.eraser) er[e] = pen.eraser[e]
+        er[kind] = name
+        pen.eraser = er
+      })
+    } else if (group === "pentail") {
       writePen(function (pen) {
         var tail = ({})
         if (pen.tail_clicks) for (var t in pen.tail_clicks) tail[t] = pen.tail_clicks[t]
@@ -540,6 +561,8 @@ Item {
         var o = JSON.parse(text())
         root.penTailActions = (o.tail && Array.isArray(o.tail.actions)) ? o.tail.actions : []
         if (o.tail && o.tail.defaults) root.penTailDefaults = o.tail.defaults
+        root.penEraserActions = (o.eraser && Array.isArray(o.eraser.actions)) ? o.eraser.actions : []
+        if (o.eraser && o.eraser.defaults) root.penEraserDefaults = o.eraser.defaults
         root.penBarrelActions = (o.barrel && Array.isArray(o.barrel.actions)) ? o.barrel.actions : []
         if (o.barrel && o.barrel.default) root.penBarrelDefault = o.barrel.default
       } catch (e) { root.penTailActions = []; root.penBarrelActions = [] }
@@ -1297,12 +1320,12 @@ Item {
               color: root.cfg.soft(0.5)
             }
 
-            Repeater {
-              model: root.tailKinds
-              delegate: Column {
+            Component {
+              id: penRowDelegate
+              Column {
                 id: tailRow
                 required property var modelData
-                readonly property var action: root.clickAction("pentail", modelData.key)
+                readonly property var action: root.clickAction(modelData.group, modelData.key)
                 width: parent.width
                 spacing: Style.space(2)
 
@@ -1318,11 +1341,11 @@ Item {
                   }
                   Pressable {
                     id: tailChip
-                    label: "Pen tail button, " + tailRow.modelData.title + ": " + tailRow.action.label
+                    label: (tailRow.modelData.group === "eraser" ? "Pen eraser, " : "Pen tail button, ") + tailRow.modelData.title + ": " + tailRow.action.label
                     ringColor: root.cfg.accentColor
                     ringWidth: Math.max(2, Style.space(2))
-                    onActivated: root.cycleClick("pentail", tailRow.modelData.key, 1)
-                    onAlternate: root.cycleClick("pentail", tailRow.modelData.key, -1)
+                    onActivated: root.cycleClick(tailRow.modelData.group, tailRow.modelData.key, 1)
+                    onAlternate: root.cycleClick(tailRow.modelData.group, tailRow.modelData.key, -1)
                     Keys.onRightPressed: activated()
                     Keys.onLeftPressed: alternate()
                     width: tailRow.width - Style.space(92)
@@ -1353,6 +1376,11 @@ Item {
                   color: root.cfg.soft(0.5)
                 }
               }
+            }
+
+            Repeater {
+              model: root.tailKinds
+              delegate: penRowDelegate
             }
 
             Item { width: 1; height: Style.space(4) }
@@ -1432,8 +1460,37 @@ Item {
             }
           }
 
+          Column {
+            width: parent.width
+            spacing: Style.space(2)
+            visible: root.penEnabled
+            opacity: root.penEnabled ? 1 : 0.4
+
+            Text {
+              text: "Eraser (the back of the pen)"
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              color: root.cfg.soft(0.5)
+            }
+            Repeater {
+              model: root.eraserKinds
+              delegate: penRowDelegate
+            }
+            ChoiceRow {
+              cfg: root.cfg
+              title: "Ignore light touches"
+              unit: " ms"
+              help: "A touch shorter than this is a brush, not a tap. Raise it if scrolling with the eraser sometimes presses Escape; Off counts every touch."
+              options: [ { key: 0, label: "Off" }, { key: 100, label: "100 ms" },
+                         { key: 200, label: "200 ms" }, { key: 300, label: "300 ms" } ]
+              current: (root.configDoc && root.configDoc.pen && typeof root.configDoc.pen.eraser_tap_min_ms === "number")
+                       ? root.configDoc.pen.eraser_tap_min_ms : 100
+              onPicked: key => root.writePen(function (pen) { pen.eraser_tap_min_ms = key })
+            }
+          }
+
           Text {
-            text: "Both buttons apply immediately, no daemon restart needed."
+            text: "The buttons and the eraser apply immediately, no daemon restart needed."
             width: parent.width
             wrapMode: Text.WordWrap
             font.family: Style.font.family

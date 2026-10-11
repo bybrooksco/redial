@@ -99,6 +99,10 @@ ERASER_TAP_MAX_TRAVEL = 90  # ABS_Y units, ~5mm
 ERASER_CURSOR_STEP = 55  # ABS_X units per cursor move, ~3mm
 # Eraser tap vs hold is classified on release by duration; there is no pressure signal.
 ERASER_HOLD_S = 0.45
+# A touch shorter than this is a brush, not a tap: a scroll often starts with a bounce of contact
+# 30-60 ms long, which used to fire Escape. The default is easy to beat on purpose; the Pen
+# settings can raise, lower or switch it off (0).
+ERASER_TAP_MIN_MS_DEFAULT = 100
 ERASER_SCROLL_GAIN = {
     "foot": 1.6,
     "alacritty": 1.6,
@@ -2143,12 +2147,17 @@ class EraserState:
     def _touch_up(self, now):
         if self.dragging and self.travel < ERASER_TAP_MAX_TRAVEL:
             held = now - self.touch_at
+            tap, hold, tap_min = pen_eraser_config()
             if held >= ERASER_HOLD_S:
-                log(f"eraser hold ({held:.2f}s) -> delete word")
-                key("ctrl", "BackSpace")
+                kind, name = "hold", hold
+            elif held >= tap_min:
+                kind, name = "tap", tap
             else:
-                log(f"eraser tap ({held:.2f}s) -> Escape")
-                key("Escape")
+                kind, name = "brush", None
+            fn = pen_eraser_fn(name) if name else None
+            log(f"eraser {kind} ({held:.2f}s) -> {name or 'ignored'}")
+            if fn:
+                fn(1)
         self.dragging, self.last_y, self.last_x = False, None, None
         self.axis = None
 
@@ -3171,6 +3180,53 @@ def pen_tail_fn(slot):
     return _pen_tail_fns[name]
 
 
+# Eraser (the back of the pen): a short tap and a long press, each configurable, or "Nothing".
+# Defaults keep the original behaviour. Applies live, no restart.
+PEN_ERASER_ACTIONS = [
+    ("none", "Nothing", "Do nothing.", None),
+    ("escape", "Escape", "Press Escape (cancel, close a menu).", {"do": "key", "keys": ["Escape"]}),
+    (
+        "delete_word",
+        "Delete word",
+        "Delete the word before the cursor (Ctrl+Backspace).",
+        {"do": "key", "keys": ["ctrl", "BackSpace"]},
+    ),
+] + [a for a in _PEN_SHARED_ACTIONS if a[0] not in ("none", "escape", "delete_word")]
+PEN_ERASER_DEFAULTS = {"tap": "escape", "hold": "delete_word"}
+_PEN_ERASER_BY_NAME = {a[0]: a for a in PEN_ERASER_ACTIONS}
+_pen_eraser_cache = {}
+_pen_eraser_fns = {}
+
+
+def pen_eraser_config():
+    """(tap action name, hold action name, minimum tap seconds) for the eraser, live-reloaded."""
+
+    def build(doc):
+        pen = _pen_section(doc)
+        raw = pen.get("eraser")
+        raw = raw if isinstance(raw, dict) else {}
+        choice = dict(PEN_ERASER_DEFAULTS)
+        for k in PEN_ERASER_DEFAULTS:
+            v = raw.get(k)
+            if isinstance(v, str) and v in _PEN_ERASER_BY_NAME:
+                choice[k] = v
+            elif v is not None:
+                log(f"pen.eraser.{k}: {v!r} is not usable; using {PEN_ERASER_DEFAULTS[k]!r}")
+        ms = pen.get("eraser_tap_min_ms")
+        ok = isinstance(ms, (int, float)) and not isinstance(ms, bool) and 0 <= ms <= 500
+        return choice["tap"], choice["hold"], (ms if ok else ERASER_TAP_MIN_MS_DEFAULT) / 1000.0
+
+    return live_derived(_pen_eraser_cache, build)
+
+
+def pen_eraser_fn(name):
+    """Compiled action for an eraser slot, or None (Nothing)."""
+    if name not in _pen_eraser_fns:
+        spec = _PEN_ERASER_BY_NAME[name][3]
+        _pen_eraser_fns[name] = make_action(spec) if spec else None
+    return _pen_eraser_fns[name]
+
+
 # Barrel button: one physical click, so one configurable action plus an
 # enable toggle -- not split into click vs. long-press. Default reproduces
 # the old hardcoded behaviour (always right-click) exactly.
@@ -3308,6 +3364,7 @@ def write_tool_manifest():
         "pen_clicks.json": {
             "tail": {"defaults": PEN_TAIL_DEFAULTS, "actions": actions(PEN_TAIL_ACTIONS)},
             "barrel": {"default": PEN_BARREL_DEFAULT, "actions": actions(PEN_BARREL_ACTIONS)},
+            "eraser": {"defaults": PEN_ERASER_DEFAULTS, "actions": actions(PEN_ERASER_ACTIONS)},
         },
     }
     for name, doc in manifests.items():

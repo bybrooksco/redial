@@ -1515,6 +1515,65 @@ class Eraser(Base):
         self.up(0.1)
         self.assertEqual(EVENTS, ["KEY:Escape"])
 
+    def configure(self, **pen):
+        with open(self.cfg, "w") as f:
+            json.dump({"pen": pen}, f)
+        m._live.update(mtime=object())  # force a re-read
+
+    def test_a_brief_brush_is_not_a_tap(self):
+        # The log showed scrolls starting with a 30-60 ms bounce of contact that fired Escape.
+        self.down(0.0)
+        self.up(0.04)
+        self.assertEqual(EVENTS, [])
+
+    def test_the_brush_threshold_is_adjustable_and_can_be_switched_off(self):
+        self.configure(eraser_tap_min_ms=250)
+        self.down(0.0)
+        self.up(0.2)
+        self.assertEqual(EVENTS, [])
+        self.configure(eraser_tap_min_ms=0)
+        self.down(0.0)
+        self.up(0.01)
+        self.assertEqual(EVENTS, ["KEY:Escape"])
+
+    def test_nonsense_thresholds_fall_back_to_the_default(self):
+        for bad in ("fast", -5, 99999, True, None):
+            self.configure(eraser_tap_min_ms=bad)
+            self.assertEqual(m.pen_eraser_config()[2], m.ERASER_TAP_MIN_MS_DEFAULT / 1000.0, bad)
+
+    def test_the_tap_can_be_set_to_nothing(self):
+        self.configure(eraser={"tap": "none"})
+        self.down(0.0)
+        self.up(0.2)
+        self.assertEqual(EVENTS, [])
+
+    def test_the_tap_can_be_another_action(self):
+        self.configure(eraser={"tap": "enter"})
+        self.down(0.0)
+        self.up(0.2)
+        self.assertEqual(EVENTS, ["KEY:Return"])
+
+    def test_the_hold_can_be_set_to_nothing_and_an_unknown_name_falls_back(self):
+        self.configure(eraser={"hold": "none"})
+        self.down(0.0)
+        self.up(m.ERASER_HOLD_S + 0.1)
+        self.assertEqual(EVENTS, [])
+        self.configure(eraser={"tap": "teleport"})
+        self.assertEqual(m.pen_eraser_config()[0], "escape")
+
+    def test_the_settings_window_is_told_about_the_eraser_options(self):
+        cfg = os.path.join(tempfile.mkdtemp(), "config.json")
+        real = m.CONFIG_PATH
+        m.CONFIG_PATH = cfg
+        self.addCleanup(lambda: setattr(m, "CONFIG_PATH", real))
+        m.write_tool_manifest()
+        with open(os.path.join(os.path.dirname(cfg), "pen_clicks.json")) as f:
+            doc = json.load(f)
+        names = [a["name"] for a in doc["eraser"]["actions"]]
+        self.assertEqual(doc["eraser"]["defaults"], {"tap": "escape", "hold": "delete_word"})
+        self.assertIn("none", names)
+        self.assertEqual(len(names), len(set(names)))
+
     def test_a_long_press_deletes_a_word(self):
         self.down(0.0)
         self.up(m.ERASER_HOLD_S + 0.1)
@@ -2098,7 +2157,7 @@ class PenWatchers(Base):
     def test_eraser_watcher_feeds_events_to_the_state_machine(self):
         fx = Fixture(self)
         with open(self.cfg, "w") as f:
-            json.dump({}, f)
+            json.dump({"pen": {"eraser_tap_min_ms": 0}}, f)  # the pipe delivers events at once
         fx.set(m, "focused_class", lambda: "firefox")
         fh = pipe_with(
             (m.EV_KEY, m.BTN_TOOL_RUBBER, 1),
