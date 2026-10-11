@@ -157,8 +157,6 @@ BTN_TOOL_RUBBER, BTN_TOUCH, BTN_STYLUS = 0x141, 0x14A, 0x14B
 EV_ABS = 0x03
 ABS_X, ABS_Y = 0x00, 0x01
 
-COUNTS_PER_REV = 3600
-
 # --- timing ---------------------------------------------------------------
 HOLD_S = 0.40  # press longer than this opens the menu
 # Where the dashboard parks. center | top | bottom | left | right |
@@ -372,6 +370,18 @@ class Actions:
 
 
 ACTIONS = Actions()
+
+
+def write_json_atomic(path, doc, **dump_kw):
+    """Write `doc` as JSON so a reader (the settings window, the shell) never sees half a file.
+
+    Writes a temp file beside it, then renames. Raises OSError; callers decide how much it matters.
+    """
+    tmp = f"{path}.{os.getpid()}.tmp"
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(doc, f, **dump_kw)
+    os.replace(tmp, path)
 
 
 def run(cmd):
@@ -967,12 +977,8 @@ class Guide:
         """Write progress, atomically. Best effort: the dial works without it."""
         if not self.dirty:
             return
-        tmp = f"{self.path}.{os.getpid()}.tmp"
         try:
-            os.makedirs(os.path.dirname(self.path), exist_ok=True)
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(self.state, f)
-            os.replace(tmp, self.path)
+            write_json_atomic(self.path, self.state)
             self.dirty = False
         except OSError as exc:
             log(f"could not write progress ({exc})")
@@ -1308,7 +1314,7 @@ class VirtualPointer:
     """
 
     UI_SET_EVBIT, UI_SET_KEYBIT, UI_SET_RELBIT = 0x40045564, 0x40045565, 0x40045566
-    UI_DEV_CREATE, UI_DEV_DESTROY = 0x5501, 0x5502
+    UI_DEV_CREATE = 0x5501
     EV_SYN, EV_KEY, EV_REL = 0x00, 0x01, 0x02
     REL_X, REL_Y, REL_WHEEL, REL_WHEEL_HI_RES = 0x00, 0x01, 0x08, 0x0B
     REL_HWHEEL, REL_HWHEEL_HI_RES = 0x06, 0x0C
@@ -3213,10 +3219,13 @@ def write_tool_manifest():
     tool added here shows up there automatically. Best-effort: a failure to
     write it costs the picker a stale list, not the daemon.
     """
-    path = os.path.join(os.path.dirname(CONFIG_PATH), "tools.json")
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        manifest = [
+    here = os.path.dirname(CONFIG_PATH)
+
+    def actions(rows):
+        return [{"name": n, "label": lbl, "description": d} for n, lbl, d, _ in rows]
+
+    manifests = {
+        "tools.json": [
             {
                 "name": t["name"],
                 "icon": t.get("icon", ""),
@@ -3224,57 +3233,20 @@ def write_tool_manifest():
                 "default": t.get("default", True),
             }
             for t in TOOL_LIBRARY
-        ]
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(manifest, f, indent=2)
-    except OSError as exc:
-        log(f"could not write tool manifest ({exc})")
-    # Same idea for the click gestures: the picker lists these, never hardcodes them.
-    try:
-        with open(
-            os.path.join(os.path.dirname(CONFIG_PATH), "clicks.json"), "w", encoding="utf-8"
-        ) as f:
-            json.dump(
-                {
-                    "defaults": CLICK_DEFAULTS,
-                    "actions": [
-                        {"name": n, "label": lbl, "description": d}
-                        for n, lbl, d, _ in CLICK_ACTIONS
-                    ],
-                },
-                f,
-                indent=2,
-            )
-    except OSError as exc:
-        log(f"could not write click manifest ({exc})")
-    # Same idea for the pen's two configurable buttons -- published together
-    # so the settings window's Pen section never hardcodes either list.
-    try:
-        with open(
-            os.path.join(os.path.dirname(CONFIG_PATH), "pen_clicks.json"), "w", encoding="utf-8"
-        ) as f:
-            json.dump(
-                {
-                    "tail": {
-                        "defaults": PEN_TAIL_DEFAULTS,
-                        "actions": [
-                            {"name": n, "label": lbl, "description": d}
-                            for n, lbl, d, _ in PEN_TAIL_ACTIONS
-                        ],
-                    },
-                    "barrel": {
-                        "default": PEN_BARREL_DEFAULT,
-                        "actions": [
-                            {"name": n, "label": lbl, "description": d}
-                            for n, lbl, d, _ in PEN_BARREL_ACTIONS
-                        ],
-                    },
-                },
-                f,
-                indent=2,
-            )
-    except OSError as exc:
-        log(f"could not write pen click manifest ({exc})")
+        ],
+        # The picker lists click gestures from here, never hardcodes them.
+        "clicks.json": {"defaults": CLICK_DEFAULTS, "actions": actions(CLICK_ACTIONS)},
+        # Same for the pen's two configurable buttons.
+        "pen_clicks.json": {
+            "tail": {"defaults": PEN_TAIL_DEFAULTS, "actions": actions(PEN_TAIL_ACTIONS)},
+            "barrel": {"default": PEN_BARREL_DEFAULT, "actions": actions(PEN_BARREL_ACTIONS)},
+        },
+    }
+    for name, doc in manifests.items():
+        try:
+            write_json_atomic(os.path.join(here, name), doc, indent=2)
+        except OSError as exc:
+            log(f"could not write {name} ({exc})")
 
 
 def load_tools():
@@ -3385,7 +3357,6 @@ class Dial:
         self.tool = IDLE_TOOL
         self.accum = 0.0
         self.speed = 0.0
-        self.last_rot = 0.0
         self.last_action = 0.0
         self.menu = False
         self.menu_accum = 0.0
@@ -3547,7 +3518,6 @@ class Dial:
                 f"rotation alive: {self.rot_events} events, accum={self.accum:.0f}, "
                 f"tool={TOOLS[self.tool]['name']}, detent={self.detent()}"
             )
-        self.last_rot = now
         self.rot_hist.append((now, abs(value)))
         cutoff = now - SPEED_WINDOW
         while self.rot_hist and self.rot_hist[0][0] < cutoff:
@@ -3921,12 +3891,8 @@ def build_status(attached, connected, battery, now=None):
 
 def write_status(doc):
     """Atomically write the status file. Best-effort: the dial works without it."""
-    tmp = f"{STATUS_PATH}.{os.getpid()}.tmp"
     try:
-        os.makedirs(os.path.dirname(STATUS_PATH), exist_ok=True)
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(doc, f)
-        os.replace(tmp, STATUS_PATH)
+        write_json_atomic(STATUS_PATH, doc)
     except OSError as exc:
         log(f"could not write status ({exc})")
 

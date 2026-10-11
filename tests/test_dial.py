@@ -1333,7 +1333,6 @@ class DeadZone(Base):
         d.last_action = 0.0
         EVENTS.clear()
         d.on_rotate(10, 1.0)
-        self.assertEqual(d.last_rot, 0.0)
         self.assertEqual(d.last_action, 0.0)
         self.assertFalse(EVENTS)
 
@@ -3759,6 +3758,35 @@ class GuideModes(Base):
 
     def test_a_tool_the_library_does_not_know_has_no_introduction(self):
         self.assertNotIn("intro", m.tool_lines("No Such Tool"))
+
+
+class AtomicJsonWrites(unittest.TestCase):
+    def test_writes_valid_json_and_leaves_no_temp_file(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "sub", "x.json")
+        m.write_json_atomic(path, {"a": 1}, indent=2)
+        with open(path) as f:
+            self.assertEqual(json.load(f), {"a": 1})
+        self.assertEqual(os.listdir(os.path.dirname(path)), ["x.json"])
+
+    def test_a_failed_write_keeps_the_old_file(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "x.json")
+        m.write_json_atomic(path, {"ok": True})
+        with self.assertRaises(TypeError):
+            m.write_json_atomic(path, {"bad": object()})
+        with open(path) as f:
+            self.assertEqual(json.load(f), {"ok": True})
+
+    def test_the_manifests_the_settings_window_reads_are_written(self):
+        cfg = os.path.join(tempfile.mkdtemp(), "config.json")
+        real = m.CONFIG_PATH
+        m.CONFIG_PATH = cfg
+        self.addCleanup(lambda: setattr(m, "CONFIG_PATH", real))
+        m.write_tool_manifest()
+        for name in ("tools.json", "clicks.json", "pen_clicks.json"):
+            with open(os.path.join(os.path.dirname(cfg), name)) as f:
+                self.assertTrue(json.load(f), name)
 
 
 class WindowManagerBackends(unittest.TestCase):
