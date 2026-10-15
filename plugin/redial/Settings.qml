@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import "ThemeSlots.js" as ThemeSlots
 
 // Configuration for the re:dial overlay.
 //
@@ -113,8 +114,9 @@ Item {
   // that needs a fallback.
   //
   // Accepts: "theme" (the role's natural theme colour), a palette role name
-  // (accent/foreground/background/urgent/muted), or any literal Qt colour
-  // string such as "#78824b".
+  // (accent/foreground/background/urgent/muted), a theme slot "color0".."color15"
+  // (that slot of whatever theme is active, so it re-colours on a theme switch),
+  // or any literal Qt colour string such as "#78824b".
   function resolveColor(spec, role) {
     var s = String(spec === undefined || spec === null ? "theme" : spec).trim()
     var natural = role === "accent" ? Color.accent
@@ -126,6 +128,7 @@ Item {
     if (s === "background") return Color.background
     if (s === "urgent") return Color.urgent
     if (s === "muted") return Color.muted !== undefined ? Color.muted : Color.foreground
+    if (/^color([0-9]|1[0-5])$/.test(s)) return themeSlots[s] || natural
     if (/^#([0-9a-fA-F]{3,8})$/.test(s)) return s
     return natural
   }
@@ -216,6 +219,24 @@ Item {
       doc = ({})
     }
     changed()
+  }
+
+  // The active theme's 16 terminal colours, for "color0".."color15" (see ThemeSlots.js).
+  // Omarchy only reads its palette at startup and pushes later switches over IPC, so
+  // re-read whenever that palette changes.
+  property var themeSlots: ({})
+  FileView {
+    id: themeColors
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/alacritty.toml"
+    printErrors: false
+    onLoaded: cfg.themeSlots = ThemeSlots.parse(text())
+    onLoadFailed: cfg.themeSlots = ({})
+  }
+  Connections {
+    target: Color
+    function onBackgroundChanged() { themeColors.reload() }
+    function onForegroundChanged() { themeColors.reload() }
+    function onAccentChanged() { themeColors.reload() }
   }
 
   FileView {

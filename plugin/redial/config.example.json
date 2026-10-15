@@ -22,7 +22,7 @@
   "menu_timeout_ms": 8000,
   "watchdogMs": 15000,
   "colors": {
-    "_comment": "\"theme\" follows the Omarchy palette. Also accepts a role name (accent, foreground, background, urgent, muted) or a literal hex such as \"#78824b\".",
+    "_comment": "\"theme\" follows the Omarchy palette. Also accepts a role name (accent, foreground, background, urgent, muted), a theme slot color0..color15 (follows theme switches), or a literal hex such as \"#78824b\" (fixed).",
     "accent": "theme",
     "line": "theme",
     "background": "theme"

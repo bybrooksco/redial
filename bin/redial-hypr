@@ -167,7 +167,7 @@ HOLD_S = 0.40  # press longer than this opens the menu
 # top-left | top-right | bottom-left | bottom-right
 # Config is shared with the overlay plugin; every key is optional and re-read when the menu
 # opens. Env vars win.
-__version__ = "0.8.4"
+__version__ = "0.8.5"
 
 # DIAL_CONFIG_DIR exists so tests can keep importing this file away from the real config.
 CONFIG_PATH = os.path.join(
@@ -3975,20 +3975,21 @@ def parse_bluetooth_info(text):
     return connected, battery
 
 
+def dial_address():
+    """The paired Surface Dial's Bluetooth address, or None. Raises OSError/SubprocessError."""
+    devs = subprocess.run(
+        ["bluetoothctl", "devices"], capture_output=True, text=True, timeout=3
+    ).stdout
+    return next(
+        (ln.split()[1] for ln in devs.splitlines() if "Surface Dial" in ln and len(ln.split()) > 1),
+        None,
+    )
+
+
 def dial_bluetooth():
     """(connected, battery) for the paired Surface Dial, or (None, None) if unavailable."""
     try:
-        devs = subprocess.run(
-            ["bluetoothctl", "devices"], capture_output=True, text=True, timeout=3
-        ).stdout
-        addr = next(
-            (
-                ln.split()[1]
-                for ln in devs.splitlines()
-                if "Surface Dial" in ln and len(ln.split()) > 1
-            ),
-            None,
-        )
+        addr = dial_address()
         if not addr:
             return None, None
         info = subprocess.run(
@@ -4030,11 +4031,56 @@ def write_status(doc):
         log(f"could not write status ({exc})")
 
 
+# Bluetooth can report the dial connected while the kernel never made an input device for it:
+# BlueZ handed over an empty HID report map (kernel: "unbalanced collection ... parse failed").
+# Dropping the link makes the dial reconnect cleanly on its next touch.
+STUCK_S = 12.0  # connected-but-no-input this long counts as stuck
+STUCK_BACKOFF_S = (30.0, 120.0, 600.0)  # wait between kicks while it stays stuck
+
+
+class StuckWatch:
+    """Decide when a connected-but-unattached dial needs its Bluetooth link dropped."""
+
+    def __init__(self):
+        self.since = None  # when the current stuck stretch began
+        self.next_at = None  # earliest time the next kick may happen
+        self.kicks = 0
+
+    def feed(self, connected, attached, now):
+        if attached or connected is not True:
+            if attached and self.kicks:
+                log(f"self-heal: dial attached after {self.kicks} reconnect(s)")
+            self.since = self.next_at = None
+            self.kicks = 0
+            return False
+        if self.since is None:
+            self.since, self.next_at = now, now + STUCK_S
+        if now < self.next_at:
+            return False
+        self.next_at = now + STUCK_BACKOFF_S[min(self.kicks, len(STUCK_BACKOFF_S) - 1)]
+        self.kicks += 1
+        return True
+
+
+def kick_dial():
+    """Drop the dial's Bluetooth link so it reconnects (and re-sends its HID map) on next touch."""
+    try:
+        addr = dial_address()
+        if addr:
+            log(f"self-heal: Bluetooth connected but no input device; disconnecting {addr}")
+            subprocess.run(["bluetoothctl", "disconnect", addr], capture_output=True, timeout=10)
+    except (OSError, subprocess.SubprocessError) as exc:
+        log(f"self-heal: disconnect failed ({exc})")
+
+
 def status_loop(interval=5):
     """Keep status.json current: on any change, and as a heartbeat otherwise."""
     last_doc, last_at = None, 0.0
+    stuck = StuckWatch()
     while True:
         connected, battery = dial_bluetooth()
+        if stuck.feed(connected, _status["attached"], time.monotonic()):
+            kick_dial()
         doc = build_status(_status["attached"], connected, battery)
         key = {k: v for k, v in doc.items() if k != "updated"}
         if key != last_doc or time.monotonic() - last_at >= STATUS_BEAT_S:

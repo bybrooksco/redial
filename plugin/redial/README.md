@@ -107,7 +107,9 @@ watched, so edits apply live — no restart. A malformed file logs a warning and
 falls back to defaults rather than taking the overlay down.
 
 Colours accept `"theme"` (follow the Omarchy palette), a role name
-(`accent`, `foreground`, `background`, `urgent`, `muted`), or a literal hex.
+(`accent`, `foreground`, `background`, `urgent`, `muted`), a theme slot
+(`color0` to `color15`, the active theme's terminal colours, so the dial
+re-colours when you switch themes), or a literal hex (fixed, ignores themes).
 All colour resolution goes through one function in `Settings.qml`, which is the
 only place coupled to Omarchy's palette.
 

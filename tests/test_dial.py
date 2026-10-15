@@ -2396,6 +2396,21 @@ class StatusLoop(Base):
         self.assertEqual(writes, [80, 79])
 
 
+class StuckWatchTest(Base):
+    def test_kicks_only_after_stuck_window_then_backs_off_and_resets_on_attach(self):
+        w = m.StuckWatch()
+        self.assertFalse(w.feed(True, False, 0.0))
+        self.assertFalse(w.feed(True, False, m.STUCK_S - 0.1))
+        self.assertTrue(w.feed(True, False, m.STUCK_S))
+        self.assertFalse(w.feed(True, False, m.STUCK_S + 1))  # backing off
+        self.assertTrue(w.feed(True, False, m.STUCK_S + m.STUCK_BACKOFF_S[0]))
+        self.assertFalse(w.feed(True, True, 100.0))  # attached: reset
+        self.assertFalse(w.feed(False, False, 200.0))  # asleep is not stuck
+        self.assertFalse(w.feed(None, False, 300.0))  # unknown is not stuck
+        self.assertFalse(w.feed(True, False, 400.0))  # fresh window
+        self.assertTrue(w.feed(True, False, 400.0 + m.STUCK_S))
+
+
 class NarrowedErrors(Base):
     """The failures that used to be swallowed by a bare `except Exception` still degrade quietly,
     and the ones that are bugs are no longer hidden."""

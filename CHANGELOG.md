@@ -5,15 +5,19 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-10-14
+
+### Added
+- Colours can be a theme slot, `color0` to `color15`: that colour of whichever Omarchy theme is active, so the dial re-colours when you switch themes. Works for themes that name their colours (`red`, `bright_blue`) and themes that number them, because it reads Omarchy's generated `alacritty.toml`. The parser is `plugin/redial/ThemeSlots.js`, tested in `tests/qml/tst_themeslots.qml`.
+- Self-heal for a dial that Bluetooth reports connected but that never became an input device (BlueZ handed the kernel an empty HID map). After 12 s the daemon drops the link so the dial reconnects on its next touch, backing off 30 s, 2 min, then 10 min. Logged as `self-heal:`.
+- A test that an old-name Rise widget is renamed on upgrade.
+- `docs/BETA-GUIDE.md`: what testers need, hardware basics, what to try, and how to report.
+
 ### Fixed
 - Upgrading from the Surface Dial beta left the Rise bar widget calling the removed `surface-dial-bar`. `install.sh` now refreshes an already-installed widget.
 
 ### Changed
 - `.coverage` is no longer tracked. The roadmap and BETA.md now describe the rename and the in-place upgrade.
-
-### Added
-- A test that an old-name Rise widget is renamed on upgrade.
-- `docs/BETA-GUIDE.md`: what testers need, hardware basics, what to try, and how to report.
 
 ## [0.8.4] - 2026-10-11 (renamed to re:dial)
 
