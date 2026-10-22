@@ -435,6 +435,26 @@ scale is drawn once and only redrawn when the selection changes.
 The socket is optional. If nothing is listening the daemon logs it and the
 needle steps per detent instead.
 
+## States: turning, hints, can't act
+
+A second connection to the same socket carries what happens outside the ring, one JSON object per
+line after its kind:
+
+    turn {"name":"Volume","icon":"…","hint":"mute","value":42,"valueText":"42%"}\n
+    hint {"prompt":"Now press it","gesture":"press","step":2,"steps":6}\n
+    cant {"reason":"asleep","title":"Dial went to sleep","line":"Press it to wake it"}\n
+
+`turn` comes when a tool is turned with the ring closed (`value`/`valueText` only for a tool with a
+level, at most ~10 a second); `hint` is a line from the introduction (`gesture` is `turn`, `press`,
+`hold` or empty; `step`/`steps` only on the guided tour); `cant` says why the dial did nothing
+(`reason`: `asleep` when the dial drops within 5 s of use, `waiting`, or `tool`, a tool with nothing
+to act on). Each shows for its own time (1.2 s, 3.5 s, 2.5 s; `Notes.js`) and never covers the
+settings window.
+
+The daemon sends these only while the chosen look draws them (today: `face: classic`, layout
+`dial`). Otherwise, or when the overlay is not listening, they go to Omarchy's own OSD as before,
+so the dial is never quieter for it.
+
 ## Known issues
 
 ### Scroll corrupts the input line in Claude Code (open, 2026-08-29)

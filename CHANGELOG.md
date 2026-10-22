@@ -10,11 +10,15 @@ versions follow [Semantic Versioning](https://semver.org/).
 - `color_scheme`: `light` (the new default, ink on vellum), `dark`, or `theme` (match the desktop theme, read from Omarchy's `colors.toml`). It fills four colour roles (ground, line, accent, alert) in `ColourScheme.js`; a theme colour that does not reach 3:1 on the background falls back to a readable one. `colors.accent` still overrides the accent. Tested in `tests/qml/tst_colourscheme.qml`.
 - `reference_lines` (default `true`): one switch for the construction lines, crosshair and registration marks.
 - A title block on the Classic plate showing the tool's place on the ring (`SHEET 3/8`).
+- The overlay draws three states itself in re:dial classic, instead of handing them to Omarchy's OSD: **turning** a tool with the ring closed (the scale lit to the level with a dimension arc and figures; at most ~10 updates a second), **hints** from the introduction (a revision cloud with the gesture to make and, on the guided tour, the step), and **can't act** (section hatching and a status: a tool with nothing to act on, or the dial dropping within 5 s of use). They travel as `turn`/`hint`/`cant` lines on the existing socket; when the overlay is not listening, or the chosen look does not draw them yet, they go to Omarchy's OSD exactly as before. Tested in `tests/test_dial.py` (`OverlayNotes`) and `tests/qml/tst_notes.qml`.
 
 ### Changed
 - The Classic look is redrawn in re:dial classic (`languages/classic/Classic.qml`, replacing `FaceClassic.qml`): the lit sector turns with the hand as a pre-drawn layer instead of repainting all 180 bars on every detent, the leader eases between tools, the chosen glyph grows by transform, labels and callout keys are a step darker, and its colours come from the colour scheme. Construction lines are now on by default.
 - Opening and closing: the overlay fades in over 120 ms and out over 100 ms with stronger curves. `reduce_motion` still removes all sliding and scaling but keeps that short fade.
 - Every look's position comes from one helper, `Placement.js` (it was pasted five times; audit finding 6). Tested in `tests/qml/tst_placement.qml`.
+
+### Fixed
+- Classic's leader no longer crosses the dial: for tools on the left (Select, Focus, Tabs) it follows the scale round to the right and leaves between two labels, and when the callout has to sit higher or lower than the leader's natural line (tools at the bottom) it runs round the scale to meet it. Its first line now sits on the leader.
 
 ## [0.8.5] - 2026-10-14
 

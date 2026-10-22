@@ -227,6 +227,7 @@ ACK_QUIET_S = 3.0
 WATCH_SAFETY_S = 2.0
 OPEN_RETRY_S = 0.02  # udev applies a new node's permissions within a few tens of milliseconds
 OPEN_RETRY_MAX = 50  # so about a second in all, then the safety timeout takes over
+DROP_IN_USE_S = 5.0  # a drop this soon after the last action was mid-use, so it is shown
 REATTACH_PAUSE_S = 0.25  # after a drop, so a device that flaps cannot spin the loop
 # A tool that holds a modifier (Zoom's Ctrl) is capped: while it is armed, every key typed elsewhere
 # carries that modifier, so it must never be left armed for long.
@@ -691,12 +692,16 @@ class MenuStream:
         else None
     )
     MIN_INTERVAL = 0.012  # ~80Hz ceiling; the panel cannot use more
+    RETRY_S = 2.0  # a note retries an overlay that was not listening at most this often
+    TURN_INTERVAL = 0.1  # level readouts at most ~10 a second; the eye cannot use more
 
     def __init__(self):
         self.sock = None
         self.last = 0.0
+        self.tried = -1e9
+        self.last_turn = -1e9
 
-    def connect(self):
+    def connect(self, quiet=False):
         self.close()
         if not self.PATH:
             return
@@ -709,7 +714,8 @@ class MenuStream:
             self.last = 0.0
         except Exception as e:
             self.sock = None
-            log(f"menu stream unavailable ({e}) - needle will step per detent")
+            if not quiet:
+                log(f"menu stream unavailable ({e}) - needle will step per detent")
 
     def pos(self, value, now):
         if self.sock is None or now - self.last < self.MIN_INTERVAL:
@@ -723,6 +729,38 @@ class MenuStream:
             log(f"menu stream write failed: {e}")
             self.close()
 
+    def note(self, kind, doc):
+        """Send one state ("turn", "hint", "cant") as `kind {json}`; True when the overlay took it.
+
+        The note channel stays connected between notes. While nothing listens it retries at most
+        every RETRY_S, so a missing overlay costs nothing per detent.
+        """
+        now = time.monotonic()
+        if self.sock is None:
+            if now - self.tried < self.RETRY_S:
+                return False
+            self.tried = now
+            self.connect(quiet=True)
+            if self.sock is None:
+                return False
+        try:
+            self.sock.sendall(f"{kind} {json.dumps(doc)}\n".encode())
+        except BlockingIOError:
+            return False  # the overlay is behind; the OSD shows this one
+        except OSError as e:
+            log(f"overlay note failed: {e}")
+            self.close()
+            return False
+        if kind == "turn":
+            self.last_turn = now
+        return True
+
+    def turn_wait(self):
+        """Seconds until the next level readout may go to the overlay (0 when not connected)."""
+        if self.sock is None:
+            return 0.0
+        return max(0.0, self.last_turn + self.TURN_INTERVAL - time.monotonic())
+
     def close(self):
         if self.sock is not None:
             try:
@@ -733,7 +771,8 @@ class MenuStream:
 
 
 MENU_UI = MenuUI()
-MENU_STREAM = MenuStream()
+MENU_STREAM = MenuStream()  # the live needle while the ring is held
+MENU_NOTES = MenuStream()  # turning, hints and can't-act, whenever the overlay listens
 
 
 _notify_id = None  # id of our last notification, so the next one replaces it in place
@@ -923,6 +962,10 @@ TOUR_STEPS = [
 ]
 
 
+# The gesture a hint asks for, from the event that answers it (the overlay draws it).
+HINT_GESTURE = {"step": "turn", "click": "press", "menu": "hold", "menu_same": "hold", "pick": "hold"}
+
+
 def guide_stages(mode):
     return DISCOVER_STAGES if mode == "discover" else GUIDE_STAGES
 
@@ -932,7 +975,8 @@ class Guide:
 
     `event(kind)` takes "step", "click", "menu" (menu opened), "pick" (a different tool chosen)
     and "menu_same" (menu closed without a change). `armed(name, rest)` says which tool is now
-    active, `attached()` that the dial just connected or woke. `say(text)` shows a line,
+    active, `attached()` that the dial just connected or woke. `say(text, meta)` shows a line
+    (meta: the gesture it asks for and, on the tour, "step" of "steps"),
     `mode()` returns "adaptive", "discover" or "guided", and `describe(name)` returns the
     {"intro", "click"} lines for a tool (or None). Nothing here blocks or changes what the dial
     does; it only watches and, now and then, shows a line of text.
@@ -1106,7 +1150,7 @@ class Guide:
         self.last_hint = self.clock()
         self.session_steps = 0
         self.flush()
-        self.say(lines["intro"])
+        self.say(lines["intro"], {"gesture": "turn"})
 
     def attached(self):
         """The dial connected or woke: the tour (if it is the chosen style) asks its next step."""
@@ -1145,7 +1189,7 @@ class Guide:
         if stage["done"] is None:
             self._complete(stage["id"])  # showing it was the lesson
         self.flush()
-        self.say(text)
+        self.say(text, {"gesture": HINT_GESTURE.get(stage["done"], "")})
         return True
 
     def _maybe_tool_click_hint(self, kind):
@@ -1168,16 +1212,18 @@ class Guide:
         self.last_hint = now
         self.dirty = True
         self.flush()
-        self.say(text)
+        self.say(text, {"gesture": "press"})
 
     # --- guided tour
     def _tour_say(self):
         tour = self.state["tour"]
-        text = TOUR_STEPS[tour["step"]]["text"]()
+        step = TOUR_STEPS[tour["step"]]
+        text = step["text"]()
         tour["prompts"] += 1
         self.last_prompt = self.clock()
         self.dirty = True
-        self.say(text)
+        gesture = HINT_GESTURE.get(step["done"][0], "") if step["done"] else ""
+        self.say(text, {"gesture": gesture, "step": tour["step"] + 1, "steps": len(TOUR_STEPS)})
         if TOUR_STEPS[tour["step"]]["id"] == "feel":
             tour["done"] = True  # showing the last step was the lesson
         self.flush()
@@ -1256,12 +1302,13 @@ def tool_lines(name):
     return lines
 
 
-def _say_sync(text):
-    osd(message=text, duration=3500)
+def _say_sync(text, meta=None):
+    if not overlay_note("hint", dict(meta or {}, prompt=text)):
+        osd(message=text, duration=3500)
 
 
-def guide_say(text):
-    ACTIONS.submit(_say_sync, text)
+def guide_say(text, meta=None):
+    ACTIONS.submit(_say_sync, text, meta)
 
 
 class Haptics:
@@ -1537,16 +1584,56 @@ def show_level(kind):
 
 
 def _show_level(kind):
+    wait = MENU_NOTES.turn_wait()
+    if wait > 0:  # the overlay takes ~10 readouts a second; this job reads the level when it fires
+        threading.Timer(wait, ACTIONS.submit, (_show_level, kind)).start()
+        return
     _level_pending.discard(kind)
     if kind == "volume":
         v = MenuUI._volume()
         if v is not None:
             pct, text = v
-            osd(icon="volume-muted" if text == "muted" else "volume", progress=pct)
+            if not turn_note("Volume", pct, text):
+                osd(icon="volume-muted" if text == "muted" else "volume", progress=pct)
     elif kind == "brightness":
         pct = read_brightness()
-        if pct is not None:
+        if pct is not None and not turn_note("Brightness", pct, f"{pct}%"):
             osd(icon="brightness", progress=pct)
+
+
+def overlay_note(kind, doc):
+    """Show a state ("turn", "hint" or "cant") on re:dial's own overlay.
+
+    False when the overlay is not listening (or the on-screen display is off): the caller then
+    uses Omarchy's OSD, so the dial is never quieter than before.
+    """
+    return osd_enabled() and overlay_draws_states() and MENU_NOTES.note(kind, doc)
+
+
+def overlay_draws_states():
+    """Whether the overlay's chosen look draws these states itself.
+
+    shortcut: only re:dial classic's Classic face does so far; once the other looks draw them
+    (Phase 3) the overlay should say what it draws instead of the daemon reading the config.
+    """
+    doc = live_config()
+    layout = os.environ.get("DIAL_MENU_LAYOUT") or cfg_str(doc, "layout", MENU_LAYOUT)
+    return layout == "dial" and cfg_str(doc, "face", "classic") == "classic"
+
+
+def turn_note(name, value=None, text=None):
+    """A tool turning, for the overlay: its name and icon, and its level when it has one."""
+    spec = next((t for t in TOOLS if t["name"] == name), None)
+    doc = {"name": name, "icon": spec["icon"] if spec else "", "hint": click_hint(spec) if spec else ""}
+    if value is not None:
+        doc["value"], doc["valueText"] = value, text
+    return overlay_note("turn", doc)
+
+
+def cant_note(reason, title, line):
+    """The dial cannot act; say why (reason: "asleep", "waiting" or "tool")."""
+    if not overlay_note("cant", {"reason": reason, "title": title, "line": line}):
+        osd(message=line)
 
 
 def backlight_device():
@@ -1592,7 +1679,7 @@ def set_brightness(mag, up, step=BRIGHT_STEP, device=None):
         # Silence reads as a broken dial: say why nothing happened (at most every few seconds).
         if time.monotonic() - _bright_said[0] > 3.0:
             _bright_said[0] = time.monotonic()
-            osd(message="No screen backlight on this machine")
+            cant_note("tool", "Brightness can't act", "No screen backlight on this machine")
         return
     delta = int(step) * max(1, int(mag))
     new = max(BRIGHT_MIN, min(100, cur + (delta if up else -delta)))
@@ -3639,7 +3726,7 @@ class Dial:
             _show_level("volume")
         elif t["name"] == "Brightness":
             _show_level("brightness")
-        else:
+        elif not turn_note(t["name"]):
             osd(message=f"{t['icon']}  {t['name']}")
 
     def _track_speed(self, value, now):
@@ -4164,11 +4251,16 @@ def main():
         dial.last_action = time.monotonic()
         dial.show_connected()
         GUIDE.attached()
+        attached_at = time.monotonic()
         try:
             pump(fh, dial)
         except OSError as exc:
             log(f"detached ({exc})")
         _status["attached"] = False
+        # Dropped while in use: say so, or the next turn just does nothing. A dial that sleeps
+        # on its own while idle says nothing; nobody is looking.
+        if attached_at < dial.last_action > time.monotonic() - DROP_IN_USE_S:
+            cant_note("asleep", "Dial went to sleep", "Press it to wake it")
         dial.detach()
         lost_at = time.monotonic()
         time.sleep(REATTACH_PAUSE_S)

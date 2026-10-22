@@ -49,6 +49,8 @@ A look is an `Item`. The host sets these on it:
 | `unit`, `fontFamily`, `type` | the host's spacing unit, font and type sizes (`caption`, `subtitle`, `title`, `display`, `displayLarge`) |
 | `tools`, `index` | the tool list (`icon`, `name`, `hint`, optional `value`/`valueText`) and the chosen one |
 | `position`, `live` | the continuous hand position in tool units (about 100 updates a second while turning) and whether it is driving |
+| `noteKind`, `note` | a state to draw besides the ring: `"turn"` (`name`, `hint`, optional `value` 0-100 and `valueText`), `"hint"` (`prompt`, `gesture`, optional `step`/`steps`), `"cant"` (`reason`, `title`, `line`); `""` is the ring. The host draws the callout text; the look draws the state on the instrument |
+| `landY` | where the host placed the callout's first line (-1: at the look's own `leaderY`), so a leader can meet a callout that was clamped |
 
 Rules a look follows:
 
@@ -62,8 +64,11 @@ Rules a look follows:
 5. **Plain text for names** (`textFormat: Text.PlainText`): a launcher named `<b>x` must not render
    as markup.
 
-Planned (phase 2 of the re:dial classic build): looks also draw four more states besides the tool
-ring: turning (a value), a hint, and "can't act" (asleep, not connected, tool unavailable).
+Besides the tool ring a look draws three states (`noteKind`): turning (a value), a hint, and "can't
+act". re:dial classic draws them in drafting terms: the scale lit to the level with a dimension arc,
+a revision cloud round the hint, section hatching for can't act, and the title block naming the
+state (`NOTE 2/6`, `STATUS: ASLEEP`). A look that does not draw them yet leaves them to the host's
+on-screen display; see the plugin README, "States".
 
 ## re:dial classic
 

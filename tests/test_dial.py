@@ -45,6 +45,7 @@ def load_daemon():
 
 
 m = load_daemon()
+m.MENU_NOTES.PATH = None  # no test may reach the overlay running on this machine
 # What the daemon module looked like before any test touched it. Base restores every attribute a
 # test changed, so one test's stub can never leak into the next (one did: read_brightness).
 PRISTINE = dict(vars(m))
@@ -108,9 +109,26 @@ class Recorder:
         POSITIONS.append(p)
 
 
+class Notes:
+    """Stands in for MENU_NOTES: records each note; `listening` says whether the overlay took it."""
+
+    def __init__(self, listening=False):
+        self.listening = listening
+        self.sent = []
+
+    def note(self, kind, doc):
+        if self.listening:
+            self.sent.append((kind, doc))
+        return self.listening
+
+    def turn_wait(self):
+        return 0.0
+
+
 def install_stubs(cfg_path):
     m.HAPTIC = Haptics()
     m.MENU_UI = m.MENU_STREAM = Recorder()
+    m.MENU_NOTES = Notes()
     m.key = lambda *k: EVENTS.append("KEY:" + "+".join(k))
     m.dictation_toggle = lambda: EVENTS.append("DICTATION")
     m.notify = lambda *a, **k: None
@@ -3264,9 +3282,14 @@ class GuideTests(Base):
         self.path = os.path.join(self.tmp, "progress.json")
         self.now = [1000.0]
         self.said = []
+        self.metas = []
+
+    def say(self, text, meta=None):
+        self.said.append(text)
+        self.metas.append(meta)
 
     def guide(self, enabled=lambda: True):
-        return m.Guide(self.path, self.said.append, clock=lambda: self.now[0], enabled=enabled)
+        return m.Guide(self.path, self.say, clock=lambda: self.now[0], enabled=enabled)
 
     def steps(self, g, n):
         for _ in range(n):
@@ -3560,6 +3583,7 @@ class GuideModes(Base):
         self.path = os.path.join(self.tmp, "progress.json")
         self.now = [1000.0]
         self.said = []
+        self.metas = []
         self.mode = ["adaptive"]
         self.on = [True]
         self.lines = {
@@ -3568,10 +3592,14 @@ class GuideModes(Base):
             "Volume": {"intro": "Volume: turn it up", "click": "Volume: click to mute"},
         }
 
+    def say(self, text, meta=None):
+        self.said.append(text)
+        self.metas.append(meta)
+
     def guide(self):
         return m.Guide(
             self.path,
-            self.said.append,
+            self.say,
             clock=lambda: self.now[0],
             enabled=lambda: self.on[0],
             mode=lambda: self.mode[0],
@@ -3735,6 +3763,14 @@ class GuideModes(Base):
         g = self.tour()
         g.attached()
         self.assertEqual(self.said, ["Turn the dial"])
+
+    def test_tour_hints_carry_their_gesture_and_place(self):
+        g = self.tour()
+        g.attached()
+        self.steps(g, m.TOUR_TURN_STEPS)
+        n = len(m.TOUR_STEPS)
+        self.assertEqual(self.metas[0], {"gesture": "turn", "step": 1, "steps": n})
+        self.assertEqual(self.metas[1], {"gesture": "press", "step": 2, "steps": n})
 
     def test_the_other_styles_do_not_start_a_tour(self):
         for mode in ("adaptive", "discover"):
@@ -3990,6 +4026,106 @@ class PrivateFiles(unittest.TestCase):
         stream.PATH = None
         stream.connect()
         self.assertIsNone(stream.sock)
+
+
+class OverlayNotes(Base):
+    """Turning, hints and can't-act go to re:dial's own overlay, or to Omarchy's OSD without it."""
+
+    def setUp(self):
+        super().setUp()
+        self.notes = m.MENU_NOTES = Notes(listening=True)
+        OSDS.clear()
+
+    def listen(self):
+        """A real socket where the overlay would be; returns (stream, accepted-connection reader)."""
+        import socket as so
+
+        path = os.path.join(self.tmp, "redial.sock")
+        server = so.socket(so.AF_UNIX, so.SOCK_STREAM)
+        server.bind(path)
+        server.listen(1)
+        self.addCleanup(server.close)
+        stream = m.MenuStream()
+        stream.PATH = path
+        return stream, server
+
+    def test_a_note_is_one_json_line_after_its_kind(self):
+        stream, server = self.listen()
+        self.assertTrue(stream.note("hint", {"prompt": "Turn the dial", "gesture": "turn"}))
+        conn, _ = server.accept()
+        self.addCleanup(conn.close)
+        stream.close()
+        kind, _, body = conn.recv(4096).decode().rstrip("\n").partition(" ")
+        self.assertEqual(kind, "hint")
+        self.assertEqual(json.loads(body), {"prompt": "Turn the dial", "gesture": "turn"})
+
+    def test_with_nothing_listening_it_retries_only_now_and_then(self):
+        stream = m.MenuStream()
+        stream.PATH = os.path.join(self.tmp, "nobody.sock")
+        tries = []
+        real = stream.connect
+        stream.connect = lambda quiet=False: (tries.append(1), real(quiet))
+        for _ in range(50):
+            self.assertFalse(stream.note("turn", {"name": "Volume"}))
+        self.assertEqual(len(tries), 1)
+
+    def test_level_readouts_are_held_to_about_ten_a_second(self):
+        stream, server = self.listen()
+        self.assertEqual(stream.turn_wait(), 0.0, "not connected: no wait")
+        stream.note("turn", {"name": "Volume"})
+        self.assertGreater(stream.turn_wait(), 0.05)
+        stream.last_turn -= stream.TURN_INTERVAL
+        self.assertEqual(stream.turn_wait(), 0.0)
+
+    def test_a_volume_step_shows_its_level_on_the_overlay(self):
+        m.MenuUI = types.SimpleNamespace(_volume=lambda: (42, "42%"))
+        PRISTINE["_show_level"]("volume")
+        self.assertEqual(OSDS, [])
+        kind, doc = self.notes.sent[0]
+        self.assertEqual(kind, "turn")
+        self.assertEqual((doc["name"], doc["value"], doc["valueText"]), ("Volume", 42, "42%"))
+
+    def test_without_the_overlay_a_level_goes_to_omarchys_display(self):
+        self.notes.listening = False
+        m.MenuUI = types.SimpleNamespace(_volume=lambda: (42, "42%"))
+        PRISTINE["_show_level"]("volume")
+        self.assertEqual(OSDS, [{"icon": "volume", "progress": 42}])
+
+    def test_a_turned_tool_without_a_level_is_named(self):
+        d = m.Dial()
+        d.tool = next(i for i, t in enumerate(m.TOOLS) if t["name"] == "Zoom")
+        d.show_ack()
+        self.assertEqual(self.notes.sent[0][0], "turn")
+        self.assertEqual(self.notes.sent[0][1]["name"], "Zoom")
+        self.assertNotIn("value", self.notes.sent[0][1])
+
+    def test_a_hint_goes_to_the_overlay_with_its_gesture(self):
+        m.guide_say("Now press it", {"gesture": "press", "step": 2, "steps": 6})
+        self.assertEqual(
+            self.notes.sent, [("hint", {"prompt": "Now press it", "gesture": "press", "step": 2, "steps": 6})]
+        )
+        self.assertEqual(OSDS, [])
+
+    def test_a_tool_that_cannot_act_says_why(self):
+        m.read_brightness = lambda d=None: None
+        m.backlight_device = lambda: None
+        m._bright_said[0] = -1e9
+        m.set_brightness(1, True)
+        kind, doc = self.notes.sent[0]
+        self.assertEqual((kind, doc["reason"]), ("cant", "tool"))
+        self.assertEqual(doc["line"], "No screen backlight on this machine")
+
+    def test_a_look_that_does_not_draw_states_leaves_them_to_omarchy(self):
+        with open(self.cfg, "w") as f:
+            json.dump({"face": "pie"}, f)
+        m.guide_say("Now press it")
+        self.assertEqual(self.notes.sent, [])
+        self.assertEqual(OSDS, [{"message": "Now press it", "duration": 3500}])
+
+    def test_with_the_display_off_nothing_reaches_the_overlay(self):
+        m.osd_enabled = lambda: False
+        self.assertFalse(m.overlay_note("hint", {"prompt": "x"}))
+        self.assertEqual(self.notes.sent, [])
 
 
 class LaunchDoesNotWait(unittest.TestCase):

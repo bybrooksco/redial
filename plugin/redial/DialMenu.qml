@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -5,6 +7,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "Placement.js" as Place
+import "Notes.js" as Notes
 
 // re:dial tool dashboard.
 //
@@ -45,6 +48,7 @@ Item {
   readonly property color roleGround: cfg.roles.ground
   readonly property color roleLine: cfg.roles.line
   readonly property color roleAccent: cfg.roles.accent
+  readonly property color roleAlert: cfg.roles.alert
   function roleInk(a) { return Qt.rgba(roleLine.r, roleLine.g, roleLine.b, a) }
 
   // One shared window, two modes: "live" is the daemon-driven overlay; "settings" is
@@ -98,8 +102,41 @@ Item {
       freeY = p.y === undefined ? -1 : p.y
       mode = "live"
       liveDriven = true
+      ringOpen = true
+      if (noteKind === "turn") { noteKind = ""; noteTimer.stop() }   // the ring shows the tool itself
       opened = true
     } catch (e) {}
+  }
+
+  // States the daemon reports over the socket, drawn by a look that knows them (re:dial classic's
+  // Classic): "turn" a tool turning (name, icon, hint, value?, valueText?), "hint" a guide line
+  // (prompt, gesture, step?, steps?), "cant" the dial cannot act (reason, title, line). "" is the
+  // ring. A note shows for its time and then goes, unless the ring is open underneath it.
+  property string noteKind: ""
+  property var note: ({})
+  property bool ringOpen: false
+  property real noteAt: 0
+  function showNote(kind, payloadJson) {
+    var doc
+    try { doc = JSON.parse(payloadJson || "{}") } catch (e) { return }
+    if (typeof doc !== "object" || doc === null) return
+    if (!Notes.accept(kind, { kind: noteKind, ringOpen: ringOpen, settings: opened && mode === "settings",
+                              ageMs: Date.now() - noteAt })) return
+    if (kind === "turn" && !live) {
+      for (var i = 0; i < tools.length; i++) if (tools[i].name === doc.name) { index = i; position = i }
+    }
+    note = doc
+    noteKind = kind
+    noteAt = Date.now()
+    noteTimer.interval = Notes.MS[kind]
+    noteTimer.restart()
+    mode = "live"
+    liveDriven = true
+    opened = true
+  }
+  Timer {
+    id: noteTimer
+    onTriggered: { root.noteKind = ""; if (!root.ringOpen) root.opened = false }
   }
 
   readonly property int n: tools.length
@@ -113,7 +150,11 @@ Item {
     }
     watchdog.restart()
   }
-  function close() { opened = false; live = false; watchdog.stop() }
+  // Closing the ring leaves a note on screen to finish its time.
+  function close() {
+    ringOpen = false; live = false; watchdog.stop()
+    if (!noteTimer.running) opened = false
+  }
 
   // Safety net only - the daemon owns the real lifecycle. Generous enough that
   // a long deliberate hold never trips it.
@@ -168,6 +209,8 @@ Item {
           } else if (cmd === "close") {
             root.live = false
             root.close()
+          } else if (cmd === "turn" || cmd === "hint" || cmd === "cant") {
+            root.showNote(cmd, arg)
           }
         }
       }
@@ -915,6 +958,9 @@ Item {
             // Language looks take the host's metrics instead of importing the shell's Style.
             if (faceLoader.languageLook) {   // see languages/README.md
               item["language"] = Qt.binding(function () { return root.language })
+              item["noteKind"] = Qt.binding(function () { return root.noteKind })
+              item["landY"] = Qt.binding(function () { return callout.y - faceLoader.y + calloutTitle.height / 2 })
+              item["note"] = Qt.binding(function () { return root.note })
               item["unit"] = Qt.binding(function () { return Style.spaceReal(1) })
               item["fontFamily"] = Qt.binding(function () { return Style.font.family })
               item["type"] = Qt.binding(function () {
@@ -925,20 +971,54 @@ Item {
         }
       }
 
+      // A hint is a revision cloud: the scalloped outline a drawing puts round a change.
+      Canvas {
+        id: cloud
+        readonly property int pad: Style.space(20)
+        visible: callout.visible && root.noteKind === "hint"
+        x: callout.x - pad; y: callout.y - pad
+        width: callout.width + pad * 2; height: callout.height + pad * 2
+        onWidthChanged: requestPaint()
+        onHeightChanged: requestPaint()
+        onVisibleChanged: if (visible) requestPaint()
+        Connections { target: root; function onRoleAccentChanged() { cloud.requestPaint() } }
+        renderStrategy: Canvas.Cooperative
+        onPaint: {
+          var ctx = getContext("2d")
+          ctx.reset()
+          var bump = Style.space(16), m = Math.ceil(bump / 2) + 2, w = width - 2 * m, h = height - 2 * m
+          ctx.strokeStyle = String(root.roleAccent); ctx.globalAlpha = 0.85; ctx.lineWidth = 1.2
+          // walk the rectangle clockwise, one outward half circle per bump, each its own stroke
+          // (Qt's canvas draws stray lines between arcs that share a path)
+          function side(x0, y0, x1, y1) {
+            var len = Math.hypot(x1 - x0, y1 - y0), n = Math.max(1, Math.round(len / bump))
+            for (var i = 0; i < n; i++) {
+              var ax = x0 + (x1 - x0) * i / n, ay = y0 + (y1 - y0) * i / n
+              var mx = x0 + (x1 - x0) * (i + 0.5) / n, my = y0 + (y1 - y0) * (i + 0.5) / n
+              var start = Math.atan2(ay - my, ax - mx)
+              ctx.beginPath(); ctx.arc(mx, my, len / n / 2, start, start + Math.PI, false); ctx.stroke()
+            }
+          }
+          side(m, m, m + w, m); side(m + w, m, m + w, m + h)
+          side(m + w, m + h, m, m + h); side(m, m + h, m, m)
+        }
+      }
+
       // Classic callout column. Restored rather than rebuilt - the leader line
       // in FaceClassic runs out to exactly this block, which is what makes that
       // face landscape.
       Column {
+        id: callout
         visible: plate.classic && cfg.showCallout && faceLoader.item !== null
         x: faceLoader.x + faceLoader.height + Style.space(56)
-        // Sits where the leader lands, clamped so a selection at the top or
-        // bottom cannot push it off the plate.
+        // Its first line sits where the leader lands, clamped so a selection at the top or bottom
+        // cannot push it off the plate or onto the title block (the leader then bends to meet it).
         y: {
           var ly = faceLoader.item && faceLoader.item.leaderY !== undefined
                    ? faceLoader.item.leaderY : plate.height / 2
           return Math.max(Style.space(58),
-                   Math.min(plate.height - height - Style.space(70),
-                            faceLoader.y + ly - height / 2))
+                   Math.min(plate.height - height - Style.space(root.noteKind === "hint" ? 84 : 70),
+                            faceLoader.y + ly - calloutTitle.height / 2))
         }
         Behavior on y { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.BezierSpline; easing.bezierCurve: root.easeOut } }
         spacing: Style.space(3)
@@ -946,79 +1026,103 @@ Item {
         // used to end 4 units short of the border, so a long click label ran over it.
         width: Math.min(Style.space(210), plate.width - x - Style.space(30))
 
+        // What the callout says, per state: a title, then key/value rows.
+        readonly property string stamp: ({ asleep: "ASLEEP", waiting: "NO DIAL" })[root.note.reason] || "CAN'T ACT"
+        readonly property var ringTool: root.tools.length > root.index ? root.tools[root.index] : ({})
+        readonly property string title: root.noteKind === "turn" ? (root.note.name || "")
+                                        : root.noteKind === "hint" ? (root.note.prompt || "")
+                                        : root.noteKind === "cant" ? (root.note.title || "")
+                                        : (ringTool.name || "")
+        readonly property var rows: {
+          function click(h) { return (h && h !== "\u2014") ? [{ k: "CLICK", v: h }] : [] }
+          if (root.noteKind === "turn") {
+            var level = root.note.valueText !== undefined
+            return (level ? [{ k: "VALUE", v: root.note.valueText }] : [])
+                   .concat(click(root.note.hint), [{ k: "ROTATE", v: level ? "level" : "use" }])
+          }
+          if (root.noteKind === "hint") return []
+          if (root.noteKind === "cant") return [{ k: "STATE", v: stamp, alert: true }, { k: "DO", v: root.note.line || "" }]
+          return click(ringTool.hint).concat([{ k: "ROTATE", v: "select" }])
+        }
+
         Text {
+          id: calloutTitle
           width: parent.width
           elide: Text.ElideRight
-          text: root.tools.length > root.index ? (root.tools[root.index].name || "") : ""
+          wrapMode: root.noteKind === "hint" ? Text.WordWrap : Text.NoWrap
+          maximumLineCount: 3
+          text: callout.title
           textFormat: Text.PlainText  // a tool named "<b>x" must not render as markup
           font.family: Style.font.family
           font.pixelSize: Style.font.body
           font.bold: true
-          color: root.roleAccent
+          color: root.noteKind === "cant" ? root.roleAlert : root.noteKind === "hint" ? root.roleLine : root.roleAccent
         }
         Rectangle {
           width: Style.space(34); height: 1
           color: root.roleInk(0.35)
         }
-        // Key/value rows: the value gets its own column so a long click label wraps
-        // (two lines, then elides) inside the callout instead of running past it.
-        Row {
-          id: clickRow
-          readonly property string hint: {
-            if (!root.tools.length || root.index >= root.tools.length) return ""
-            var h = root.tools[root.index].hint
-            return (h && h !== "\u2014") ? h : ""
-          }
-          visible: hint !== ""
-          width: parent.width
-          spacing: Style.space(8)
-          Text {
-            width: Style.space(48)
-            text: "CLICK"
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            color: root.roleInk(0.55)
-          }
-          Text {
-            width: clickRow.width - Style.space(56)
-            text: clickRow.hint
-            wrapMode: Text.WordWrap
-            maximumLineCount: 2
-            elide: Text.ElideRight
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            color: root.roleInk(0.78)
+        // Key/value rows: the value gets its own column so a long value wraps (two lines, then
+        // elides) inside the callout instead of running past it.
+        Repeater {
+          model: callout.rows
+          delegate: Row {
+            id: kv
+            required property var modelData
+            width: callout.width
+            spacing: Style.space(8)
+            Text {
+              width: Style.space(48)
+              text: kv.modelData.k
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              color: root.roleInk(0.55)
+            }
+            Text {
+              width: kv.width - Style.space(56)
+              text: kv.modelData.v
+              textFormat: Text.PlainText
+              wrapMode: Text.WordWrap
+              maximumLineCount: 2
+              elide: Text.ElideRight
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              font.bold: !!kv.modelData.alert
+              color: kv.modelData.alert ? root.roleAlert : root.roleInk(0.78)
+            }
           }
         }
+        // A guided step's place in the tour: one square per step, filled up to this one.
         Row {
-          width: parent.width
-          spacing: Style.space(8)
-          Text {
-            width: Style.space(48)
-            text: "ROTATE"
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            color: root.roleInk(0.55)
-          }
-          Text {
-            text: "select"
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            color: root.roleInk(0.78)
+          visible: root.noteKind === "hint" && root.note.steps > 0
+          spacing: Style.space(5)
+          topPadding: Style.space(4)
+          Repeater {
+            model: root.noteKind === "hint" ? (root.note.steps || 0) : 0
+            delegate: Rectangle {
+              id: dot
+              required property int index
+              width: Style.space(8); height: width
+              color: dot.index < root.note.step ? root.roleAccent : "transparent"
+              border.width: dot.index < root.note.step ? 0 : 1
+              border.color: root.roleInk(0.5)
+            }
           }
         }
       }
 
       // Title block, as a drawing is labelled: the tool's place on the ring (Sheet 3/8).
       Row {
-        visible: plate.classic && cfg.showCallout && root.tools.length > 0
+        visible: plate.classic && cfg.showCallout && (root.tools.length > 0 || root.noteKind !== "")
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.rightMargin: Style.space(30)
         anchors.bottomMargin: Style.space(26)
         spacing: -1   // cells share one border
         Repeater {
-          model: ["RE:DIAL", "SHEET " + (root.index + 1) + "/" + root.tools.length]
+          model: ["RE:DIAL", root.noteKind === "cant" ? "STATUS: " + callout.stamp
+                             : root.noteKind === "hint" ? (root.note.steps > 0 ? "NOTE " + root.note.step + "/" + root.note.steps : "NOTE")
+                             : root.tools.length ? "SHEET " + (root.index + 1) + "/" + root.tools.length : "SHEET"]
           delegate: Rectangle {
             required property string modelData
             width: cellText.implicitWidth + Style.space(24)

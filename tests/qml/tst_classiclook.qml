@@ -112,6 +112,68 @@ Item {
       }
     }
 
+    function test_left_side_leaders_go_round_the_scale_not_across_it() {
+      var look = make(top.eight)
+      for (var i = 0; i < 8; i++) {
+        var r = look.leaderRoute(-90 + i * 45)
+        verify(Math.cos(r.a) > -0.06, "tool " + i + " leaves the dial on the right")
+        if (!r.left) continue
+        var off = ((r.a * 180 / Math.PI + 90) % 45 + 45) % 45
+        fuzzyCompare(off, 22.5, 1e-6, "tool " + i + " leaves between two labels, not through one")
+        compare(Math.sin(r.a) < 0, r.up, "tool " + i + " stays on its side of level")
+      }
+      verify(look.leaderRoute(-90 + 7 * 45).left && look.leaderRoute(-90 + 7 * 45).up, "Select goes over the top")
+      verify(look.leaderRoute(-90 + 5 * 45).left && !look.leaderRoute(-90 + 5 * 45).up, "Tabs goes under")
+      verify(look.leaderRoute(-90 + 6 * 45).up, "Focus, level with the hub, goes over the top")
+      verify(!look.leaderRoute(-90 + 2 * 45).left, "Windows on the right goes straight out")
+    }
+
+    function test_a_clamped_callout_is_met_round_the_scale_not_across_it() {
+      var look = make(top.eight)
+      var bottom = -90 + 4 * 45   // Zoom, straight down
+      var land = look.cy + 150     // the host held the callout higher than the leader's natural run
+      var r = look.leaderRoute(bottom, land)
+      fuzzyCompare(look.cy + Math.sin(r.a) * (look.rRule + look.u(36)), land, 1e-6, "the level run meets the callout")
+      verify(Math.cos(r.a) > 0, "it leaves on the right")
+      verify(!r.cw, "from the bottom up the right side is anticlockwise")
+      var free = look.leaderRoute(bottom, look.cy + look.rRule + look.u(36))
+      compare(free.a, bottom * Math.PI / 180, "an unclamped callout changes nothing")
+    }
+
+    function test_a_level_takes_the_scale_and_the_hand() {
+      var look = make(top.eight)
+      look.index = 3
+      look.note = { name: "Volume", value: 50, valueText: "50%" }
+      look.noteKind = "turn"
+      verify(look.levelShown)
+      compare(look.levelDeg, 90, "50% is half way round from the top")
+      tryCompare(look, "needleDeg", 90)
+      compare(look.ringInk, 0, "the tool ring steps aside")
+      tryCompare(look, "leaderY", look.cy + look.rRule + look.u(36))
+      look.note = { name: "Volume", value: 140, valueText: "140%" }
+      compare(look.levelDeg, 270, "a level over 100 pins at full scale")
+    }
+
+    function test_a_turn_without_a_level_keeps_the_ring() {
+      var look = make(top.eight)
+      look.noteKind = "turn"
+      look.note = { name: "Zoom" }
+      verify(!look.levelShown)
+      compare(look.ringInk, 1)
+    }
+
+    function test_hints_and_cant_act_set_the_ring_back() {
+      var look = make(top.eight)
+      look.noteKind = "hint"
+      look.note = { prompt: "Now press it", gesture: "press" }
+      compare(look.ringInk, 0.55)
+      look.noteKind = "cant"
+      look.note = { reason: "asleep", title: "Dial went to sleep", line: "Press it once to wake it" }
+      compare(look.ringInk, 0.35)
+      look.noteKind = ""
+      compare(look.ringInk, 1)
+    }
+
     function test_no_tools_still_draws() {
       var look = make([])
       compare(look.n, 1)
