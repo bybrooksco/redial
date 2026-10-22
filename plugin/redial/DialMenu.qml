@@ -4,6 +4,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
+import "Placement.js" as Place
 
 // re:dial tool dashboard.
 //
@@ -25,6 +26,26 @@ Item {
 
   // All tunables live here, with defaults in code - see Settings.qml.
   Settings { id: cfg }
+
+  // The design language (languages/<name>/Language.qml, see languages/README.md). An unknown or
+  // broken one falls back to re:dial classic, so a half-finished language never blanks the overlay.
+  Loader {
+    id: languageLoader
+    property bool failed: false
+    readonly property string dir: "languages/" + (failed ? "classic" : cfg.language)
+    source: dir + "/Language.qml"
+    onStatusChanged: if (status === Loader.Error && !failed) failed = true
+    Connections { target: cfg; function onLanguageChanged() { languageLoader.failed = false } }
+  }
+  readonly property var language: languageLoader.item
+  readonly property var easeOut: [0.23, 1, 0.32, 1, 1, 1]
+
+  // The colour scheme's roles (see ColourScheme.js), as colours, for the parts of the classic
+  // plate this file draws itself.
+  readonly property color roleGround: cfg.roles.ground
+  readonly property color roleLine: cfg.roles.line
+  readonly property color roleAccent: cfg.roles.accent
+  function roleInk(a) { return Qt.rgba(roleLine.r, roleLine.g, roleLine.b, a) }
 
   // One shared window, two modes: "live" is the daemon-driven overlay; "settings" is
   // ToolPicker's content (IPC target "dialtools"). `mode` picks the content and the mask/focus
@@ -225,20 +246,9 @@ Item {
       border.width: Math.max(1, Style.space(2))
       border.color: Util.alpha(cfg.lineColor, 0.30)
 
-      readonly property bool free: root.freeX >= 0 && root.freeY >= 0
-      readonly property bool atTop: root.anchor.indexOf("top") === 0
-      readonly property bool atBottom: root.anchor.indexOf("bottom") === 0
-      readonly property bool atLeft: root.anchor.indexOf("left") === 0 || root.anchor.indexOf("-left") > 0
-      readonly property bool atRight: root.anchor.indexOf("right") === 0 || root.anchor.indexOf("-right") > 0
 
-      x: free ? Math.max(root.edgeMargin, Math.min(parent.width - width - root.edgeMargin, root.freeX - width / 2))
-              : (atLeft ? root.edgeMargin
-                        : (atRight ? parent.width - width - root.edgeMargin
-                                   : (parent.width - width) / 2))
-      y: free ? Math.max(root.edgeMargin, Math.min(parent.height - height - root.edgeMargin, root.freeY - height / 2))
-              : (atTop ? root.edgeMargin
-                       : (atBottom ? parent.height - height - root.edgeMargin
-                                   : (parent.height - height) / 2))
+      x: Place.x(root.anchor, root.freeX, root.freeY, width, parent.width, root.edgeMargin)
+      y: Place.y(root.anchor, root.freeX, root.freeY, height, parent.height, root.edgeMargin)
 
       Behavior on x { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
       Behavior on y { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
@@ -404,20 +414,9 @@ Item {
       // attention, and the fill already reads as a defined panel on its own.
       color: cfg.backgroundColor
 
-      readonly property bool free: root.freeX >= 0 && root.freeY >= 0
-      readonly property bool atTop: root.anchor.indexOf("top") === 0
-      readonly property bool atBottom: root.anchor.indexOf("bottom") === 0
-      readonly property bool atLeft: root.anchor.indexOf("left") === 0 || root.anchor.indexOf("-left") > 0
-      readonly property bool atRight: root.anchor.indexOf("right") === 0 || root.anchor.indexOf("-right") > 0
 
-      x: free ? Math.max(root.edgeMargin, Math.min(parent.width - width - root.edgeMargin, root.freeX - width / 2))
-              : (atLeft ? root.edgeMargin
-                        : (atRight ? parent.width - width - root.edgeMargin
-                                   : (parent.width - width) / 2))
-      y: free ? Math.max(root.edgeMargin, Math.min(parent.height - height - root.edgeMargin, root.freeY - height / 2))
-              : (atTop ? root.edgeMargin
-                       : (atBottom ? parent.height - height - root.edgeMargin
-                                   : (parent.height - height) / 2))
+      x: Place.x(root.anchor, root.freeX, root.freeY, width, parent.width, root.edgeMargin)
+      y: Place.y(root.anchor, root.freeX, root.freeY, height, parent.height, root.edgeMargin)
 
       Behavior on x { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
       Behavior on y { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
@@ -516,20 +515,9 @@ Item {
       width: Math.max(pill.width, dots.implicitWidth)
       height: pill.height + Style.space(14) + dots.implicitHeight
 
-      readonly property bool free: root.freeX >= 0 && root.freeY >= 0
-      readonly property bool atTop: root.anchor.indexOf("top") === 0
-      readonly property bool atBottom: root.anchor.indexOf("bottom") === 0
-      readonly property bool atLeft: root.anchor.indexOf("left") === 0 || root.anchor.indexOf("-left") > 0
-      readonly property bool atRight: root.anchor.indexOf("right") === 0 || root.anchor.indexOf("-right") > 0
 
-      x: free ? Math.max(root.edgeMargin, Math.min(parent.width - width - root.edgeMargin, root.freeX - width / 2))
-              : (atLeft ? root.edgeMargin
-                        : (atRight ? parent.width - width - root.edgeMargin
-                                   : (parent.width - width) / 2))
-      y: free ? Math.max(root.edgeMargin, Math.min(parent.height - height - root.edgeMargin, root.freeY - height / 2))
-              : (atTop ? root.edgeMargin
-                       : (atBottom ? parent.height - height - root.edgeMargin
-                                   : (parent.height - height) / 2))
+      x: Place.x(root.anchor, root.freeX, root.freeY, width, parent.width, root.edgeMargin)
+      y: Place.y(root.anchor, root.freeX, root.freeY, height, parent.height, root.edgeMargin)
 
       Behavior on x { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
       Behavior on y { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
@@ -676,22 +664,11 @@ Item {
         text: "100%"
       }
 
-      readonly property bool free: root.freeX >= 0 && root.freeY >= 0
-      readonly property bool atTop: root.anchor.indexOf("top") === 0
-      readonly property bool atBottom: root.anchor.indexOf("bottom") === 0
-      readonly property bool atLeft: root.anchor.indexOf("left") === 0 || root.anchor.indexOf("-left") > 0
-      readonly property bool atRight: root.anchor.indexOf("right") === 0 || root.anchor.indexOf("-right") > 0
       // Bottom-centre sits in the OSD's own slot, so the two read as one family.
       readonly property int bottomMargin: Style.space(67)
 
-      x: free ? Math.max(root.edgeMargin, Math.min(parent.width - width - root.edgeMargin, root.freeX - width / 2))
-              : (atLeft ? root.edgeMargin
-                        : (atRight ? parent.width - width - root.edgeMargin
-                                   : (parent.width - width) / 2))
-      y: free ? Math.max(root.edgeMargin, Math.min(parent.height - height - root.edgeMargin, root.freeY - height / 2))
-              : (atTop ? root.edgeMargin
-                       : (atBottom ? parent.height - height - bottomMargin
-                                   : (parent.height - height) / 2))
+      x: Place.x(root.anchor, root.freeX, root.freeY, width, parent.width, root.edgeMargin)
+      y: Place.y(root.anchor, root.freeX, root.freeY, height, parent.height, root.edgeMargin, bottomMargin)
       Behavior on x { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
       Behavior on y { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
 
@@ -805,25 +782,14 @@ Item {
       width: classic ? Style.space(880) : Style.space(760)
       height: classic ? Style.space(640) : width
 
-      readonly property bool free: root.freeX >= 0 && root.freeY >= 0
-      readonly property bool atTop: root.anchor.indexOf("top") === 0
-      readonly property bool atBottom: root.anchor.indexOf("bottom") === 0
-      readonly property bool atLeft: root.anchor.indexOf("left") === 0 || root.anchor.indexOf("-left") > 0
-      readonly property bool atRight: root.anchor.indexOf("right") === 0 || root.anchor.indexOf("-right") > 0
       readonly property int edge: Style.space(24)
 
       // The dial honours `anchor` exactly as the deck does. Bottom is the
       // reachable edge one-handed on a large panel, and centred the face
       // collides with the bar, so this is a reachability requirement rather
       // than a preference.
-      x: free ? Math.max(edge, Math.min(parent.width - width - edge, root.freeX - width / 2))
-              : (atLeft ? edge
-                        : (atRight ? parent.width - width - edge
-                                   : (parent.width - width) / 2))
-      y: free ? Math.max(edge, Math.min(parent.height - height - edge, root.freeY - height / 2))
-              : (atTop ? edge
-                       : (atBottom ? parent.height - height - edge
-                                   : (parent.height - height) / 2))
+      x: Place.x(root.anchor, root.freeX, root.freeY, width, parent.width, edge)
+      y: Place.y(root.anchor, root.freeX, root.freeY, height, parent.height, edge)
 
       Behavior on x { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
       Behavior on y { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
@@ -832,13 +798,11 @@ Item {
       // Size is a uniform scale about the edge/corner the overlay is anchored to, so
       // a smaller dial stays parked where `anchor` put it rather than shrinking
       // toward the middle of the screen. Layout metrics stay at full size.
-      transformOrigin: free ? Item.Center
-        : (atTop ? (atLeft ? Item.TopLeft : (atRight ? Item.TopRight : Item.Top))
-        : (atBottom ? (atLeft ? Item.BottomLeft : (atRight ? Item.BottomRight : Item.Bottom))
-        : (atLeft ? Item.Left : (atRight ? Item.Right : Item.Center))))
+      transformOrigin: Place.origin(root.anchor, root.freeX, root.freeY)
       scale: (root.opened ? 1 : 0.97) * cfg.sizeScale
-      Behavior on opacity { NumberAnimation { duration: cfg.motionFast; easing.type: Easing.OutCubic } }
-      Behavior on scale { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
+      // Opening fades in; closing is quicker. The fade survives reduced motion (it moves nothing).
+      Behavior on opacity { NumberAnimation { duration: root.opened ? cfg.motionFade : cfg.motionExit; easing.type: Easing.BezierSpline; easing.bezierCurve: root.easeOut } }
+      Behavior on scale { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.BezierSpline; easing.bezierCurve: root.easeOut } }
 
       // Backing. `none` is the default; `disc` exists because 0.5px hairlines
       // over arbitrary desktop content can wash out, and it is one config value
@@ -862,11 +826,16 @@ Item {
       Rectangle {
         visible: cfg.plate === "rect"
         anchors.fill: parent
-        color: Qt.rgba(cfg.backgroundColor.r, cfg.backgroundColor.g,
-                       cfg.backgroundColor.b, cfg.plateOpacity)
+        // The classic plate takes the colour scheme's ground; a light plate is opaque, because
+        // desktop text showing through vellum reads as dirt. Other faces keep the theme colours.
+        color: plate.classic
+               ? Qt.rgba(root.roleGround.r, root.roleGround.g, root.roleGround.b,
+                         cfg.colorScheme === "light" ? 1 : cfg.plateOpacity)
+               : Qt.rgba(cfg.backgroundColor.r, cfg.backgroundColor.g,
+                         cfg.backgroundColor.b, cfg.plateOpacity)
         radius: Style.space(4)
         border.width: 1
-        border.color: Util.alpha(cfg.lineColor, 0.16)
+        border.color: plate.classic ? root.roleInk(0.16) : Util.alpha(cfg.lineColor, 0.16)
       }
 
       // Corner registration marks belong to the rectangular plate; a disc has
@@ -883,12 +852,12 @@ Item {
           y: atBottom ? plate.height - height - Style.space(12) : Style.space(12)
           Rectangle {
             width: parent.width; height: 1
-            color: Util.alpha(cfg.lineColor, 0.45)
+            color: plate.classic ? root.roleInk(0.45) : Util.alpha(cfg.lineColor, 0.45)
             y: mark.atBottom ? parent.height - 1 : 0
           }
           Rectangle {
             width: 1; height: parent.height
-            color: Util.alpha(cfg.lineColor, 0.45)
+            color: plate.classic ? root.roleInk(0.45) : Util.alpha(cfg.lineColor, 0.45)
             x: mark.atRight ? parent.width - 1 : 0
           }
         }
@@ -911,7 +880,7 @@ Item {
         // Classic, same as before this map existed - a bad config value
         // degrades to the safe default rather than an empty Loader.
         readonly property var faceFiles: ({
-          "classic": "FaceClassic.qml",
+          "classic": "languages/classic/Classic.qml",
           "capsule": "FaceCapsule.qml",
           "pie": "FacePie.qml",
           "gauge": "FaceGauge.qml"
@@ -919,19 +888,40 @@ Item {
         // setSource rather than `source:`, because the faces declare cfg as a
         // required property and those must be supplied at construction - a
         // binding applied in onLoaded arrives one frame too late.
+        // The language draws the faces it lists (languages/<name>/); any other face falls back to
+        // the built-in file.
+        // True when the face came from a language folder: those take the host's metrics below.
+        property bool languageLook: false
         function reload() {
-          setSource(faceFiles[cfg.face] || "FaceClassic.qml", { "cfg": cfg })
+          var own = root.language && root.language.looks ? root.language.looks[cfg.face] : undefined
+          var file = own ? languageLoader.dir + "/" + own : (faceFiles[cfg.face] || faceFiles.classic)
+          languageLook = file.indexOf("languages/") === 0
+          setSource(file, { "cfg": cfg })
         }
         Component.onCompleted: reload()
         Connections {
           target: cfg
           function onFaceChanged() { faceLoader.reload() }
         }
+        Connections {
+          target: languageLoader
+          function onLoaded() { faceLoader.reload() }
+        }
         onLoaded: {
             item.tools = Qt.binding(function () { return root.tools })
             item.index = Qt.binding(function () { return root.index })
             item.position = Qt.binding(function () { return root.position })
             item.live = Qt.binding(function () { return root.live })
+            // Language looks take the host's metrics instead of importing the shell's Style.
+            if (faceLoader.languageLook) {   // see languages/README.md
+              item["language"] = Qt.binding(function () { return root.language })
+              item["unit"] = Qt.binding(function () { return Style.spaceReal(1) })
+              item["fontFamily"] = Qt.binding(function () { return Style.font.family })
+              item["type"] = Qt.binding(function () {
+                return { caption: Style.font.caption, subtitle: Style.font.subtitle, title: Style.font.title,
+                         display: Style.font.display, displayLarge: Style.font.displayLarge }
+              })
+            }
         }
       }
 
@@ -947,10 +937,10 @@ Item {
           var ly = faceLoader.item && faceLoader.item.leaderY !== undefined
                    ? faceLoader.item.leaderY : plate.height / 2
           return Math.max(Style.space(58),
-                   Math.min(plate.height - height - Style.space(34),
+                   Math.min(plate.height - height - Style.space(70),
                             faceLoader.y + ly - height / 2))
         }
-        Behavior on y { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.OutCubic } }
+        Behavior on y { NumberAnimation { duration: cfg.motionBase; easing.type: Easing.BezierSpline; easing.bezierCurve: root.easeOut } }
         spacing: Style.space(3)
         // Never wider than the room left on the plate (30-unit right margin): this column
         // used to end 4 units short of the border, so a long click label ran over it.
@@ -964,11 +954,11 @@ Item {
           font.family: Style.font.family
           font.pixelSize: Style.font.body
           font.bold: true
-          color: cfg.accentColor
+          color: root.roleAccent
         }
         Rectangle {
           width: Style.space(34); height: 1
-          color: Util.alpha(cfg.lineColor, 0.35)
+          color: root.roleInk(0.35)
         }
         // Key/value rows: the value gets its own column so a long click label wraps
         // (two lines, then elides) inside the callout instead of running past it.
@@ -987,7 +977,7 @@ Item {
             text: "CLICK"
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: Util.alpha(cfg.lineColor, 0.42)
+            color: root.roleInk(0.55)
           }
           Text {
             width: clickRow.width - Style.space(56)
@@ -997,7 +987,7 @@ Item {
             elide: Text.ElideRight
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: Util.alpha(cfg.lineColor, 0.62)
+            color: root.roleInk(0.78)
           }
         }
         Row {
@@ -1008,13 +998,43 @@ Item {
             text: "ROTATE"
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: Util.alpha(cfg.lineColor, 0.42)
+            color: root.roleInk(0.55)
           }
           Text {
             text: "select"
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: Util.alpha(cfg.lineColor, 0.42)
+            color: root.roleInk(0.78)
+          }
+        }
+      }
+
+      // Title block, as a drawing is labelled: the tool's place on the ring (Sheet 3/8).
+      Row {
+        visible: plate.classic && cfg.showCallout && root.tools.length > 0
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: Style.space(30)
+        anchors.bottomMargin: Style.space(26)
+        spacing: -1   // cells share one border
+        Repeater {
+          model: ["RE:DIAL", "SHEET " + (root.index + 1) + "/" + root.tools.length]
+          delegate: Rectangle {
+            required property string modelData
+            width: cellText.implicitWidth + Style.space(24)
+            height: Style.space(30)
+            color: "transparent"
+            border.width: 1
+            border.color: root.roleInk(0.4)
+            Text {
+              id: cellText
+              anchors.centerIn: parent
+              text: parent.modelData
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              font.letterSpacing: 1.2
+              color: root.roleInk(0.7)
+            }
           }
         }
       }

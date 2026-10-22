@@ -106,6 +106,26 @@ See `config.example.json` for the full document with defaults. The file is
 watched, so edits apply live — no restart. A malformed file logs a warning and
 falls back to defaults rather than taking the overlay down.
 
+### Design layers
+
+The overlay is drawn in layers, and each can be swapped without touching the others
+(`docs/DESIGN.md#design-layers`, `languages/README.md`):
+
+- `language`: the design language, how things are drawn and how they move. `classic`
+  (**re:dial classic**, a drafting plate) is the standard. Others live in
+  `languages/<name>/`; an unknown one falls back to `classic`. Today the language draws the
+  `classic` face; the other faces are drawn by their built-in files until they are redrawn.
+- `color_scheme`: `light` (ink on vellum, the default for everyone), `dark`, or `theme` (match
+  the desktop's theme: Omarchy's `colors.toml`, dark where there is none). It fills the four
+  colour roles a language uses: ground, line, accent, alert. `colors.accent`, when set to a hex
+  colour or a theme slot, still overrides the accent.
+- `reference_lines`: `true` (default) or `false`. Off hides the drawing's background reference
+  lines: construction lines, crosshair and registration marks. The rings and the scale stay,
+  because they carry information.
+
+The colour keys below (`colors.*` as `"theme"`, a role or a slot) apply to the faces a language
+does not draw yet.
+
 Colours accept `"theme"` (follow the Omarchy palette), a role name
 (`accent`, `foreground`, `background`, `urgent`, `muted`), a theme slot
 (`color0` to `color15`, the active theme's terminal colours, so the dial
@@ -136,9 +156,11 @@ is the reachable one, and a centred overlay collides with the bar.
 
 ## Faces
 
-`FaceClassic.qml`, `FaceCapsule.qml`, `FacePie.qml` and `FaceGauge.qml` are
-peers behind a `Loader` (`DialMenu.qml`'s `faceFiles` map), sharing one
-contract (`cfg`, `tools`, `index`, `position`, `live`) and everything outside
+`languages/classic/Classic.qml` (the Classic look of re:dial classic), `FaceCapsule.qml`,
+`FacePie.qml` and `FaceGauge.qml` are peers behind a `Loader` (`DialMenu.qml`'s `faceFiles`
+map, after the active language's own `looks`), sharing one contract (`cfg`, `tools`, `index`,
+`position`, `live`; language looks also get `language`, `unit`, `fontFamily`, `type`) and
+everything outside
 the face: settings, socket, IPC, plate, anchor, daemon. `carousel`, `toast` and `omarchy` are **not** faces — they're not circular, so the `dial` contract
 (`angleOf()`, a square Canvas) would fight them rather than fit them; they're
 two more top-level `layout` values instead, hardcoded directly in
@@ -148,7 +170,7 @@ Faces are separate components rather than branches in one file because they
 differ in geometry, in what the interior rings (if any) mean, and in where
 the callout lives — gating that together would be a parallel implementation
 tangled into a single scope. `FacePie.qml`/`FaceGauge.qml` reuse
-`FaceCapsule.qml`'s/`FaceClassic.qml`'s exact `angleOf()`/needle-
+`FaceCapsule.qml`'s/the Classic look's exact `angleOf()`/needle-
 interpolation math rather than re-deriving it — `FaceGauge.qml` is the one
 exception, since its 180°-dome topology genuinely isn't the same problem as
 a full circle. Adding a fifth face means adding a file, a `faceFiles` entry
@@ -290,7 +312,7 @@ and every number is clamped to a safe range (text or true/false means the defaul
 | `double_click_ms` | How long a second (or third) press can take and still count as a double (or triple) click. | `250` | 150 to 600 |
 | `hold_ms` | How long to hold the button to open the tool menu. | `400` | 200 to 1500 |
 | `announce_tool` | Speak the tool name aloud when it is armed or highlighted in the menu. Needs `spd-say` (speech-dispatcher) or `espeak-ng`. | `false` | true / false |
-| `reduce_motion` | Turn off sliding, scaling and fading on the dial display; everything changes instantly. | `false` | true / false |
+| `reduce_motion` | Turn off sliding and scaling on the dial display; everything moves instantly. The overlay still fades in and out briefly, which moves nothing. | `false` | true / false |
 | `deadzone` | Ignore small turns: after a pause the dial must turn this many counts before anything happens, so a bump or a tremor does nothing. A deliberate turn loses only that lead-in (the counts are released together, not dropped). `0` is off. | `0` | 0 to 100 |
 | `menu_latch` | Tap menu: hold until the menu opens, let go, then turn and click to choose. Turning while still holding works as before. For anyone who cannot hold and turn at once. | `false` | true / false |
 | `menu_timeout_ms` | How long an untouched tap menu waits before closing without changing anything. | `8000` | 3000 to 12000 |

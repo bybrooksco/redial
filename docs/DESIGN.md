@@ -19,6 +19,7 @@ decision live here. Dates are when a decision was made or measured.
 - [Overlay window](#overlay-window)
 - [Config bindings](#config-bindings)
 - [Faces and layouts](#faces-and-layouts)
+- [Design layers](#design-layers)
 - [Settings window](#settings-window)
 
 ## Interaction model
@@ -359,6 +360,42 @@ wrote afterward. `cfg`'s binding is the single source of truth.
 
 `ToolPicker` follows the same rule: it never assigns `root.anchor` directly,
 because that is a binding off `configDoc`.
+
+## Design layers
+
+The overlay is drawn in six layers, and each can be swapped without touching the
+others (the diagram is in the project vault; the contract is in
+`plugin/redial/languages/README.md`):
+
+| Layer | Decides | Changed by |
+|---|---|---|
+| Your settings | reference lines, size, position, reduced motion, tools | you |
+| Colour scheme | the values of four roles: ground, line, accent, alert | anyone |
+| Look | one layout (Classic, Capsule, ...) | designers, community |
+| Design language | how things are drawn and how they move | designers, community |
+| Host | what the desktop offers (Omarchy today; a standalone host is planned) | re:dial |
+| Engine | dial input, tools, states (`redial-hypr`) | re:dial |
+
+- **Languages and colour schemes are separate axes.** A language only names the
+  roles; `ColourScheme.js` only supplies values for them. So a new language gets
+  Light, Dark and theme matching without extra work. Light is the default for
+  everyone; theme matching reads Omarchy's `colors.toml` directly (not the shell's
+  `Color` singleton) and checks contrast: a theme red that does not reach 3:1 on the
+  ground falls back to the next warm slot, then to the ink.
+- **A language is a folder** (`languages/<name>/Language.qml` plus one file per
+  look). The face `Loader` takes a look from the active language first and falls back
+  to the built-in file; a missing or broken language falls back to `classic`, so a
+  half-finished one never blanks the overlay.
+- **Looks import nothing from the Omarchy shell.** The host passes the spacing unit,
+  font and type sizes in, which is what lets a standalone host run them later.
+- **re:dial classic** keeps Classic's plate and makes it cheaper: the lit sector is a
+  pre-drawn layer turned by transform with the hand, and the leader repaints a small
+  canvas as it eases; the 180-bar scale no longer repaints on every detent.
+- **Motion rules:** strong ease-out for arrivals, ease-in-out for things moving on
+  screen, closing (100 ms) quicker than opening (120 ms). `reduce_motion` drops
+  movement but keeps the short open/close fade, which moves nothing.
+- **Placement** for every look goes through `Placement.js` (it was pasted five times;
+  the Omarchy look passes its own bottom margin, the OSD slot).
 
 ## Faces and layouts
 

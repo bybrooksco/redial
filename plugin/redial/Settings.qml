@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import "ThemeSlots.js" as ThemeSlots
+import "ColourScheme.js" as Scheme
 
 // Configuration for the re:dial overlay.
 //
@@ -32,6 +33,12 @@ Item {
 
   // ---------------------------------------------------------------- defaults
   readonly property var defaults: ({
+    "_language": "classic - the design language that draws the overlay (how things are drawn and how they move). re:dial classic is the standard; others live in plugin/redial/languages/<name>/ and fall back to classic when absent",
+    "language": "classic",
+    "_color_scheme": "light | dark | theme - fills the language's four colour roles (ground, line, accent, alert). light is ink on vellum and the default; theme matches the desktop's own theme (Omarchy), dark where there is none. colors.accent, when set, still overrides the accent",
+    "color_scheme": "light",
+    "_reference_lines": "true | false - the drawing's background reference lines (construction lines, crosshair, registration marks). Rings and the scale stay: they carry information",
+    "reference_lines": true,
     "_layout": "dial | deck | carousel | toast | omarchy - the overlay's overall shape. dial is the circular instrument (see face, below, for which one); deck and carousel are both horizontal card rows (deck: dense, original; carousel: fewer visual details, center-emphasis sizing); toast is a single small pill plus a dot strip, the smallest footprint of the four.",
     "layout": "dial",
     "_face": "classic | capsule | pie | gauge - which instrument face the dial layout draws",
@@ -62,7 +69,7 @@ Item {
       "capsuleFillet": 1.0,
       "_capsuleSpan": "0..1 - capsule width as a fraction of the arc each tool owns. Higher closes the gaps between pills. Note the capsule keeps a fixed radial length, so pushing this far past ~0.35 squares it off and, at capsuleFillet 1, turns it into a circle.",
       "capsuleSpan": 0.14,
-      "constructionLines": false,
+      "constructionLines": true,
       "crosshair": false,
       "registrationMarks": true,
       "labels": true,
@@ -148,6 +155,27 @@ Item {
   // An opaque surface a little lighter (or darker) than the card, for tooltips.
   function tint(t) { return contrast.mix(lineColor, backgroundColor, t) }
 
+  // Design layers (docs/DESIGN.md#design-layers). A language folder name is the only thing a
+  // community language needs; an unknown one falls back to classic where it is loaded.
+  readonly property string language: {
+    var v = String(get("language"))
+    return /^[a-z0-9][a-z0-9-]{0,39}$/.test(v) ? v : "classic"
+  }
+  readonly property string colorScheme: {
+    var v = String(get("color_scheme"))
+    return (v === "light" || v === "dark" || v === "theme") ? v : "light"
+  }
+  readonly property bool referenceLines: get("reference_lines") !== false
+  // The user's own accent, when colors.accent names one: a hex colour or a theme slot.
+  readonly property string accentOverride: {
+    var s = String(get("colors.accent")).trim()
+    if (/^#[0-9a-fA-F]{6}$/.test(s)) return s
+    if (/^color([0-9]|1[0-5])$/.test(s)) return themeSlots[s] || ""
+    return ""
+  }
+  // The four colour roles every language draws with, as "#rrggbb" strings.
+  readonly property var roles: Scheme.roles(colorScheme, omarchyTheme, themeSlots, accentOverride)
+
   readonly property string layout: {
     var v = String(get("layout"))
     return (v === "deck" || v === "dial" || v === "carousel" || v === "toast" || v === "omarchy") ? v : "dial"
@@ -178,11 +206,14 @@ Item {
     return "disc"
   }
   // Motion: three speeds used by every animation, all zero when reduce_motion is on (config key
-  // or Feel page), so nothing slides, scales or fades; changes of state are then instant.
+  // or Feel page), so nothing slides or scales. Reduced motion means gentler, not none: the
+  // overlay's own fade in and out keeps motionFade/motionExit, which move nothing.
   readonly property bool reduceMotion: !!(doc && doc.reduce_motion === true)
-  readonly property int motionFast: reduceMotion ? 0 : 120   // fades, small text and colour shifts
+  readonly property int motionFast: reduceMotion ? 0 : 120   // small text and colour shifts
   readonly property int motionBase: reduceMotion ? 0 : 160   // moves, scale, highlight travel
   readonly property int motionSlow: reduceMotion ? 0 : 260   // whole-dial rotations
+  readonly property int motionFade: 120                      // opening fade, kept under reduce_motion
+  readonly property int motionExit: 100                      // closing is always quicker than opening
   readonly property int watchdogMs: num("watchdogMs", 2000, 120000)
 
   readonly property int barCount: num("dial.barCount", 24, 720)
@@ -195,9 +226,10 @@ Item {
   readonly property real ringWidth: num("dial.ringWidth", 0.5, 8)
   readonly property real capsuleFillet: num("dial.capsuleFillet", 0.0, 1.0)
   readonly property real capsuleSpan: num("dial.capsuleSpan", 0.05, 1.0)
-  readonly property bool constructionLines: get("dial.constructionLines") === true
-  readonly property bool crosshair: get("dial.crosshair") === true
-  readonly property bool registrationMarks: get("dial.registrationMarks") === true
+  // reference_lines is the one switch for all three; the dial.* keys still tune each when it is on
+  readonly property bool constructionLines: referenceLines && get("dial.constructionLines") === true
+  readonly property bool crosshair: referenceLines && get("dial.crosshair") === true
+  readonly property bool registrationMarks: referenceLines && get("dial.registrationMarks") === true
   readonly property bool showLabels: get("dial.labels") === true
   readonly property bool showGlyphs: get("dial.glyphs") === true
   readonly property bool showCallout: get("dial.callout") === true
@@ -232,11 +264,21 @@ Item {
     onLoaded: cfg.themeSlots = ThemeSlots.parse(text())
     onLoadFailed: cfg.themeSlots = ({})
   }
+  // The theme's own background, foreground and accent for color_scheme "theme". Read from the file,
+  // not from the shell's Color singleton, so the colour layer needs nothing from Omarchy's shell.
+  property var omarchyTheme: ({})
+  FileView {
+    id: themeToml
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/colors.toml"
+    printErrors: false
+    onLoaded: cfg.omarchyTheme = Scheme.parseToml(text())
+    onLoadFailed: cfg.omarchyTheme = ({})
+  }
   Connections {
     target: Color
-    function onBackgroundChanged() { themeColors.reload() }
-    function onForegroundChanged() { themeColors.reload() }
-    function onAccentChanged() { themeColors.reload() }
+    function onBackgroundChanged() { themeColors.reload(); themeToml.reload() }
+    function onForegroundChanged() { themeColors.reload(); themeToml.reload() }
+    function onAccentChanged() { themeColors.reload(); themeToml.reload() }
   }
 
   FileView {

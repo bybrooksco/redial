@@ -5,6 +5,17 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **re:dial classic**, the standard design language, and the layer structure behind it: a language is a folder in `plugin/redial/languages/` (`Language.qml` plus one file per look), selected with `language`; unknown or broken languages fall back to `classic`. The contract for adding a language or a look is in `plugin/redial/languages/README.md`.
+- `color_scheme`: `light` (the new default, ink on vellum), `dark`, or `theme` (match the desktop theme, read from Omarchy's `colors.toml`). It fills four colour roles (ground, line, accent, alert) in `ColourScheme.js`; a theme colour that does not reach 3:1 on the background falls back to a readable one. `colors.accent` still overrides the accent. Tested in `tests/qml/tst_colourscheme.qml`.
+- `reference_lines` (default `true`): one switch for the construction lines, crosshair and registration marks.
+- A title block on the Classic plate showing the tool's place on the ring (`SHEET 3/8`).
+
+### Changed
+- The Classic look is redrawn in re:dial classic (`languages/classic/Classic.qml`, replacing `FaceClassic.qml`): the lit sector turns with the hand as a pre-drawn layer instead of repainting all 180 bars on every detent, the leader eases between tools, the chosen glyph grows by transform, labels and callout keys are a step darker, and its colours come from the colour scheme. Construction lines are now on by default.
+- Opening and closing: the overlay fades in over 120 ms and out over 100 ms with stronger curves. `reduce_motion` still removes all sliding and scaling but keeps that short fade.
+- Every look's position comes from one helper, `Placement.js` (it was pasted five times; audit finding 6). Tested in `tests/qml/tst_placement.qml`.
+
 ## [0.8.5] - 2026-10-14
 
 ### Added
