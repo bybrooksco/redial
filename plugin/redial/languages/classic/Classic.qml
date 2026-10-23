@@ -514,8 +514,16 @@ Item {
             : face.tools.length > face.index && face.tools[face.index].valueText !== undefined
             ? face.tools[face.index].valueText : ""
       textFormat: Text.PlainText
+      objectName: "valueText"
+      // a level reads large; a window or track name is a line of text and must fit inside the ring
+      readonly property bool wordy: text.length > 8
+      width: Math.min(implicitWidth, face.rInner * 1.7)
+      horizontalAlignment: Text.AlignHCenter
+      elide: Text.ElideRight
+      maximumLineCount: wordy ? 2 : 1
+      wrapMode: wordy ? Text.WordWrap : Text.NoWrap
       font.family: face.fontFamily
-      font.pixelSize: face.type.display
+      font.pixelSize: wordy ? face.type.subtitle : face.type.display
       color: face.accent
     }
   }

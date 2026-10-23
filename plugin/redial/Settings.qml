@@ -141,9 +141,15 @@ Item {
   }
 
   // --------------------------------------------------------- resolved values
-  readonly property color accentColor: resolveColor(get("colors.accent"), "accent")
-  readonly property color lineColor: resolveColor(get("colors.line"), "foreground")
-  readonly property color backgroundColor: resolveColor(get("colors.background"), "background")
+  // Every look and the settings window draw with the colour scheme's roles (Light, Dark, Match
+  // desktop), so one choice recolours all of re:dial. colors.* still wins when it names a colour.
+  function overridden(key) {
+    var s = String(get(key)).trim()
+    return s !== "" && s !== "theme" && s !== "auto"
+  }
+  readonly property color accentColor: roles.accent
+  readonly property color lineColor: roles.line
+  readonly property color backgroundColor: roles.ground
 
   // Text colours for the settings card, which is always drawn opaque on backgroundColor. Each is
   // the theme's own colour, adjusted only as far as needed to reach 4.5:1 (see Contrast.qml), so
@@ -166,15 +172,18 @@ Item {
     return (v === "light" || v === "dark" || v === "theme") ? v : "light"
   }
   readonly property bool referenceLines: get("reference_lines") !== false
-  // The user's own accent, when colors.accent names one: a hex colour or a theme slot.
-  readonly property string accentOverride: {
-    var s = String(get("colors.accent")).trim()
-    if (/^#[0-9a-fA-F]{6}$/.test(s)) return s
-    if (/^color([0-9]|1[0-5])$/.test(s)) return themeSlots[s] || ""
-    return ""
+  // The user's own colours (colors.*), as "#rrggbb", or "" where the scheme's own role stays.
+  function overrideHex(key, role) {
+    if (!overridden(key)) return ""
+    var c = String(Qt.lighter(resolveColor(get(key), role), 1.0))  // a colour value as "#rrggbb"
+    return c.length === 9 ? "#" + c.slice(3) : c                    // "#aarrggbb": drop the alpha
   }
   // The four colour roles every language draws with, as "#rrggbb" strings.
-  readonly property var roles: Scheme.roles(colorScheme, omarchyTheme, themeSlots, accentOverride)
+  readonly property var roles: Scheme.roles(colorScheme, omarchyTheme, themeSlots, {
+    accent: overrideHex("colors.accent", "accent"),
+    line: overrideHex("colors.line", "foreground"),
+    ground: overrideHex("colors.background", "background")
+  })
 
   readonly property string layout: {
     var v = String(get("layout"))

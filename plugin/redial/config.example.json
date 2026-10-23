@@ -12,6 +12,8 @@
   "_feel": "Twelve 'feel' settings, all live (no restart) and clamped to a safe range; also set from the settings window's Feel page. sensitivity 0.5-2 (higher = less turning); auto_return_s 3-300 seconds an armed tool stays armed before dropping back to Volume (Zoom is always capped at 10 because it holds Ctrl); osd true/false = show the volume or brightness level, or the tool name, on screen as you turn (default true; handy while learning the dial and for movies); guide true/false = hints while you learn: a short line about the next thing the dial can do, shown when what you do suggests you are ready (default true; needs osd; progress is kept in progress.json next to this file); onboarding_mode adaptive | discover | guided = how the hints teach: adaptive shows each hint when what you do says you are ready (default), discover says almost nothing (press, then hold, and a tip when you first try each tool), guided is a short tour on connect; return_buzz true/false; double_click_ms 150-600; hold_ms 200-1500 (hold the button this long to open the tool menu); assistant: the command the 'Quick assistant' click action runs, whichever AI or chat you use (a local model in a terminal, a chat app, a web page); takes effect immediately; examples: [\"omarchy-launch-or-focus-tui\", \"ollama\", \"run\", \"llama3\"], [\"omarchy-launch-or-focus-tui\", \"claude\"], [\"omarchy-launch-or-focus-webapp\", \"chat\", \"https://example.com/chat\"]. launchers: your own click actions, [{\"name\": \"Notes\", \"label\": \"Open notes\", \"cmd\": [\"obsidian\"]}] (up to 12; needs a daemon restart to pick up); intro_seen is set by the settings window once you dismiss the welcome card (set false to see it again); announce_tool true = speak the tool name aloud when it is armed or highlighted (needs spd-say or espeak-ng; off by default); reduce_motion true = no sliding, scaling or fading on the dial display (applies live); deadzone 0-100 counts: after a pause the dial must turn this far before anything registers, which ignores bumps and tremor (0 = off); menu_latch true = tap menu: after it opens, let go, turn, then click to choose (turning while still holding works as before); menu_timeout_ms 3000-12000 = how long an untouched tap menu waits before closing with no change.",
   "sensitivity": 1,
   "auto_return_s": 6,
+  "_tool_return_s": "Seconds for one tool, beating auto_return_s: {\"Scroll\": 120}. Scroll, Pages and Settings already stay at least 60 s (you stop to read), never shorter than auto_return_s.",
+  "tool_return_s": {},
   "osd": true,
   "guide": true,
   "onboarding_mode": "adaptive",
@@ -28,7 +30,7 @@
   "menu_timeout_ms": 8000,
   "watchdogMs": 15000,
   "colors": {
-    "_comment": "\"theme\" follows the Omarchy palette. Also accepts a role name (accent, foreground, background, urgent, muted), a theme slot color0..color15 (follows theme switches), or a literal hex such as \"#78824b\" (fixed).",
+    "_comment": "\"theme\" follows color_scheme (Light, Dark or Match desktop) for every look and the settings window. Also accepts a role name (accent, foreground, background, urgent, muted), a theme slot color0..color15 (follows theme switches), or a literal hex such as \"#78824b\" (fixed).",
     "accent": "theme",
     "line": "theme",
     "background": "theme"
@@ -42,7 +44,7 @@
     "barWidthActive": 2.5,
     "needleWidth": 2,
     "ringWidth": 1,
-    "constructionLines": false,
+    "constructionLines": true,
     "crosshair": false,
     "registrationMarks": true,
     "labels": true,
@@ -74,7 +76,7 @@
       "action": "right_click"
     }
   },
-  "_active_tools": "Picks and orders a subset of the built-in tool library by name -- the normal way to configure which tools you get, and what the ToolPicker UI (Omarchy menu > Setup > Surface Dial) writes. Example: [\"Volume\", \"Scroll\", \"Windows\", \"Workspaces\", \"Word Nav\", \"Zoom\", \"Media\"]. The full built-in library, for reference: Volume, Windows, Workspaces, Scroll, Undo, Zoom, Media, Word Nav, Arrow Keys, Window Size, Brightness.",
+  "_active_tools": "Picks and orders a subset of the built-in tool library by name -- the normal way to configure which tools you get, and what the ToolPicker UI (Omarchy menu > Setup > re:dial) writes. Example: [\"Volume\", \"Scroll\", \"Windows\", \"Workspaces\", \"Text\", \"Zoom\", \"Media\"]. With neither active_tools nor tools the ring is Volume, Windows, Workspaces, Scroll, Undo, Zoom, Media, Settings, plus Brightness where there is a backlight. The rest of the library: Text, Arrow Keys, Window Size, Pointer, Focus, Tabs, Pages, Tile Focus, Move Window. Word Nav, Select and H Scroll still load (as Text and Scroll).",
   "tools": [
     {
       "_comment": "The full override, for defining a custom tool the library can't express (or reordering/dropping tools by hand instead of via active_tools). Omitting 'tools' entirely uses active_tools if set, else the built-in set, which is what this list reproduces. detent = dial counts per step (3600 counts = one revolution). magnitude = let rotation speed scale the step size. 'tools' wins if both 'tools' and 'active_tools' are present.",
@@ -180,8 +182,10 @@
   "_anchor": "center | top | bottom | left | right | top-left | top-right | bottom-left | bottom-right. Honoured by both layouts.",
   "face": "classic",
   "size": "large",
-  "_size": "large | medium | small. Overall size of the dial menu: large is the original full size, medium is 0.75x, small is 0.55x. It shrinks toward the edge or corner 'anchor' pins it to. Also set from the settings window (Omarchy menu > Setup > Surface Dial). Dial layout only.",
+  "_size": "large | medium | small. Overall size of the dial menu: large is the original full size, medium is 0.75x, small is 0.55x. It shrinks toward the edge or corner 'anchor' pins it to. Also set from the settings window (Omarchy menu > Setup > re:dial). Dial layout only.",
   "clicks": { "single": "tool", "double": "dictation", "triple": "enter" },
+  "_tool_clicks": "Clicks for one tool, beating that tool's own defaults and 'clicks' above. Any action name, or 'tool' for the tool's own click (any of the three). Pointer's own: single mouse_left, double tool (flip the axis), triple mouse_right. Read live.",
+  "tool_clicks": {},
   "_clicks": "What single / double / triple click do. Options: tool (single only: the armed tool's own click), dictation, enter, escape, backspace, space, tab, mute, play_pause, next_track, prev_track, maximize, none. Read live -- no daemon restart. A double click waits 0.25 s for a possible third press unless triple is 'none'.",
   "_face": "classic | capsule | pie | gauge. Only read when layout is 'dial'. classic is the original instrument in a rectangular window: horizontal labels, concentric rings, and a callout column beside the dial. capsule puts the tools on radial pills around a round backing. pie is full-bleed game-menu-style wedges, no rings or callout. gauge lays tools across a 180-degree speedometer-style dome with a needle. The backing follows the face unless you set 'plate' yourself."
 }

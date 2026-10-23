@@ -6,7 +6,7 @@ import "../../plugin/redial/Notes.js" as Notes
 TestCase {
   name: "Notes"
 
-  function idle() { return { kind: "", ringOpen: false, settings: false, ageMs: 0 } }
+  function idle() { return { kind: "", ringOpen: false, ageMs: 0 } }
 
   function test_each_state_shows_on_an_idle_overlay() {
     compare(Notes.accept("turn", idle()), true)
@@ -16,10 +16,6 @@ TestCase {
   function test_an_unknown_kind_is_ignored() {
     compare(Notes.accept("pos", idle()), false)
     compare(Notes.accept("", idle()), false)
-  }
-  function test_the_settings_window_is_never_covered() {
-    var s = idle(); s.settings = true
-    compare(Notes.accept("hint", s), false)
   }
   function test_the_open_ring_already_shows_the_tool_turning() {
     var s = idle(); s.ringOpen = true

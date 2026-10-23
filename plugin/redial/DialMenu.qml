@@ -8,6 +8,7 @@ import qs.Commons
 import qs.Ui
 import "Placement.js" as Place
 import "Notes.js" as Notes
+import "Peek.js" as Peek
 
 // re:dial tool dashboard.
 //
@@ -51,10 +52,9 @@ Item {
   readonly property color roleAlert: cfg.roles.alert
   function roleInk(a) { return Qt.rgba(roleLine.r, roleLine.g, roleLine.b, a) }
 
-  // One shared window, two modes: "live" is the daemon-driven overlay; "settings" is
-  // ToolPicker's content (IPC target "dialtools"). `mode` picks the content and the mask/focus
-  // policy. See docs/DESIGN.md#overlay-window.
-  property string mode: "live"
+  // Two windows: the click-through overlay (the ring, notes) and the settings window, a normal
+  // window (IPC target "dialtools"). See docs/DESIGN.md#overlay-window.
+  property bool settingsOpen: false
   // True only while the live display is being driven by dial rotation; scopes the inactivity
   // watchdog (a manual peek from Settings should stay up).
   property bool liveDriven: false
@@ -100,7 +100,6 @@ Item {
       // See docs/DESIGN.md#config-bindings.
       freeX = p.x === undefined ? -1 : p.x
       freeY = p.y === undefined ? -1 : p.y
-      mode = "live"
       liveDriven = true
       ringOpen = true
       if (noteKind === "turn") { noteKind = ""; noteTimer.stop() }   // the ring shows the tool itself
@@ -120,7 +119,7 @@ Item {
     var doc
     try { doc = JSON.parse(payloadJson || "{}") } catch (e) { return }
     if (typeof doc !== "object" || doc === null) return
-    if (!Notes.accept(kind, { kind: noteKind, ringOpen: ringOpen, settings: opened && mode === "settings",
+    if (!Notes.accept(kind, { kind: noteKind, ringOpen: ringOpen,
                               ageMs: Date.now() - noteAt })) return
     if (kind === "turn" && !live) {
       for (var i = 0; i < tools.length; i++) if (tools[i].name === doc.name) { index = i; position = i }
@@ -130,7 +129,6 @@ Item {
     noteAt = Date.now()
     noteTimer.interval = Notes.MS[kind]
     noteTimer.restart()
-    mode = "live"
     liveDriven = true
     opened = true
   }
@@ -164,9 +162,9 @@ Item {
     id: watchdog
     interval: cfg.watchdogMs
     // Only auto-closes the "popped up because the dial is turning" case --
-    // a manual peek at Live from Settings (mode flips, liveDriven doesn't)
+    // a manual peek at Live from Settings (liveDriven stays false)
     // sits there like Settings itself does, no timeout.
-    onTriggered: if (root.mode === "live" && root.liveDriven) root.close()  // close() also clears `live`
+    onTriggered: if (root.liveDriven) root.close()  // also clears `live`
   }
 
   onOpenedChanged: if (opened) watchdog.restart(); else watchdog.stop()
@@ -195,7 +193,6 @@ Item {
             var v = parseFloat(arg)
             if (!isNaN(v) && root.tools.length) {
               root.live = true
-              root.mode = "live"
               root.liveDriven = true
               root.position = v
               var n = root.tools.length
@@ -233,17 +230,41 @@ Item {
   // merged (see docs/DESIGN.md#overlay-window).
   IpcHandler {
     target: "dialtools"
-    function open(): string { root.mode = "settings"; root.liveDriven = false; root.opened = true; return "ok" }
-    function close(): string { if (root.mode === "settings") root.close(); return "ok" }
-    function toggle(): string {
-      if (root.opened && root.mode === "settings") root.close()
-      else { root.mode = "settings"; root.liveDriven = false; root.opened = true }
-      return "ok"
-    }
-    function state(): string { return (root.opened && root.mode === "settings") ? "open" : "closed" }
+    function open(): string { root.settingsOpen = true; return "ok" }
+    function close(): string { root.settingsOpen = false; return "ok" }
+    function toggle(): string { root.settingsOpen = !root.settingsOpen; return "ok" }
+    function state(): string { return root.settingsOpen ? "open" : "closed" }
     function tip(name: string): string { return toolPicker.tipForName(name) ? "ok" : "not on the ring" }
-    function page(name: string): string { toolPicker.page = (name === "feel" || name === "help") ? name : "look"; return "ok" }
+    function page(name: string): string { toolPicker.page = (name === "feel" || name === "help" || name === "all") ? name : "look"; return "ok" }
     function ping(): string { return "ok" }
+  }
+
+  // Settings: a normal window, so it can be moved, resized and Alt-Tabbed to. install.sh adds a
+  // Hyprland rule that floats it at this size; the layout adapts to whatever size it is given.
+  onSettingsOpenChanged: settingsWindow.visible = settingsOpen
+  FloatingWindow {
+    id: settingsWindow
+    title: "re:dial settings"  // the daemon's Settings tool and the window rule match this title
+    visible: false
+    implicitWidth: 960
+    implicitHeight: 720
+    minimumSize: Qt.size(480, 520)
+    color: Qt.rgba(cfg.backgroundColor.r, cfg.backgroundColor.g, cfg.backgroundColor.b, 1.0)
+    onVisibleChanged: {
+      root.settingsOpen = visible  // closed by the compositor (Super+W) too
+      if (visible) toolPicker.forceActiveFocus()
+      else if (Peek.closesWithSettings(root)) root.close()
+    }
+    ToolPicker {
+      id: toolPicker
+      cfg: cfg
+      anchors.fill: parent
+      onCloseRequested: root.settingsOpen = false
+      onLiveRequested: {
+        if (Peek.toggle(root) === "close") root.close()
+        else { root.liveDriven = false; root.opened = true }
+      }
+    }
   }
 
   PanelWindow {
@@ -253,35 +274,17 @@ Item {
     color: "transparent"
     WlrLayershell.namespace: "dial-dashboard"
     WlrLayershell.layer: WlrLayer.Overlay
-    // Live: click-through (the dial is the input device). Settings: real mouse/keyboard input.
-    WlrLayershell.keyboardFocus: root.mode === "settings" ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    // Click-through: the dial is the input device.
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
-    mask: root.mode === "settings" ? null : clickThroughMask
+    mask: clickThroughMask
 
     Region { id: clickThroughMask }
-
-    // Settings tab content + its background-dismiss, only reachable (and
-    // only rendered) while mode is "settings" -- Live stays exactly the
-    // click-through overlay it always was.
-    MouseArea {
-      anchors.fill: parent
-      visible: root.mode === "settings"
-      enabled: root.mode === "settings"
-      onClicked: root.close()
-    }
-    ToolPicker {
-      id: toolPicker
-      cfg: cfg
-      anchors.fill: parent
-      visible: root.mode === "settings"
-      onCloseRequested: root.close()
-      onLiveRequested: root.mode = "live"
-    }
 
     // Deck: the dashboard surface the cards ride in.
     Rectangle {
       id: deck
-      visible: root.mode === "live" && root.layout === "deck"
+      visible: root.layout === "deck"
       width: Math.min(root.visibleSpan + root.pad * 2, parent.width - root.edgeMargin * 2)
       height: root.pad * 2 + root.headerH + Style.space(6) + root.cardH
       radius: Style.cornerRadius
@@ -446,7 +449,7 @@ Item {
     // See docs/DESIGN.md#faces-and-layouts.
     Rectangle {
       id: carousel
-      visible: root.mode === "live" && root.layout === "carousel"
+      visible: root.layout === "carousel"
       readonly property int cardSmall: Style.space(64)
       readonly property int cardLarge: Style.space(104)
       width: row.implicitWidth + Style.space(40)
@@ -552,7 +555,7 @@ Item {
     // distance-to-next-tool feedback that circular and ordered layouts show.
     Item {
       id: toast
-      visible: root.mode === "live" && root.layout === "toast"
+      visible: root.layout === "toast"
       readonly property var activeTool: root.tools.length > root.index ? root.tools[root.index] : null
       // dots never sets `width`, so read implicitWidth/implicitHeight (as Carousel's row is).
       width: Math.max(pill.width, dots.implicitWidth)
@@ -663,7 +666,7 @@ Item {
     // rather than cfg.colors. See docs/DESIGN.md#faces-and-layouts.
     Item {
       id: omarchy
-      visible: root.mode === "live" && root.layout === "omarchy"
+      visible: root.layout === "omarchy"
       width: omarchyCard.width
       height: omarchyCard.height
 
@@ -818,7 +821,7 @@ Item {
     // slab any more, because the selection is called out on the ring itself.
     Item {
       id: plate
-      visible: root.mode === "live" && root.layout === "dial"
+      visible: root.layout === "dial"
       // Classic is landscape because its callout column sits beside the dial;
       // the capsule face carries its callout on the rim and so is square.
       readonly property bool classic: cfg.face === "classic"

@@ -123,8 +123,14 @@ The overlay is drawn in layers, and each can be swapped without touching the oth
   lines: construction lines, crosshair and registration marks. The rings and the scale stay,
   because they carry information.
 
-The colour keys below (`colors.*` as `"theme"`, a role or a slot) apply to the faces a language
-does not draw yet.
+The colour scheme recolours everything: every face and layout (except `omarchy`, which is the
+shell's own OSD style) and the settings window. The `colors.*` keys below override one role each
+when they name a colour; left at `"theme"` they follow the scheme.
+
+**Every setting** is a page of the settings window: each key re:dial reads, with its key, its default
+and a Reset, grouped and searchable, from `schema.json`. Lists and objects (`active_tools`,
+`launchers`, `assistant`, `tool_return_s`, `tools`) are shown there and edited in `config.json`, which
+the page opens in your editor. A new setting without a row in `schema.json` fails the tests.
 
 Colours accept `"theme"` (follow the Omarchy palette), a role name
 (`accent`, `foreground`, `background`, `urgent`, `muted`), a theme slot
@@ -180,31 +186,43 @@ helpers rather than copying them again.
 ## Tools
 
 The tool set is data, not code, and lives in the daemon's `TOOL_LIBRARY`
-(`~/.local/bin/redial-hypr`) — eleven tools as shipped:
+(`~/.local/bin/redial-hypr`). The default ring (no `active_tools`) is the everyday set: Volume,
+Windows, Workspaces, Scroll, Undo, Zoom, Media, Settings, and Brightness where there is a backlight.
 
 | Tool | Rotate | Click |
 |---|---|---|
 | Volume | volume up/down (speed scales the step) | mute |
 | Windows | cycle windows | maximize |
 | Workspaces | previous/next workspace | last workspace |
-| Scroll | real wheel events (suppressed where they'd corrupt input) | — |
+| Scroll | real wheel events (suppressed where they'd corrupt input); sideways once flipped (clockwise is right) | flip up-down / sideways |
 | Undo | redo / undo | — |
 | Zoom | Ctrl+scroll | reset zoom |
-| Media | **scrub** the playing media, 5 s per click, doubling with rotation speed | play/pause |
-| Word Nav | word left/right | — |
-| Arrow Keys | Up/Down, or Left/Right once toggled | flip axis |
-| Window Size | grow/shrink the focused window 40 px per click | flip width/height |
-| Brightness | screen backlight, 2 % per click (speed scales it), floor 1 % | — |
+| Media | **scrub** the playing media, 5 s per click, doubling with rotation speed; shows position and title | play/pause, on the same player |
+| Settings | Tab / Shift+Tab through the settings window, which it opens when picked | press the focused control |
+| Brightness | screen backlight, 2 % per click (speed scales it), floor 1 % (default only with a backlight) | — |
+| *Text* | move a word left/right; select a word at a time once flipped | flip move/select; **double: copy** |
+| *Arrow Keys* | Up/Down, or Left/Right once toggled | flip axis |
+| *Window Size* | grow/shrink the focused window 40 px per click | flip width/height |
 | *Focus* | Tab / Shift+Tab: move through any form, dialog or toolbar | Enter |
 | *Tabs* | next / previous tab (Ctrl+Tab, Ctrl+Shift+Tab) | — |
-| *Select* | extend the selection a word at a time (Ctrl+Shift+Left/Right) | — |
 | *Pages* | Page Down / Page Up | — |
 | *Tile Focus* | move focus to the left/right tile, or up/down once toggled | flip axis |
 | *Move Window* | carry the focused window to the next/previous workspace, or around the positions of this workspace once toggled | flip workspaces/tiles |
-| *H Scroll* | scroll sideways (clockwise is right); speed scales it | — |
-| *Pointer* | move the mouse pointer; slow turns are fine steps, fast spins cross the screen | flip left-right / up-down |
+| *Pointer* | move the mouse pointer; slow turns are fine steps, fast spins cross the screen | **left click; double: flip left-right / up-down; triple: right click** |
 
-The italic tools are **not in the default set**, so the ring is the size it always was; add them in
+**Windows** shows the name of the window you land on. **Media** works on one player for turning and
+clicking: a playing one (among several, the one re:dial last worked on), else the one it last paused,
+told apart by MPRIS instance, so two browser tabs (YouTube and Jellyfin, say) or a browser and VLC are
+never mixed up. **Settings** lets the dial set itself up; its keys go only to the settings window (closed,
+a turn or click opens it instead), and leaving it off the ring keeps settings out of reach on a shared
+machine. Scroll, Pages and Settings stay armed at least 60 s (`tool_return_s` sets any tool's
+own time), because a pause to read should not hand the next turn to Volume.
+
+Word Nav and Select became **Text**, and H Scroll became Scroll's sideways flip (2026-10-23); rings saved
+with the old names load the new tools. Bold clicks are the tool's own double or triple (see Clicks for one
+tool on the Feel page, `tool_clicks`).
+
+The italic tools are **not in the default set**; add them in
 the settings window (**Look** page, the chips under the ring) or list them in `active_tools`. They exist so
 a whole session can be driven from the dial: *Focus* alone lets you operate any dialog with no keyboard.
 *Move Window* starts by carrying the window to another workspace (the same relative form as the Workspaces
@@ -214,8 +232,8 @@ A fresh arm always starts on workspaces.
 
 Window Size and Brightness are per-machine in practice: list them in `active_tools`
 where they make sense (Brightness needs a backlight; with none it logs once and does
-nothing). Changing which tools are active applies live: press **Save** in the picker (or edit
-`active_tools`) and the daemon reloads the
+nothing). Changing which tools are active applies live: each add, remove or move in the picker is
+saved at once (or edit `active_tools`), and the daemon reloads the
 list the next time the dial is idle (never mid-gesture, because the state machine holds a
 tool index) and re-arms the default tool. The log says what it loaded.
 
@@ -280,7 +298,9 @@ Two fields apply to the whole tool rather than one rotation direction:
 | `key` | `keys`, `repeat` | sends a key combo via `wtype`; `repeat` honours magnitude |
 | `volume` | `direction` | built-in; magnitude is the percent step |
 | `dictation` | — | toggles `voxtype` |
-| `seek` | `direction` (`forward`/`back`), `step` (seconds) | scrubs the playing MPRIS player via `playerctl position`; the step doubles per rotation-speed step, so the tool needs `magnitude` |
+| `seek` | `direction` (`forward`/`back`), `step` (seconds) | scrubs the Media player (see above) via `playerctl position`; the step doubles per rotation-speed step, so the tool needs `magnitude` |
+| `media` | `op` (`play-pause`/`next`/`previous`) | the same player `seek` scrubs |
+| `settings` | `op` (`open`/`next`/`prev`/`press`) | the settings window; keys only while it is open |
 | `resize` | `axis` (`x`/`y`), `direction` (`grow`/`shrink`), `step` (px) | resizes the focused window; points the delta at the edge that has a neighbour, so grow always grows |
 | `brightness` | `direction` (`up`/`down`), `step` (percent), `device` | backlight percent × magnitude, clamped 1–100; names the device explicitly |
 | `wheel` | — | marks a `continuous` tool; the virtual pointer drives it |
@@ -336,6 +356,8 @@ Those are the defaults. Options: `tool` (single only — the armed tool's own cl
 `next_track`, `prev_track`, `maximize`, `launcher` (opens the Omarchy menu), `screenshot`, `copy`,
 `paste`, `cut`, `select_all`, `redo`, `tab_next`, `tab_prev`, `fullscreen`, `float`, `mouse_left`, `mouse_right`,
 `mouse_middle`, `terminal`, `browser`, `files`, `assistant`, any `launch_<name>` you define, and `none`.
+`reconnect_dial` drops the dial's Bluetooth link so it reconnects on the next press: for the rare
+wake-up where clicks work but turning does nothing.
 **`copy` and `paste` are terminal-aware:** in a terminal Ctrl+C means "interrupt" and would kill the
 running program, so they send Ctrl+Insert and Shift+Insert there (the same as Omarchy's own
 universal copy and paste); `select_all` and `redo` do nothing in a terminal. A terminal is any window
@@ -457,7 +479,11 @@ so the dial is never quieter for it.
 
 ## Known issues
 
-### Scroll corrupts the input line in Claude Code (open, 2026-08-29)
+### Scroll corrupts the input line in Claude Code (guarded 2026-10-22)
+
+Now guarded in any terminal: Scroll sends nothing while the focused window's process tree runs
+`claude` (`SCROLL_SUPPRESS_PROGRAMS`), as well as over the `org.omarchy.agent` class, and the overlay
+says "Scroll is paused here". The transcript still cannot be scrolled with the dial there. History:
 
 Selecting **Scroll** and turning the dial over a Claude Code terminal walks its
 prompt history and destroys whatever is typed.

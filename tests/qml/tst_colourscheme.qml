@@ -11,7 +11,7 @@ TestCase {
   readonly property var miasmaSlots: ({ color1: "#685742", color9: "#685742", color3: "#b36d43", color4: "#78824b", color5: "#bb7744", color6: "#c9a554" })
 
   function test_light_is_the_default() {
-    var r = Scheme.roles("light", null, null, "")
+    var r = Scheme.roles("light", null, null, {})
     compare(r.ground, Scheme.LIGHT.ground)
     compare(r.line, Scheme.LIGHT.line)
     compare(Scheme.roles("anything else", null, null, "").ground, Scheme.LIGHT.ground)
@@ -38,6 +38,12 @@ TestCase {
     compare(Scheme.roles("theme", { background: "nope" }, {}, "").ground, Scheme.DARK.ground)
   }
 
+  function test_your_colours_override_every_role_the_looks_draw_with() {
+    var r = Scheme.roles("theme", miasma, miasmaSlots, { accent: "#112233", line: "#445566", ground: "#778899" })
+    compare([r.accent, r.line, r.ground], ["#112233", "#445566", "#778899"])
+    compare(Scheme.roles("light", null, null, { line: "", ground: "nope" }).ground, Scheme.LIGHT.ground)
+  }
+
   function test_unreadable_accent_falls_back_to_a_slot_then_ink() {
     var flat = { background: "#000000", foreground: "#ffffff", accent: "#050505" }
     compare(Scheme.roles("theme", flat, { color4: "#888888" }, "").accent, "#888888")
@@ -45,9 +51,9 @@ TestCase {
   }
 
   function test_the_users_accent_override_wins_in_every_scheme() {
-    compare(Scheme.roles("light", null, null, "#de6145").accent, "#de6145")
-    compare(Scheme.roles("theme", miasma, miasmaSlots, "#de6145").accent, "#de6145")
-    compare(Scheme.roles("light", null, null, "theme").accent, Scheme.LIGHT.accent)
+    compare(Scheme.roles("light", null, null, { accent: "#de6145" }).accent, "#de6145")
+    compare(Scheme.roles("theme", miasma, miasmaSlots, { accent: "#de6145" }).accent, "#de6145")
+    compare(Scheme.roles("light", null, null, { accent: "theme" }).accent, Scheme.LIGHT.accent)
   }
 
   function test_parse_toml_reads_hex_keys_and_ignores_the_rest() {

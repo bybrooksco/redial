@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-23
+
 ### Added
 - **re:dial classic**, the standard design language, and the layer structure behind it: a language is a folder in `plugin/redial/languages/` (`Language.qml` plus one file per look), selected with `language`; unknown or broken languages fall back to `classic`. The contract for adding a language or a look is in `plugin/redial/languages/README.md`.
 - `color_scheme`: `light` (the new default, ink on vellum), `dark`, or `theme` (match the desktop theme, read from Omarchy's `colors.toml`). It fills four colour roles (ground, line, accent, alert) in `ColourScheme.js`; a theme colour that does not reach 3:1 on the background falls back to a readable one. `colors.accent` still overrides the accent. Tested in `tests/qml/tst_colourscheme.qml`.
@@ -12,13 +14,37 @@ versions follow [Semantic Versioning](https://semver.org/).
 - A title block on the Classic plate showing the tool's place on the ring (`SHEET 3/8`).
 - The overlay draws three states itself in re:dial classic, instead of handing them to Omarchy's OSD: **turning** a tool with the ring closed (the scale lit to the level with a dimension arc and figures; at most ~10 updates a second), **hints** from the introduction (a revision cloud with the gesture to make and, on the guided tour, the step), and **can't act** (section hatching and a status: a tool with nothing to act on, or the dial dropping within 5 s of use). They travel as `turn`/`hint`/`cant` lines on the existing socket; when the overlay is not listening, or the chosen look does not draw them yet, they go to Omarchy's OSD exactly as before. Tested in `tests/test_dial.py` (`OverlayNotes`) and `tests/qml/tst_notes.qml`.
 
+- **Settings** tool: picked from the ring it opens the settings window, then turning walks its controls and a click presses one, so the dial can set itself up. Its keys go only to that window (closed, a turn or click opens it again). It is a tool, so a shared machine can leave it off the ring.
+- **Every setting** page in the settings window: every key re:dial reads (`plugin/redial/schema.json`), grouped and searchable, with its key, default, range and a Reset; lists and objects open `config.json` in your editor. Tests fail when a key the daemon reads, or one in `config.example.json`, has no row, or when a range disagrees with the daemon's clamp.
+- Colour (Light, Dark, Match desktop), Reference lines and Design language on the Look page.
+- `tool_return_s`: return-to-Volume time for one tool. Scroll, Pages and Settings stay armed at least 60 s, never less than `auto_return_s`.
+- Windows names the window you land on, and Media shows the playing position and title, on the overlay (or the OSD).
+
 ### Changed
+- The colour scheme now colours every face and layout (except `omarchy`) and the settings window, not only Classic; `colors.*` left at `"theme"` follow it.
+- The settings window is drawn in re:dial classic: square corners, hairline outlines, uppercase section labels, an underlined current page and a sheet title block.
+- The default ring (no `active_tools`) is Volume, Windows, Workspaces, Scroll, Undo, Zoom, Media, Settings, plus Brightness only where there is a backlight. Arrow Keys and Window Size moved to the library. Rings saved from the settings window are unchanged.
+- The settings window is a normal window: it opens floating and centred at 960x720 (install.sh adds one Hyprland rule for it, and uninstall.sh removes it), and can be moved, resized and Alt-Tabbed to. Its layout follows its width: narrow, one column as before; wide, the ring sits beside the Look controls and Every setting shows its groups two across. The ring and settings are separate windows again, so the daemon closing its ring never touches settings. The Settings tool sends keys only while the settings window has focus.
+- Tool ring changes in the settings window apply at once, like every other setting; the Save button is gone. Before, closing the window without Save quietly dropped them.
+- Click actions (dial, pen tail, eraser, barrel; Feel page and Every setting) show their place ("4 OF 32") and open a list of every action grouped by where it helps (typing and dictation, pointer, editing, web and windows, sound and media, open); Left and Right still step through.
+- The settings window shows when there is more to scroll: a scroll bar, and the content fades into the edge with "MORE BELOW".
+- Help has four setups: browse the web, point and click, dictate, run the computer.
+- **Clicks for one tool** (`tool_clicks`): any tool can have its own single, double and triple click; each falls back to the tool's own default, then to the clicks for every tool. "Tool's own click" can sit on any of the three. Set on the Feel page. Tested in `tests/test_dial.py` (`PointerTools`).
+- **Text** replaces Word Nav and Select: turning moves a word at a time, a click flips to selecting, a double click copies. **Scroll** takes over H Scroll: a click flips it sideways. Rings saved with the old names load the new tools. The library is 18 tools.
+- **Pointer clicks**: click is a left click, double click flips left-right / up-down, triple click is a right click (was: click flipped the axis and nothing pressed the button).
+
 - The Classic look is redrawn in re:dial classic (`languages/classic/Classic.qml`, replacing `FaceClassic.qml`): the lit sector turns with the hand as a pre-drawn layer instead of repainting all 180 bars on every detent, the leader eases between tools, the chosen glyph grows by transform, labels and callout keys are a step darker, and its colours come from the colour scheme. Construction lines are now on by default.
 - Opening and closing: the overlay fades in over 120 ms and out over 100 ms with stronger curves. `reduce_motion` still removes all sliding and scaling but keeps that short fade.
 - Every look's position comes from one helper, `Placement.js` (it was pasted five times; audit finding 6). Tested in `tests/qml/tst_placement.qml`.
 
 ### Fixed
-- Classic's leader no longer crosses the dial: for tools on the left (Select, Focus, Tabs) it follows the scale round to the right and leaves between two labels, and when the callout has to sit higher or lower than the leader's natural line (tools at the bottom) it runs round the scale to meet it. Its first line now sits on the leader.
+- A dial that wakes with clicks working but turning dead now has a way out: the **Reconnect dial** click action (`reconnect_dial`, in the picker under The dial) drops its Bluetooth link, and the next press reconnects it. Seen once (2026-10-23): Bluetooth and the input device both looked fine, the dial just sent almost no turns; the self-heal, which covers a dial with no input device at all, could not see it. The log now records how many turns arrived before the first press after each reconnect, so it leaves evidence.
+- "cannot open ... Permission denied" is no longer logged on every reconnect: the daemon retries for about a second while udev sets the new device's permissions, and only a failure that outlasts that is logged.
+- `colors.accent`, `colors.line` and `colors.background` now recolour every look, Classic included; they were only read by some faces, and Classic took only a six-digit accent.
+- With the settings window open, the overlay no longer stops showing levels and notes.
+- Media scrubbed one player and play/pause hit another: the player was chosen by app name (`-p firefox` is whichever Firefox player comes first, so YouTube in one tab and Jellyfin in another were mixed up) and the click went to playerctl's default player. Turning, clicking and the readout now share one player, chosen by MPRIS instance; nothing playing says so on screen instead of guessing.
+- Scroll over Claude Code in an ordinary terminal (foot > bash > claude) no longer walks its prompt history: the guard now checks the focused window's processes, not only the `org.omarchy.agent` class.
+- Classic's leader no longer crosses the dial: for tools on the left (such as Focus and Tabs) it follows the scale round to the right and leaves between two labels, and when the callout has to sit higher or lower than the leader's natural line (tools at the bottom) it runs round the scale to meet it. Its first line now sits on the leader.
 
 ## [0.8.5] - 2026-10-14
 

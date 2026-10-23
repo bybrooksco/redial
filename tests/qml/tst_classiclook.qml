@@ -162,6 +162,18 @@ Item {
       compare(look.ringInk, 1)
     }
 
+    function test_a_window_name_fits_inside_the_ring() {
+      var look = make(top.eight)
+      look.noteKind = "turn"
+      look.note = { name: "Windows", valueText: "Obsidian  2026-10-22 re-dial New Overlay Look - Studio Prompt" }
+      var t = findChild(look, "valueText")
+      verify(t.wordy)
+      verify(t.width <= look.rInner * 1.7 + 0.5)
+      verify(t.font.pixelSize < look.type.display)
+      look.note = { name: "Volume", value: 42, valueText: "42%" }
+      verify(!t.wordy)
+    }
+
     function test_hints_and_cant_act_set_the_ring_back() {
       var look = make(top.eight)
       look.noteKind = "hint"

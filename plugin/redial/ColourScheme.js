@@ -43,8 +43,9 @@ function firstReadable(candidates, ground, fallback) {
 }
 
 // theme: parsed colors.toml (background, foreground, accent); slots: color0..color15 (ThemeSlots.js).
-// accentOverride: a resolved "#rrggbb" from the user's colors.accent, or "" to use the scheme's own.
-function roles(scheme, theme, slots, accentOverride) {
+// overrides: { accent, line, ground }, each a resolved "#rrggbb" from the user's colors.*, or ""
+// to keep the scheme's own. Every look draws from these roles, so this is the one place they apply.
+function roles(scheme, theme, slots, overrides) {
   var r
   if (scheme === "theme" && theme && isHex(theme.background) && isHex(theme.foreground)) {
     var s = slots || {}
@@ -56,6 +57,7 @@ function roles(scheme, theme, slots, accentOverride) {
     var b = scheme === "dark" || scheme === "theme" ? DARK : LIGHT
     r = { ground: b.ground, line: b.line, accent: b.accent, alert: b.alert }
   }
-  if (isHex(accentOverride)) r.accent = accentOverride
+  var o = overrides || {}
+  for (var k of ["accent", "line", "ground"]) if (isHex(o[k])) r[k] = o[k]
   return r
 }
