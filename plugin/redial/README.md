@@ -127,6 +127,12 @@ The colour scheme recolours everything: every face and layout (except `omarchy`,
 shell's own OSD style) and the settings window. The `colors.*` keys below override one role each
 when they name a colour; left at `"theme"` they follow the scheme.
 
+**Style**, on the Look page, sets those colours from swatches (Auto, the theme's roles and its 16
+slots, stored as references such as `"color9"`), plus `plateOpacity`, a Line weight preset (the five
+`dial.*Width` keys at once), a Scale density preset (`dial.barCount`) and the six `dial.*` drawing
+switches. Controls the chosen appearance does not draw are greyed. The presets live in
+`StylePresets.js`; the Every setting page still sets each value on its own.
+
 **Every setting** is a page of the settings window: each key re:dial reads, with its key, its default
 and a Reset, grouped and searchable, from `schema.json`. Lists and objects (`active_tools`,
 `launchers`, `assistant`, `tool_return_s`, `tools`) are shown there and edited in `config.json`, which

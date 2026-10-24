@@ -5028,6 +5028,18 @@ class SettingsSchema(unittest.TestCase):
             if row["type"] == "click":
                 self.assertIn(row["group"], ("dial", "pentail", "barrel", "eraser"), key)
 
+    def test_style_presets_start_from_the_defaults(self):
+        # An untouched config must read as Normal, Medium and 96% on the Look page's Style block.
+        with open(os.path.join(self.ROOT, "plugin/redial/StylePresets.js")) as f:
+            js = f.read()
+        normal = re.search(r'key: "normal".*?w: \{([^}]*)\}', js).group(1)
+        for k, v in re.findall(r"(\w+): ([0-9.]+)", normal):
+            self.assertEqual(float(v), self.rows["dial." + k]["default"], k)
+        for k, v in re.findall(r'key: "(\w+)", label: "[^"]*", fallback: (true|false)', js):
+            self.assertEqual(v == "true", self.rows["dial." + k]["default"], k)
+        self.assertIn(f"key: {self.rows['plateOpacity']['default']:g},", js)
+        self.assertIn(f"key: {self.rows['dial.barCount']['default']:d},", js)
+
 
 def tool_index_all(name):
     return [t["name"] for t in m.TOOLS].index(name)

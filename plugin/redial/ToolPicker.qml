@@ -8,6 +8,7 @@ import qs.Commons
 import qs.Ui
 import "ConfigText.js" as ConfigText
 import "ActionGroups.js" as ActionGroups
+import "StylePresets.js" as StylePresets
 
 // Pick and reorder which of the daemon's tools are active, and where the overlay sits.
 //
@@ -295,6 +296,78 @@ Item {
     }
   }
 
+  // One colour role as a grid of swatches: Auto (the colour scheme's own), the theme's roles and
+  // its 16 slots. A hex written by hand matches no swatch, and the note says so.
+  component SwatchRow: Column {
+    id: swatchRow
+    property var cfg
+    property string title: ""
+    property string key: ""       // "colors.accent", "colors.line" or "colors.background"
+    property string role: ""      // the role "theme" stands for, for resolveColor
+    property string current: "theme"
+    property var specs: []
+    signal picked(string spec)
+    readonly property bool custom: specs.indexOf(current.toLowerCase()) < 0
+    width: parent ? parent.width : 0
+    spacing: Style.space(6)
+
+    Text {
+      text: swatchRow.title
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      font.bold: true
+      font.capitalization: Font.AllUppercase
+      font.letterSpacing: Style.space(1.2)
+      color: swatchRow.cfg.soft(0.6)
+    }
+    Flow {
+      width: parent.width
+      spacing: Style.space(4)
+      Repeater {
+        model: swatchRow.specs
+        delegate: Pressable {
+          id: sw
+          required property string modelData
+          readonly property bool auto: modelData === "theme"
+          readonly property bool active: swatchRow.current.toLowerCase() === modelData
+          readonly property color fill: swatchRow.cfg.resolveColor(modelData, swatchRow.role)
+          label: swatchRow.title + ": " + (auto ? "Auto" : modelData)
+          checkable: true
+          checked: active
+          ringColor: swatchRow.cfg.accentColor
+          ringWidth: Math.max(2, Style.space(2))
+          onActivated: swatchRow.picked(modelData)
+          width: auto ? Style.space(56) : Style.space(40)
+          height: Style.space(32)
+          radius: Style.space(2)
+          color: auto ? "transparent" : fill
+          border.width: active ? Math.max(3, Style.space(3)) : Math.max(1, Style.space(1))
+          border.color: active ? swatchRow.cfg.lineColor : Util.alpha(swatchRow.cfg.lineColor, 0.35)
+          Text {
+            anchors.centerIn: parent
+            text: (sw.active ? "✓ " : "") + (sw.auto ? "Auto" : sw.modelData === "accent" ? "Acc"
+                  : sw.modelData === "foreground" ? "FG" : sw.modelData === "background" ? "BG"
+                  : sw.modelData.slice(5))
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            // dark text on light swatches, light on dark
+            color: sw.auto ? swatchRow.cfg.lineColor
+                 : (0.299 * sw.fill.r + 0.587 * sw.fill.g + 0.114 * sw.fill.b) > 0.55 ? "#111111" : "#f5f5f5"
+          }
+        }
+      }
+    }
+    Text {
+      width: parent.width
+      wrapMode: Text.WordWrap
+      visible: swatchRow.custom
+      text: "Custom value in config.json: " + swatchRow.current + ". Pick a swatch to replace it."
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      color: swatchRow.cfg.soft(0.5)
+    }
+  }
+
   // What a click (or a pen button) does: the current action with its place in the list ("4 of 32"),
   // and every action, grouped by where it helps, one press away. Left and Right still step through.
   component ActionPicker: Column {
@@ -457,6 +530,23 @@ Item {
     writeConfig(function (o) {
       o.layout = opt.layout
       if (opt.face) o.face = opt.face
+    })
+  }
+
+  // Style (StylePresets.js): the quick controls live here for everyone; they used to be a fly-out
+  // in one person's bar.
+  function dialValue(key, fallback) {
+    var v = getPath("dial." + key)
+    return v === undefined ? fallback : v
+  }
+  readonly property string weightChoice: StylePresets.weightOf(configDoc.dial) || "widths set one by one"
+  function drawn(what) { return StylePresets.drawn(what, cfg.layout, cfg.face, cfg.plate) }
+  function setDial(values) {
+    writeConfig(function (o) {
+      var d = ({}), src = o.dial || {}
+      for (var k in src) d[k] = src[k]
+      for (var v in values) d[v] = values[v]
+      o.dial = d
     })
   }
 
@@ -1347,6 +1437,125 @@ Item {
               options: root.languageOptions
               current: root.cfgValue("language", "classic")
               onPicked: key => root.setConfigKey("language", key)
+            }
+
+            // Style: swatches and presets. Controls the chosen look does not draw are greyed.
+            Text {
+              visible: root.page === "look"
+              width: parent.width
+              wrapMode: Text.WordWrap
+              text: "Style. Swatches follow your theme: switch themes and the dial re-colours. Greyed out: not drawn by this appearance. Finer control is on the Every setting page."
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              color: root.cfg.soft(0.6)
+            }
+            Repeater {
+              model: [ { title: "Accent colour", key: "colors.accent", role: "accent" },
+                       { title: "Ink colour", key: "colors.line", role: "foreground" },
+                       { title: "Ground colour", key: "colors.background", role: "background" } ]
+              delegate: SwatchRow {
+                required property var modelData
+                visible: root.page === "look"
+                enabled: root.drawn("colors")
+                opacity: enabled ? 1 : 0.4
+                cfg: root.cfg
+                title: modelData.title
+                key: modelData.key
+                role: modelData.role
+                specs: StylePresets.SWATCHES
+                current: String(root.getPath(modelData.key) || "theme")
+                onPicked: spec => spec === "theme" ? root.setPath(modelData.key, "", true)
+                                                   : root.setPath(modelData.key, spec)
+              }
+            }
+            ChoiceRow {
+              visible: root.page === "look"
+              enabled: root.drawn("backing")
+              opacity: enabled ? 1 : 0.4
+              cfg: root.cfg
+              title: "Backing strength"
+              options: StylePresets.BACKING
+              current: root.cfgValue("plateOpacity", 0.96)
+              onPicked: key => root.setConfigKey("plateOpacity", key)
+            }
+            ChoiceRow {
+              visible: root.page === "look"
+              enabled: root.drawn("weight")
+              opacity: enabled ? 1 : 0.4
+              cfg: root.cfg
+              title: "Line weight"
+              options: StylePresets.WEIGHT
+              current: root.weightChoice
+              onPicked: key => {
+                for (var i = 0; i < StylePresets.WEIGHT.length; i++)
+                  if (StylePresets.WEIGHT[i].key === key) root.setDial(StylePresets.WEIGHT[i].w)
+              }
+            }
+            ChoiceRow {
+              visible: root.page === "look"
+              enabled: root.drawn("density")
+              opacity: enabled ? 1 : 0.4
+              cfg: root.cfg
+              title: "Scale density"
+              options: StylePresets.DENSITY
+              current: root.dialValue("barCount", 180)
+              onPicked: key => root.setDial({ barCount: key })
+            }
+            Column {
+              visible: root.page === "look"
+              width: parent.width
+              spacing: Style.space(6)
+              Text {
+                text: "Elements"
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                font.capitalization: Font.AllUppercase
+                font.letterSpacing: Style.space(1.2)
+                color: root.cfg.soft(0.6)
+              }
+              Flow {
+                width: parent.width
+                spacing: Style.space(4)
+                Repeater {
+                  model: StylePresets.ELEMENTS
+                  delegate: Pressable {
+                    id: elem
+                    required property var modelData
+                    readonly property bool on: root.dialValue(modelData.key, modelData.fallback) === true
+                    enabled: root.drawn(modelData.key)
+                    opacity: enabled ? 1 : 0.4
+                    label: modelData.label + (on ? ": on" : ": off")
+                    checkable: true
+                    checked: on
+                    ringColor: root.cfg.accentColor
+                    ringWidth: Math.max(2, Style.space(2))
+                    onActivated: { var v = ({}); v[modelData.key] = !on; root.setDial(v) }
+                    width: elemText.implicitWidth + Style.space(20)
+                    height: Style.space(32)
+                    radius: Style.space(2)
+                    color: on ? root.cfg.accentColor : "transparent"
+                    border.width: Math.max(1, Style.space(1))
+                    border.color: on ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.55)
+                    Text {
+                      id: elemText
+                      anchors.centerIn: parent
+                      text: elem.modelData.label
+                      font.family: Style.font.family
+                      font.pixelSize: Style.font.caption
+                      color: elem.on ? root.cfg.onAccent : root.cfg.lineColor
+                    }
+                  }
+                }
+              }
+              Text {
+                width: parent.width
+                wrapMode: Text.WordWrap
+                text: "Construction lines, crosshair and registration marks need Reference lines on."
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                color: root.cfg.soft(0.5)
+              }
             }
 
             // Every setting: the whole schema, grouped, filterable, each row with its key, its default

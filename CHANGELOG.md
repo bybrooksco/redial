@@ -17,6 +17,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 - **Settings** tool: picked from the ring it opens the settings window, then turning walks its controls and a click presses one, so the dial can set itself up. Its keys go only to that window (closed, a turn or click opens it again). It is a tool, so a shared machine can leave it off the ring.
 - **Every setting** page in the settings window: every key re:dial reads (`plugin/redial/schema.json`), grouped and searchable, with its key, default, range and a Reset; lists and objects open `config.json` in your editor. Tests fail when a key the daemon reads, or one in `config.example.json`, has no row, or when a range disagrees with the daemon's clamp.
 - Colour (Light, Dark, Match desktop), Reference lines and Design language on the Look page.
+- **Style** on the Look page: swatches for the accent, ink and ground colours (Auto, the theme's roles and its 16 slots, stored as theme references so a theme switch re-colours the dial), Backing strength, Line weight (Fine, Normal, Bold), Scale density (Low, Medium, High) and the six drawing elements. Controls the chosen appearance does not draw are greyed. These were a fly-out in one bar; now everyone sets the dial in the same place.
 - `tool_return_s`: return-to-Volume time for one tool. Scroll, Pages and Settings stay armed at least 60 s, never less than `auto_return_s`.
 - Windows names the window you land on, and Media shows the playing position and title, on the overlay (or the OSD).
 
