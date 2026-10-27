@@ -235,7 +235,7 @@ Item {
     function toggle(): string { root.settingsOpen = !root.settingsOpen; return "ok" }
     function state(): string { return root.settingsOpen ? "open" : "closed" }
     function tip(name: string): string { return toolPicker.tipForName(name) ? "ok" : "not on the ring" }
-    function page(name: string): string { toolPicker.page = (name === "feel" || name === "help" || name === "all") ? name : "look"; return "ok" }
+    function page(name: string): string { toolPicker.page = (name === "feel" || name === "pen" || name === "help" || name === "all") ? name : "look"; return "ok" }
     function ping(): string { return "ok" }
   }
 

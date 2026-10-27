@@ -5,6 +5,14 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Pen page** in the settings window. The Surface Pen controls moved off the Feel page and are grouped by how you use them: away from screen (tail button), on screen while hovering (barrel button), and on screen in contact (eraser).
+- `pen.eraser_scroll_speed` (0.25 to 4, default 1): scales every app's eraser scroll speed. On the Pen page as Slow, Normal, Fast and Faster.
+
+### Fixed
+- Eraser scroll started late. A drag now locks its axis after about 2 mm instead of 5 mm, and the travel before the lock is replayed, so the page moves from the first millimetre. A touch that never locks an axis is still a tap.
+- The first eraser scroll after the daemon started was slow: the virtual pointer is now created at startup, not on first use.
+
 ## [0.9.0] - 2026-10-23
 
 ### Added

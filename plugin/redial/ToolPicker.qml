@@ -97,7 +97,7 @@ Item {
   }
 
   // Which page of the window is showing: "look" (position, size, appearance, tools) or "feel"
-  // (sensitivity, timings, clicks, pen). Everything on "feel" applies immediately.
+  // (sensitivity, timings, clicks), "pen" (the Surface Pen), "all" or "help". Feel and Pen apply immediately.
   // Installed design languages: one folder each under languages/ (see languages/README.md).
   FolderListModel {
     id: languageFolders
@@ -189,6 +189,7 @@ Item {
 
   property string page: "look"
   readonly property var pages: [ { key: "look", label: "Look" }, { key: "feel", label: "Feel" },
+                                 { key: "pen", label: "Pen" },
                                  { key: "all", label: "Every setting" }, { key: "help", label: "Help" } ]
   function pageNumber() {
     for (var i = 0; i < pages.length; i++) if (pages[i].key === page) return i + 1
@@ -1215,6 +1216,8 @@ Item {
                 ? "Drag the ring to reorder, or focus a tool and press Left or Right. Click \u2715 (or press Delete) to remove a tool, or a chip below to add one. Every change applies immediately."
                 : root.page === "feel"
                   ? "How the dial feels to use. Everything on this page applies immediately."
+                  : root.page === "pen"
+                  ? "The Surface Pen: buttons you press away from the screen, and what the pen does on it, hovering or in contact. Everything here applies immediately."
                   : root.page === "all"
                     ? "Every setting re:dial has, with its key in config.json and its default. Changes apply immediately; Reset puts one back."
                     : "How to use the dial. Nothing here changes any setting."
@@ -2073,7 +2076,7 @@ Item {
             // enable toggle + single action chip. No daemon restart needed --
             // both buttons re-read config.json live, same as the dial's clicks.
             Column {
-              visible: root.page === "feel"
+              visible: root.page === "pen"
               width: parent.width
               spacing: Style.space(6)
 
@@ -2121,7 +2124,7 @@ Item {
                 opacity: root.penEnabled ? 1 : 0.4
 
                 Text {
-                  text: "Tail button"
+                  text: "Away from screen: tail button"
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   color: root.cfg.soft(0.5)
@@ -2148,7 +2151,7 @@ Item {
                 Item { width: 1; height: Style.space(4) }
 
                 Text {
-                  text: "Barrel button"
+                  text: "On screen, hover: barrel button"
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   color: root.cfg.soft(0.5)
@@ -2202,7 +2205,7 @@ Item {
                 opacity: root.penEnabled ? 1 : 0.4
 
                 Text {
-                  text: "Eraser (the back of the pen)"
+                  text: "On screen, in contact: eraser (the back of the pen)"
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   color: root.cfg.soft(0.5)
@@ -2221,6 +2224,16 @@ Item {
                   current: (root.configDoc && root.configDoc.pen && typeof root.configDoc.pen.eraser_tap_min_ms === "number")
                            ? root.configDoc.pen.eraser_tap_min_ms : 100
                   onPicked: key => root.writePen(function (pen) { pen.eraser_tap_min_ms = key })
+                }
+                ChoiceRow {
+                  cfg: root.cfg
+                  title: "Eraser scroll speed"
+                  help: "How far a page moves per stroke of the eraser. Each app keeps its own base speed; this scales all of them."
+                  options: [ { key: 0.5, label: "Slow" }, { key: 1, label: "Normal" },
+                             { key: 2, label: "Fast" }, { key: 3, label: "Faster" } ]
+                  current: (root.configDoc && root.configDoc.pen && typeof root.configDoc.pen.eraser_scroll_speed === "number")
+                           ? root.configDoc.pen.eraser_scroll_speed : 1
+                  onPicked: key => root.writePen(function (pen) { pen.eraser_scroll_speed = key })
                 }
               }
 

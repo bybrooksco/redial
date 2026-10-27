@@ -1687,6 +1687,33 @@ class Eraser(Base):
         self.assertTrue(self.ptr.scrolls)
         self.assertNotIn("KEY:Escape", EVENTS)
 
+    def test_scroll_starts_within_two_mm_and_replays_the_travel_before_it(self):
+        # A ~5mm dead zone made every scroll start late; nothing before the lock is dropped.
+        self.down(0.0)
+        for y in range(0, 41, 4):  # 40 units, ~2.2mm
+            self.abs(m.ABS_Y, y)
+        self.assertTrue(self.ptr.scrolls)
+        self.assertAlmostEqual(sum(self.ptr.scrolls), 40 * m.ERASER_SCROLL_GAIN["firefox"])
+
+    def test_a_short_scroll_is_not_a_tap(self):
+        self.down(0.0)
+        for y in range(0, 60, 4):
+            self.abs(m.ABS_Y, y)
+        self.up(0.2)
+        self.assertNotIn("KEY:Escape", EVENTS)
+
+    def test_scroll_speed_scales_the_class_gain(self):
+        self.configure(eraser_scroll_speed=2)
+        self.down(0.0)
+        for y in range(0, 101, 4):
+            self.abs(m.ABS_Y, y)
+        self.assertAlmostEqual(sum(self.ptr.scrolls), 100 * m.ERASER_SCROLL_GAIN["firefox"] * 2)
+
+    def test_a_bad_scroll_speed_falls_back_to_normal(self):
+        for bad in (0, 10, True, "fast"):
+            self.configure(eraser_scroll_speed=bad)
+            self.assertEqual(m.pen_eraser_config()[3], 1.0, bad)
+
     def test_scroll_is_suppressed_when_the_class_routes_to_keys(self):
         m.scroll_mode = lambda: "suppress"
         self.down(0.0)

@@ -91,8 +91,10 @@ ERASER_SCROLL_GAIN_DEFAULT = 0.6
 # An eraser TAP (down and up with almost no travel) is Escape. Flipping the
 # pen over is a deliberate two-step act, so unlike the tail button's single
 # click it cannot be brushed by accident -- which is what makes it a safe
-# home for a disruptive key. Anything past this much travel is a scroll.
-ERASER_TAP_MAX_TRAVEL = 90  # ABS_Y units, ~5mm
+# home for a disruptive key. A touch that travels this far locks a drag axis and
+# is a scroll, not a tap. It was ~5mm, which made every scroll start late; the
+# travel before the lock is replayed so the page moves from the first millimetre.
+ERASER_AXIS_LOCK_TRAVEL = 36  # ABS units (18/mm), ~2mm
 # An eraser drag carries TWO axes. Vertical scrolls; horizontal steps the
 # text cursor. The axis is chosen once, by whichever accumulates more travel
 # first, and then locked for that drag so a wobble cannot flip it mid-stroke.
@@ -2334,6 +2336,7 @@ class EraserState:
         self.travel = self.trav_x = self.trav_y = 0.0
         self.axis = None
         self.cur_accum = 0.0
+        self.pend_x = self.pend_y = 0.0  # signed travel before the axis locks, replayed on lock
 
     def handle(self, etype, code, value, now):
         if etype == EV_KEY and code == BTN_STYLUS:
@@ -2382,15 +2385,15 @@ class EraserState:
         self.reset()
         self.dragging = True
         self.touch_at = now
-        self.gain = ERASER_SCROLL_GAIN.get(cls, ERASER_SCROLL_GAIN_DEFAULT)
+        self.gain = ERASER_SCROLL_GAIN.get(cls, ERASER_SCROLL_GAIN_DEFAULT) * pen_eraser_config()[3]
         # Same routing as the dial's Scroll tool (SCROLL_SUPPRESS_CLASSES); decided once per touch.
         self.y_mode = scroll_mode()
         log(f"eraser down in {cls} (gain {self.gain}, y_mode {self.y_mode})")
 
     def _touch_up(self, now):
-        if self.dragging and self.travel < ERASER_TAP_MAX_TRAVEL:
+        if self.dragging and self.axis is None:
             held = now - self.touch_at
-            tap, hold, tap_min = pen_eraser_config()
+            tap, hold, tap_min, _ = pen_eraser_config()
             if held >= ERASER_HOLD_S:
                 kind, name = "hold", hold
             elif held >= tap_min:
@@ -2405,9 +2408,13 @@ class EraserState:
         self.axis = None
 
     def _pick_axis(self):
-        if self.axis is None and self.travel >= ERASER_TAP_MAX_TRAVEL:
+        if self.axis is None and self.travel >= ERASER_AXIS_LOCK_TRAVEL:
             self.axis = "y" if self.trav_y >= self.trav_x else "x"
             log(f"eraser drag axis = {self.axis}")
+            if self.axis == "y" and self.pend_y and self.y_mode != "suppress":
+                POINTER.scroll(self.pend_y * self.gain)
+            elif self.axis == "x":
+                self.cur_accum += self.pend_x
 
     def _move_y(self, value):
         if self.last_y is not None:
@@ -2415,7 +2422,9 @@ class EraserState:
             self.travel += abs(dy)
             self.trav_y += abs(dy)
             self._pick_axis()
-            if self.axis == "y" and dy and self.y_mode != "suppress":
+            if self.axis is None:
+                self.pend_y += dy
+            elif self.axis == "y" and dy and self.y_mode != "suppress":
                 POINTER.scroll(dy * self.gain)
         self.last_y = value
 
@@ -2425,7 +2434,9 @@ class EraserState:
             self.travel += abs(dx)
             self.trav_x += abs(dx)
             self._pick_axis()
-            if self.axis == "x":
+            if self.axis is None:
+                self.pend_x += dx
+            elif self.axis == "x":
                 self.cur_accum += dx
                 while abs(self.cur_accum) >= ERASER_CURSOR_STEP:
                     d = 1 if self.cur_accum > 0 else -1
@@ -3601,7 +3612,7 @@ _pen_eraser_fns = {}
 
 
 def pen_eraser_config():
-    """(tap action name, hold action name, minimum tap seconds) for the eraser, live-reloaded."""
+    """(tap action, hold action, minimum tap seconds, scroll speed multiplier), live-reloaded."""
 
     def build(doc):
         pen = _pen_section(doc)
@@ -3616,7 +3627,14 @@ def pen_eraser_config():
                 log(f"pen.eraser.{k}: {v!r} is not usable; using {PEN_ERASER_DEFAULTS[k]!r}")
         ms = pen.get("eraser_tap_min_ms")
         ok = isinstance(ms, (int, float)) and not isinstance(ms, bool) and 0 <= ms <= 500
-        return choice["tap"], choice["hold"], (ms if ok else ERASER_TAP_MIN_MS_DEFAULT) / 1000.0
+        speed = pen.get("eraser_scroll_speed")
+        speed_ok = isinstance(speed, (int, float)) and not isinstance(speed, bool) and 0.25 <= speed <= 4
+        return (
+            choice["tap"],
+            choice["hold"],
+            (ms if ok else ERASER_TAP_MIN_MS_DEFAULT) / 1000.0,
+            speed if speed_ok else 1.0,
+        )
 
     return live_derived(_pen_eraser_cache, build)
 
@@ -4556,6 +4574,9 @@ def main():
     # it costs nothing where no pen exists (the watchers simply find no device),
     # but it can be turned off for a dial-only install.
     if bool(_pen_section(load_config()).get("enabled", True)):
+        # Create the virtual pointer now: made on first use, its first events landed
+        # before the compositor had added the device, so the first scroll started late.
+        POINTER._ensure()
         threading.Thread(target=eraser_watcher, daemon=True).start()
         threading.Thread(target=pen_button_watcher, daemon=True).start()
     else:
