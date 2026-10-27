@@ -6,7 +6,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- **Pen page** in the settings window. The Surface Pen controls moved off the Feel page and are grouped by how you use them: away from screen (tail button), on screen while hovering (barrel button), and on screen in contact (eraser).
+- **Dial | Pen tabs** at the top of the settings window. The Dial keeps its pages (Look, Feel, Every setting, Help); the Pen tab holds the Surface Pen controls, moved off the Feel page and grouped by how you use them: away from screen (tail button), on screen while hovering (barrel button), and on screen in contact (eraser).
 - `pen.eraser_scroll_speed` (0.25 to 4, default 1): scales every app's eraser scroll speed. On the Pen page as Slow, Normal, Fast and Faster.
 
 ### Fixed

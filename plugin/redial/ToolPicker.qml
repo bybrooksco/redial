@@ -97,7 +97,8 @@ Item {
   }
 
   // Which page of the window is showing: "look" (position, size, appearance, tools) or "feel"
-  // (sensitivity, timings, clicks), "pen" (the Surface Pen), "all" or "help". Feel and Pen apply immediately.
+  // (sensitivity, timings, clicks), "all" or "help" -- the Dial's pages -- or "pen", the Surface Pen,
+  // which has its own tab above the Dial's pages. Feel and Pen apply immediately.
   // Installed design languages: one folder each under languages/ (see languages/README.md).
   FolderListModel {
     id: languageFolders
@@ -188,8 +189,11 @@ Item {
   function openConfigFile() { editorProc.running = true; root.closeRequested() }
 
   property string page: "look"
+  // The Dial page to return to from the Pen tab.
+  property string dialPage: "look"
+  onPageChanged: if (page !== "pen") dialPage = page
+  readonly property var devices: [ { key: "dial", label: "Dial" }, { key: "pen", label: "Pen" } ]
   readonly property var pages: [ { key: "look", label: "Look" }, { key: "feel", label: "Feel" },
-                                 { key: "pen", label: "Pen" },
                                  { key: "all", label: "Every setting" }, { key: "help", label: "Help" } ]
   function pageNumber() {
     for (var i = 0; i < pages.length; i++) if (pages[i].key === page) return i + 1
@@ -1168,7 +1172,42 @@ Item {
             }
           }
         }
+        // Device tabs: the Dial and the Pen each have their own settings; the Dial's pages sit below.
         Row {
+          spacing: Style.space(18)
+          Repeater {
+            model: root.devices
+            delegate: Pressable {
+              id: deviceTab
+              required property var modelData
+              readonly property bool active: (root.page === "pen") === (modelData.key === "pen")
+              label: modelData.label + " settings"
+              checkable: true
+              checked: active
+              ringColor: root.cfg.accentColor
+              ringWidth: Math.max(2, Style.space(2))
+              width: deviceText.implicitWidth + Style.space(32)
+              height: Style.space(40)
+              radius: Style.space(2)
+              color: active ? root.cfg.accentColor : Util.alpha(root.cfg.lineColor, 0.08)
+              onActivated: root.page = modelData.key === "pen" ? "pen" : root.dialPage
+              Text {
+                id: deviceText
+                anchors.centerIn: parent
+                text: deviceTab.modelData.label
+                font.family: Style.font.family
+                font.pixelSize: Style.font.body
+                font.bold: true
+                font.capitalization: Font.AllUppercase
+                font.letterSpacing: Style.space(1.2)
+                color: deviceTab.active ? root.cfg.onAccent : root.cfg.soft(0.6)
+              }
+            }
+          }
+        }
+
+        Row {
+          visible: root.page !== "pen"
           spacing: Style.space(18)
           Repeater {
             model: root.pages
@@ -2507,7 +2546,8 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width - Style.space(190)
             elide: Text.ElideRight
-            text: "SHEET " + root.pageNumber() + "/" + root.pages.length + "   " + root.pages[root.pageNumber() - 1].label.toUpperCase()
+            text: root.page === "pen" ? "PEN"
+                  : "SHEET " + root.pageNumber() + "/" + root.pages.length + "   " + root.pages[root.pageNumber() - 1].label.toUpperCase()
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.letterSpacing: Style.space(1.2)
