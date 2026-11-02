@@ -94,6 +94,8 @@ class Haptics:
 class Recorder:
     """Stands in for MENU_UI / MENU_STREAM."""
 
+    overlay = False
+
     def close(self):
         EVENTS.append("menu-closed")
 
@@ -129,6 +131,7 @@ class Notes:
 def install_stubs(cfg_path):
     m.HAPTIC = Haptics()
     m.MENU_UI = m.MENU_STREAM = Recorder()
+    m.omarchy_shell = lambda: True  # the suite describes Omarchy; CI has no omarchy-shell
     m.MENU_NOTES = Notes()
     m.key = lambda *k: EVENTS.append("KEY:" + "+".join(k))
     m.dictation_toggle = lambda: EVENTS.append("DICTATION")
@@ -787,7 +790,9 @@ class Notify(unittest.TestCase):
             return types.SimpleNamespace(stdout=reply, stderr="", returncode=0)
 
         m.subprocess = types.SimpleNamespace(run=fake)
-        m.shutil = types.SimpleNamespace(which=lambda n: "/x" if have_omarchy else None)
+        m.shutil = types.SimpleNamespace(
+            which=lambda n: "/x" if have_omarchy or n == "notify-send" else None
+        )
 
     def test_uses_omarchys_notifier(self):
         self.stub(True)
@@ -805,11 +810,13 @@ class Notify(unittest.TestCase):
         self.assertNotIn("-r", first)
         self.assertEqual(second[second.index("-r") + 1], "45")
 
-    def test_falls_back_to_notify_send(self):
+    def test_falls_back_to_notify_send_and_still_replaces(self):
         self.stub(False)
-        m._notify_sync("Title", "Body")
-        kind, cmd = self.calls[0]
-        self.assertEqual((kind, cmd[0]), ("run", "notify-send"))
+        m._notify_sync("One")
+        m._notify_sync("Two")
+        kind, cmd = self.calls[1]
+        self.assertEqual((kind, cmd[0]), ("sub", "notify-send"))
+        self.assertEqual(cmd[cmd.index("-r") + 1], "45")
 
     def test_a_non_numeric_reply_is_not_kept_as_an_id(self):
         self.stub(True, reply="oops\n")
@@ -4412,6 +4419,136 @@ class AtomicJsonWrites(unittest.TestCase):
         for name in ("tools.json", "clicks.json", "pen_clicks.json"):
             with open(os.path.join(os.path.dirname(cfg), name)) as f:
                 self.assertTrue(json.load(f), name)
+
+
+class WorksHere(unittest.TestCase):
+    """On GNOME, KDE and COSMIC the default ring leaves out the tools that can't act there."""
+
+    def setUp(self):
+        saved = dict(os.environ)
+        self.addCleanup(lambda: (os.environ.clear(), os.environ.update(saved)))
+        for k in ("DIAL_WM", "HYPRLAND_INSTANCE_SIGNATURE", "NIRI_SOCKET", "SWAYSOCK", "I3SOCK"):
+            os.environ.pop(k, None)
+
+    def names(self):
+        return [t["name"] for t in m.default_tools(False)]
+
+    def test_cosmic_has_no_window_tools_and_no_settings_without_its_window(self):
+        os.environ["XDG_CURRENT_DESKTOP"] = "COSMIC"
+        real = m.shutil.which
+        m.shutil.which = lambda n, *a, **k: None if n == "redial-settings" else real(n, *a, **k)
+        try:
+            self.assertEqual(self.names(), ["Volume", "Scroll", "Undo", "Zoom", "Media"])
+        finally:
+            m.shutil.which = real
+
+    def test_settings_stays_when_redial_settings_is_installed(self):
+        os.environ["XDG_CURRENT_DESKTOP"] = "KDE"
+        real = m.shutil.which
+        m.shutil.which = lambda n, *a, **k: "/x" if n == "redial-settings" else real(n, *a, **k)
+        try:
+            self.assertIn("Settings", self.names())
+            self.assertNotIn("Windows", self.names())
+        finally:
+            m.shutil.which = real
+
+    def test_hyprland_keeps_the_whole_ring(self):
+        os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = "x"
+        self.assertIn("Windows", self.names())
+        self.assertIn("Settings", self.names())
+
+
+class OverlaySocket(unittest.TestCase):
+    """Without omarchy-shell, MenuUI writes its calls to redial-overlay's socket."""
+
+    def setUp(self):
+        real = (m.MenuStream.PATH, m.omarchy_shell)
+        self.addCleanup(
+            lambda: (setattr(m.MenuStream, "PATH", real[0]), setattr(m, "omarchy_shell", real[1]))
+        )
+        m.omarchy_shell = lambda: False
+
+    def test_a_call_reaches_the_overlay(self):
+        import socket
+
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "redial.sock")
+            srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            srv.bind(path)
+            srv.listen(1)
+            got = []
+
+            def serve():
+                conn, _ = srv.accept()
+                got.append(conn.recv(4096))
+                conn.close()
+
+            t = threading.Thread(target=serve)
+            t.start()
+            m.MenuStream.PATH = path
+            ui = m.MenuUI()
+            ui._call("highlight", "4")
+            t.join(2)
+            srv.close()
+        self.assertTrue(ui.overlay)
+        self.assertEqual(got, [b"highlight 4\n"])
+
+    def test_no_overlay_running_is_not_an_error(self):
+        m.MenuStream.PATH = "/nonexistent/redial.sock"
+        ui = m.MenuUI()
+        ui._call("close")
+        self.assertFalse(ui.overlay)
+
+    def test_the_overlay_leaves_levels_and_hints_to_notifications(self):
+        self.assertFalse(m.overlay_draws_states())
+
+
+class UinputKeys(unittest.TestCase):
+    """Keys through the uinput keyboard, for desktops wtype can't type into."""
+
+    def kb(self):
+        kb = m.VirtualKeyboard()
+        kb.sent = []
+        kb._ensure = lambda: True
+        kb._emit = lambda code, value: kb.sent.append((code, value))
+        return kb
+
+    def test_every_built_in_key_name_has_a_code(self):
+        kb = self.kb()
+        names = "ctrl shift z 0 Page_Down Page_Up BackSpace Return Escape space Tab Left Up F12"
+        for name in names.split():
+            self.assertIsNotNone(kb.codes([name]), name)
+
+    def test_combo_presses_in_order_and_releases_in_reverse(self):
+        kb = self.kb()
+        self.assertTrue(kb.combo(["ctrl", "z"]))
+        self.assertEqual(kb.sent, [(29, 1), (44, 1), (44, 0), (29, 0)])
+
+    def test_uppercase_letter_adds_shift(self):
+        self.assertEqual(self.kb().codes(["A"]), [42, 30])
+
+    def test_unknown_name_is_not_sent_so_wtype_can_try(self):
+        kb = self.kb()
+        self.assertFalse(kb.combo(["ctrl", "XF86Launch5"]))
+        self.assertEqual(kb.sent, [])
+
+    def test_keycodes_match_the_kernel_table(self):
+        k = m.VirtualKeyboard.KEYS
+        self.assertEqual((k["F1"], k["F10"], k["F11"], k["F13"], k["F24"]), (59, 68, 87, 183, 194))
+        self.assertEqual((k["1"], k["0"], k["q"], k["m"]), (2, 11, 16, 50))
+
+    def test_desktops_without_a_backend_use_uinput(self):
+        saved = dict(os.environ)
+        try:
+            for k in ("DIAL_WM", "HYPRLAND_INSTANCE_SIGNATURE", "DIAL_KEYS"):
+                os.environ.pop(k, None)
+            os.environ["XDG_CURRENT_DESKTOP"] = "KDE"
+            self.assertTrue(m.uinput_keys())
+            os.environ["DIAL_KEYS"] = "wtype"
+            self.assertFalse(m.uinput_keys())
+        finally:
+            os.environ.clear()
+            os.environ.update(saved)
 
 
 class WindowManagerBackends(unittest.TestCase):

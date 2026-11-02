@@ -291,7 +291,7 @@ Two fields apply to the whole tool rather than one rotation direction:
 | Field | Does |
 |---|---|
 | `continuous: true` | ignores `cw`/`ccw` entirely; every rotation event drives the virtual pointer directly instead of stepping on fixed detents |
-| `hold_mod: "ctrl"` | holds that modifier for as long as the tool stays armed (a parked `wtype` process — see `press_mod`/`release_mod`), so a `continuous` tool's wheel events arrive as e.g. Ctrl+scroll |
+| `hold_mod: "ctrl"` | holds that modifier for as long as the tool stays armed (a parked `wtype` process, or a key held on the uinput keyboard — see `press_mod`/`release_mod`), so a `continuous` tool's wheel events arrive as e.g. Ctrl+scroll |
 | `gain` | hi-res wheel units per dial count for a `continuous` tool; defaults to `SCROLL_GAIN` |
 | `invert: true` | flips which rotation direction is positive wheel motion, so `cw` can mean "increase" consistently even though the default (`Scroll`) has `cw` = wheel-down |
 
@@ -301,7 +301,7 @@ Two fields apply to the whole tool rather than one rotation direction:
 |---|---|---|
 | `exec` | `cmd` (argv array) | runs a command |
 | `hypr` | `lua` | Hyprland Lua dispatcher |
-| `key` | `keys`, `repeat` | sends a key combo via `wtype`; `repeat` honours magnitude |
+| `key` | `keys`, `repeat` | sends a key combo via `wtype`, or the uinput keyboard where `wtype` can't type (see `docs/PLATFORMS.md`); `repeat` honours magnitude |
 | `volume` | `direction` | built-in; magnitude is the percent step |
 | `dictation` | — | toggles `voxtype` |
 | `seek` | `direction` (`forward`/`back`), `step` (seconds) | scrubs the Media player (see above) via `playerctl position`; the step doubles per rotation-speed step, so the tool needs `magnitude` |

@@ -9,7 +9,18 @@ versions follow [Semantic Versioning](https://semver.org/).
 - **Dial | Pen tabs** at the top of the settings window. The Dial keeps its pages (Look, Feel, Every setting, Help); the Pen tab holds the Surface Pen controls, moved off the Feel page and grouped by how you use them: away from screen (tail button), on screen while hovering (barrel button), and on screen in contact (eraser).
 - `pen.eraser_scroll_speed` (0.25 to 4, default 1): scales every app's eraser scroll speed. On the Pen page as Slow, Normal, Fast and Faster.
 
+- **Desktops other than Omarchy.** `install-generic.sh` installs the daemon on KDE Plasma, GNOME/Ubuntu, COSMIC, plain Hyprland, Sway or niri (a systemd user service, the udev rule and the `input` group, each sudo step asked), and `--uninstall` removes it. `docs/PLATFORMS.md` says what works on each.
+- Key actions (Zoom, Undo, Text, Pages and every `key` click) go through a uinput virtual keyboard on desktops without a window backend (GNOME, KDE, COSMIC) or wherever `wtype` is missing, since `wtype` needs a Wayland protocol those desktops don't offer. Hyprland, Sway and niri keep `wtype`. `DIAL_KEYS=uinput|wtype` overrides. Checked live on COSMIC (Pop!_OS 24.04): the compositor picks up the device. Tested in `tests/test_dial.py` (`UinputKeys`).
+
+- **`redial-overlay`**, the tool ring on desktops without Omarchy (COSMIC, KDE Plasma, Sway, plain Hyprland). Three styles, chosen with `overlay_style`: **Menu** (every tool by name, the selected one marked ❯, the default), **Card** (the Omarchy layout's one line: icon, name, one segment per tool) and **Strip** (a status-bar row). It uses the desktop's own colours and monospace font (COSMIC theme files, KDE `kdeglobals`, or the GTK theme) and picks up a theme change on the next hold. The daemon sends it the same calls it sends Omarchy's overlay, over the existing socket. `install-generic.sh` installs it when gtk-layer-shell is present. GNOME has no layer-shell, so the ring shows as notifications there. Tested in `tests/test_overlay.py` and `tests/test_dial.py` (`OverlaySocket`).
+- **`redial-settings`**, a small settings window for desktops without Omarchy: which tools are on the ring, and the ring's style. It keeps every other key in `config.json`, re-reads the file before saving, and won't write over a config it can't read. `install-generic.sh` adds it to the app launcher as "re:dial settings", and the Settings tool opens it. Tested in `tests/test_settings.py`.
+- **Waybar module** for desktops without Omarchy: `redial-bar` (status, battery and click summary; left-click opens settings, right-click restarts the daemon), with the block to paste in `config/waybar.snippet.jsonc`.
+- The default ring leaves out the tools that can't act on this desktop: on GNOME, KDE and COSMIC, the window tools (no window backend yet) and Settings when no settings window is installed. `tools.json` says which tools work here (`works_here`), and the settings window greys the rest.
+- Without Omarchy, holding the dial names each tool you pass in a notification, so the ring is never invisible.
+
 ### Fixed
+- The haptics were silently off on machines where another package's udev rule claims every hidraw device (Vial's `99-vial.rules` does): the dial's rule now uses `:=`, so it can't be overridden.
+- Notifications through `notify-send` (any desktop without Omarchy) now replace each other instead of stacking.
 - Eraser scroll started late. A drag now locks its axis after about 2 mm instead of 5 mm, and the travel before the lock is replayed, so the page moves from the first millimetre. A touch that never locks an axis is still a tap.
 - The first eraser scroll after the daemon started was slow: the virtual pointer is now created at startup, not on first use.
 

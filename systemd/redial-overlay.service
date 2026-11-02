@@ -1,0 +1,14 @@
+# The tool ring on desktops without Omarchy (KDE Plasma, COSMIC, Sway, ...). install-generic.sh
+# installs and enables it. It exits at once on GNOME, which has no layer-shell.
+[Unit]
+Description=re:dial overlay (the tool ring on desktops without Omarchy)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/redial-overlay
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

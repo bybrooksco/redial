@@ -94,6 +94,10 @@ This is a real stuck-key risk if the daemon dies uncleanly while a tool holds
 one. Both a normal-exit path (`atexit`) and SIGTERM release it. SIGKILL can
 still leak the `wtype` child; `pkill wtype` recovers that by hand.
 
+On the uinput path (GNOME, KDE, COSMIC, or no `wtype`) the modifier is just held down
+on the virtual keyboard. The kernel destroys that device when the daemon dies, which
+releases the key, so SIGKILL can't leave it stuck.
+
 ## Scroll routing
 
 Wheel-based scroll (the dial's Scroll tool and the pen's eraser drag both go

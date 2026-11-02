@@ -7,7 +7,9 @@
 # Write access is needed to send haptic output reports -- the dial has no
 # mechanical detents, so the clicks are a motor driven from userspace by
 # ~/.local/bin/redial-hypr.
-KERNEL=="hidraw*", KERNELS=="0005:045E:091B.*", MODE="0660", GROUP="input"
+# ":=" makes these final: some packages (Vial, for one) ship a later rule that puts every
+# hidraw device in another group, which would silently turn the haptics off.
+KERNEL=="hidraw*", KERNELS=="0005:045E:091B.*", MODE:="0660", GROUP:="input"
 
 # Virtual pointer/keyboard creation, for true wheel events (scroll that
 # follows the cursor and reaches terminal scrollback, unlike arrow keys).

@@ -666,7 +666,23 @@ def seek_media(forward, mag=1, step=SEEK_STEP_S):
     show_level("media")
 
 
+def uinput_keys():
+    """True when keys go through the uinput keyboard instead of `wtype`.
+
+    `wtype` needs the virtual-keyboard Wayland protocol, which GNOME lacks and KDE and COSMIC
+    may not offer, so desktops on the no-op backend use uinput. Everywhere else `wtype` stays
+    (it sends keysyms, so letters survive non-QWERTY layouts) unless it isn't installed.
+    DIAL_KEYS=uinput|wtype overrides.
+    """
+    forced = os.environ.get("DIAL_KEYS", "").lower()
+    if forced in ("uinput", "wtype"):
+        return forced == "uinput"
+    return backend().name == "none" or not shutil.which("wtype")
+
+
 def key(*combo):
+    if uinput_keys() and KEYBOARD.combo(combo):
+        return
     args = ["wtype"]
     for mod in combo[:-1]:
         args += ["-M", mod]
@@ -679,12 +695,17 @@ def key(*combo):
 # --- held modifier (ctrl+scroll zoom) ---
 # One parked wtype process holds the modifier; killing it releases. Released on atexit and
 # SIGTERM; after a SIGKILL run `pkill wtype`. See docs/DESIGN.md#held-modifier-zoom.
+# On the uinput path the key is simply held down; the kernel releases it if the daemon dies.
 _mod_proc = None
+_mod_held = None  # modifier held down on the uinput keyboard
 
 
 def press_mod(mod):
-    global _mod_proc
+    global _mod_proc, _mod_held
     release_mod()
+    if uinput_keys() and KEYBOARD.hold(mod, True):
+        _mod_held = mod
+        return
     try:
         _mod_proc = subprocess.Popen(["wtype", "-M", mod, "-s", "999999999"])
     except Exception as exc:
@@ -693,7 +714,10 @@ def press_mod(mod):
 
 
 def release_mod():
-    global _mod_proc
+    global _mod_proc, _mod_held
+    if _mod_held is not None:
+        KEYBOARD.hold(_mod_held, False)
+        _mod_held = None
     if _mod_proc is not None:
         try:
             _mod_proc.terminate()
@@ -707,6 +731,11 @@ atexit.register(release_mod)
 signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
 
 
+def omarchy_shell():
+    """Whether Omarchy's shell (and so re:dial's own Omarchy overlay) is installed."""
+    return shutil.which("omarchy-shell") is not None
+
+
 class MenuUI:
     """Drives the redial Quickshell dashboard over Omarchy's shell IPC.
 
@@ -718,8 +747,12 @@ class MenuUI:
 
     def __init__(self):
         self.open_now = False
+        self.overlay = False  # redial-overlay took the last call (desktops without Omarchy)
 
     def _call(self, method, *args):
+        if not omarchy_shell():
+            self.overlay = self._send_overlay(method, *args)
+            return
         try:
             subprocess.Popen(
                 ["omarchy-shell", "-q", "dialmenu", method, *args],
@@ -728,6 +761,20 @@ class MenuUI:
             )
         except Exception as e:
             log(f"menu ui {method} failed: {e}")
+
+    @staticmethod
+    def _send_overlay(method, *args):
+        """The same call as one line to redial-overlay's socket; False when it isn't running."""
+        if not MenuStream.PATH:
+            return False
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.settimeout(0.25)
+                s.connect(MenuStream.PATH)
+                s.sendall((" ".join((method, *args)) + "\n").encode())
+            return True
+        except OSError:
+            return False
 
     @staticmethod
     def _volume():
@@ -910,33 +957,24 @@ def _notify_sync(title, body=""):
     notify-send where Omarchy's isn't installed.
     """
     global _notify_id
-    if shutil.which("omarchy-notification-send"):
-        cmd = ["omarchy-notification-send", "--app-name", "re:dial", "-t", "1100", "-p"]
-        if _notify_id:
-            cmd += ["-r", _notify_id]
-        cmd += [title, body] if body else [title]
-        try:
-            p = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-        except Exception as exc:
-            log(f"omarchy-notification-send raised {exc}")
-            return
-        lines = p.stdout.strip().splitlines()
-        if p.returncode == 0 and lines and lines[-1].isdigit():
-            _notify_id = lines[-1]
+    found = [n for n in ("omarchy-notification-send", "notify-send") if shutil.which(n)]
+    if not found:
         return
-    run(
-        [
-            "notify-send",
-            "-a",
-            "re:dial",
-            "-t",
-            "1100",
-            "-h",
-            "string:x-canonical-private-synchronous:redial",
-            title,
-            body,
-        ]
-    )
+    exe = found[0]
+    cmd = [exe, "--app-name", "re:dial", "-t", "1100", "-p"]
+    if exe == "notify-send":
+        cmd += ["-h", "string:x-canonical-private-synchronous:redial"]
+    if _notify_id:
+        cmd += ["-r", _notify_id]
+    cmd += [title, body] if body else [title]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+    except Exception as exc:
+        log(f"{exe} raised {exc}")
+        return
+    lines = p.stdout.strip().splitlines()
+    if p.returncode == 0 and lines and lines[-1].isdigit():
+        _notify_id = lines[-1]
 
 
 def notify(title, body=""):
@@ -1661,8 +1699,113 @@ class VirtualPointer:
             self.fd = None
 
 
+def _keycodes():
+    """wtype key names -> Linux input keycodes (linux/input-event-codes.h)."""
+    codes = {
+        "Escape": 1, "minus": 12, "equal": 13, "BackSpace": 14, "Tab": 15, "Return": 28,
+        "space": 57, "Caps_Lock": 58, "Home": 102, "Up": 103, "Page_Up": 104, "Left": 105,
+        "Right": 106, "End": 107, "Down": 108, "Page_Down": 109, "Insert": 110, "Delete": 111,
+        "XF86AudioMute": 113, "XF86AudioLowerVolume": 114, "XF86AudioRaiseVolume": 115,
+        "XF86AudioNext": 163, "XF86AudioPlay": 164, "XF86AudioPrev": 165,
+        "ctrl": 29, "shift": 42, "alt": 56, "logo": 125, "win": 125, "super": 125, "altgr": 100,
+    }  # fmt: skip
+    for row, first in (("1234567890", 2), ("qwertyuiop", 16), ("asdfghjkl", 30), ("zxcvbnm", 44)):
+        codes.update((c, first + i) for i, c in enumerate(row))
+    codes.update((f"F{n}", 58 + n) for n in range(1, 11))
+    codes.update(F11=87, F12=88)
+    codes.update((f"F{n}", 183 + n - 13) for n in range(13, 25))
+    return codes
+
+
+class VirtualKeyboard:
+    """A uinput keyboard for key actions where `wtype` can't type (see uinput_keys()).
+
+    It sends keycodes, not keysyms, so letters follow the physical QWERTY position: on an AZERTY
+    layout "z" types "w". Names it doesn't know return False, and key() falls back to `wtype`.
+    Created at startup, like the pointer, so the compositor has added it before the first key.
+    """
+
+    KEYS = _keycodes()
+
+    def __init__(self):
+        self.fd = None
+        self.warned = False
+
+    def _ensure(self):
+        if self.fd is not None:
+            return True
+        vp = VirtualPointer
+        try:
+            fd = os.open("/dev/uinput", os.O_WRONLY | os.O_NONBLOCK)
+        except OSError as exc:
+            if not self.warned:
+                log(f"uinput unavailable ({exc}) -- uinput keys disabled")
+                self.warned = True
+            return False
+        try:
+            for ev in (vp.EV_KEY, vp.EV_SYN):
+                fcntl.ioctl(fd, vp.UI_SET_EVBIT, ev)
+            for code in set(self.KEYS.values()):
+                fcntl.ioctl(fd, vp.UI_SET_KEYBIT, code)
+            name = b"re:dial Virtual Keyboard".ljust(80, b"\0")
+            os.write(fd, name + struct.pack("HHHH", 0x0006, 0, 0, 1) + bytes(4 + 4 * 256))
+            fcntl.ioctl(fd, vp.UI_DEV_CREATE)
+        except OSError as exc:
+            log(f"uinput keyboard setup failed ({exc})")
+            os.close(fd)
+            return False
+        self.fd = fd
+        log("virtual keyboard created")
+        return True
+
+    def _emit(self, code, value):
+        os.write(self.fd, struct.pack(EV_FORMAT, 0, 0, EV_KEY, code, value))
+        os.write(self.fd, struct.pack(EV_FORMAT, 0, 0, 0, 0, 0))  # EV_SYN
+
+    def codes(self, combo):
+        """The keycodes for a combo, an uppercase letter adding shift; None if any is unknown."""
+        out = []
+        for name in combo:
+            if len(name) == 1 and name.isupper() and name.lower() in self.KEYS:
+                out += [self.KEYS["shift"], self.KEYS[name.lower()]]
+            elif name in self.KEYS:
+                out.append(self.KEYS[name])
+            else:
+                return None
+        return out
+
+    def combo(self, combo):
+        """Press the combo's keys in order and release them in reverse. False if not sent."""
+        codes = self.codes(combo)
+        if codes is None or not self._ensure():
+            return False
+        try:
+            for c in codes:
+                self._emit(c, 1)
+            for c in reversed(codes):
+                self._emit(c, 0)
+        except OSError as exc:
+            log(f"uinput key failed ({exc})")
+            self.fd = None
+            return False
+        return True
+
+    def hold(self, name, down):
+        """Hold (down=True) or release one key. False if not sent."""
+        if name not in self.KEYS or not self._ensure():
+            return False
+        try:
+            self._emit(self.KEYS[name], 1 if down else 0)
+        except OSError as exc:
+            log(f"uinput key failed ({exc})")
+            self.fd = None
+            return False
+        return True
+
+
 HAPTIC = Haptics()
 POINTER = VirtualPointer()
+KEYBOARD = VirtualKeyboard()
 
 
 def vol(mag, up):
@@ -1752,6 +1895,8 @@ def overlay_draws_states():
     shortcut: only re:dial classic's Classic face does so far; once the other looks draw them
     (Phase 3) the overlay should say what it draws instead of the daemon reading the config.
     """
+    if not omarchy_shell():
+        return False  # redial-overlay draws only the ring; levels and hints stay notifications
     doc = live_config()
     layout = os.environ.get("DIAL_MENU_LAYOUT") or cfg_str(doc, "layout", MENU_LAYOUT)
     return layout == "dial" and cfg_str(doc, "face", "classic") == "classic"
@@ -2689,6 +2834,11 @@ def settings_action(op):
     window, any turn or click brings it to the front instead, so a click can never land as Enter
     in whatever app has focus.
     """
+    if not omarchy_shell():
+        # redial-settings is one window; launching it again just raises it. Walking its
+        # controls with the dial is Omarchy-only for now, so every turn and click opens it.
+        launch(["redial-settings"])
+        return
     if op == "open" or not settings_window_focused():
         launch(["omarchy-shell", "-q", "dialtools", "open"])
         hypr(f'hl.dsp.focus({{ window = "title:^{SETTINGS_TITLE}$" }})')
@@ -3149,13 +3299,42 @@ TOOL_LIBRARY = [
 # The ring with no config: the everyday tools (v1 trimmed Word Nav, Arrow Keys and Window Size
 # out, they overlap Select, Pages and Tile Focus and stay one click away in settings), plus
 # Brightness where the machine has a backlight.
+def _action_kinds(x, acc=None):
+    """Every action `do` a tool spec uses, however deeply its clicks and turns nest them."""
+    acc = set() if acc is None else acc
+    if isinstance(x, dict):
+        if isinstance(x.get("do"), str):
+            acc.add(x["do"])
+        for v in x.values():
+            _action_kinds(v, acc)
+    elif isinstance(x, list):
+        for v in x:
+            _action_kinds(v, acc)
+    return acc
+
+
+def works_here(tool):
+    """Whether a tool can act on this desktop.
+
+    Window tools need a window-manager backend (none on GNOME, KDE or COSMIC yet), and Settings
+    needs a settings window: Omarchy's, or redial-settings elsewhere.
+    """
+    kinds = _action_kinds(tool)
+    if kinds & {"wm", "resize"} and not backend().supported:
+        return False
+    if "settings" in kinds and backend().name == "none" and not shutil.which("redial-settings"):
+        return False
+    return True
+
+
 def default_tools(has_backlight=None):
     if has_backlight is None:
         has_backlight = backlight_device() is not None
     return [
         t
         for t in TOOL_LIBRARY
-        if t.get("default", True) is True or (t.get("default") == "backlight" and has_backlight)
+        if (t.get("default", True) is True or (t.get("default") == "backlight" and has_backlight))
+        and works_here(t)
     ]
 
 
@@ -3628,7 +3807,9 @@ def pen_eraser_config():
         ms = pen.get("eraser_tap_min_ms")
         ok = isinstance(ms, (int, float)) and not isinstance(ms, bool) and 0 <= ms <= 500
         speed = pen.get("eraser_scroll_speed")
-        speed_ok = isinstance(speed, (int, float)) and not isinstance(speed, bool) and 0.25 <= speed <= 4
+        speed_ok = (
+            isinstance(speed, (int, float)) and not isinstance(speed, bool) and 0.25 <= speed <= 4
+        )
         return (
             choice["tap"],
             choice["hold"],
@@ -3781,6 +3962,7 @@ def write_tool_manifest():
                 "icon": t.get("icon", ""),
                 "description": t.get("description", ""),
                 "default": t in DEFAULT_TOOLS,
+                "works_here": works_here(t),
                 "clicks": t.get("clicks", {}),  # the tool's own click defaults
                 "replaces": sorted(k for k, v in TOOL_RENAMED.items() if v == t["name"]),
             }
@@ -3979,6 +4161,10 @@ class Dial:
     def show_menu(self):
         MENU_UI.highlight(self.menu_pick)
         speak(TOOLS[self.menu_pick]["name"])
+        if not omarchy_shell() and not MENU_UI.overlay:
+            # No overlay on this desktop: name the highlighted tool, or the ring is invisible.
+            t = TOOLS[self.menu_pick]
+            notify(f"{t['icon']}  {t['name']}", "release to pick it")
 
     def detach(self):
         """The dial went away: disarm the tool and forget half-made gestures.
@@ -4581,6 +4767,8 @@ def main():
         threading.Thread(target=pen_button_watcher, daemon=True).start()
     else:
         log("pen support disabled by config")
+    if uinput_keys():
+        KEYBOARD._ensure()  # made now so the compositor has added it before the first key
     threading.Thread(target=status_loop, daemon=True).start()
     global GUIDE
     GUIDE = Guide(
