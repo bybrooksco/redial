@@ -19,6 +19,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 - Without Omarchy, holding the dial names each tool you pass in a notification, so the ring is never invisible.
 
 ### Fixed
+- Dictation no longer reports success when it failed. The "voxtype toggled" notice used to appear even when voxtype was not running (for example, its GPU driver failed to load after a kernel update). `run()` now returns whether the command worked, and a failed toggle shows "Dictation unavailable". Tested in `tests/test_dial.py` (`DictationNotice`).
 - The haptics were silently off on machines where another package's udev rule claims every hidraw device (Vial's `99-vial.rules` does): the dial's rule now uses `:=`, so it can't be overridden.
 - Notifications through `notify-send` (any desktop without Omarchy) now replace each other instead of stacking.
 - Eraser scroll started late. A drag now locks its axis after about 2 mm instead of 5 mm, and the travel before the lock is replayed, so the page moves from the first millimetre. A touch that never locks an axis is still a tap.

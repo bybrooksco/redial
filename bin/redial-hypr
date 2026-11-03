@@ -492,6 +492,8 @@ def run(cmd):
     # hyprctl exits 0 even when its Lua dispatcher fails -- check the text.
     if p.returncode != 0 or out.lower().startswith("error"):
         log(f"{cmd[0]} failed: {out[:200]}")
+        return False
+    return True
 
 
 def hypr(lua):
@@ -2645,7 +2647,10 @@ def pen_button_watcher():
 
 
 def dictation_toggle():
-    run(["voxtype", "record", "toggle"])
+    if run(["voxtype", "record", "toggle"]):
+        notify("\U0001f399  Dictation", "voxtype toggled")
+    else:
+        notify("\U0001f399  Dictation unavailable", "voxtype isn't running: journalctl --user -u voxtype")
 
 
 # --------------------------------------------------------------------------
@@ -4392,8 +4397,7 @@ class Dial:
             return
         ACTIONS.submit(fn, 1)
         if name == "dictation":
-            HAPTIC.fire(PAT_DICTATION, rate_limit=False)
-            notify("\U0001f399  Dictation", "voxtype toggled")
+            HAPTIC.fire(PAT_DICTATION, rate_limit=False)  # dictation_toggle notifies once voxtype answers
         else:
             HAPTIC.fire(PAT_SELECT, rate_limit=False)
             notify(_CLICK_BY_NAME[name][1], f"{kind} click")

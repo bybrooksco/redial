@@ -25,6 +25,7 @@ import threading
 import time
 import types
 import unittest
+import unittest.mock
 
 # Importing the daemon writes manifests into its config dir; keep that off the real one.
 os.environ["DIAL_CONFIG_DIR"] = tempfile.mkdtemp()
@@ -444,6 +445,26 @@ class Seek(unittest.TestCase):
         )
         self.assertEqual(m.media_reading("vlc"), (None, "Live"))
         self.assertIsNone(m.media_reading(None))
+
+
+class DictationNotice(unittest.TestCase):
+    """The notice must say whether voxtype actually answered, not just that we asked."""
+
+    def notice(self, rc, out):
+        shown = []
+        m.notify = lambda title, body="": shown.append(title)
+        fake = lambda cmd, **kw: types.SimpleNamespace(stdout=out, stderr="", returncode=rc)
+        with unittest.mock.patch.object(m.subprocess, "run", fake):  # the real module; must not leak
+            m.dictation_toggle()
+        return shown
+
+    def test_running_voxtype_says_toggled(self):
+        self.assertEqual(self.notice(0, ""), ["\U0001f399  Dictation"])
+
+    def test_dead_voxtype_says_unavailable(self):
+        self.assertEqual(
+            self.notice(1, "Error: Voxtype daemon is not running"), ["\U0001f399  Dictation unavailable"]
+        )
 
 
 class Brightness(unittest.TestCase):
