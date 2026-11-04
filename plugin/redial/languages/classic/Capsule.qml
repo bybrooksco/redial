@@ -7,45 +7,19 @@ import "Drafting.js" as Drafting
 // takes the accent; its name and click action ride a rim callout with a short leader. Turning a
 // tool with a level lights a ring of 24 capsules. It draws its own plate, so it draws its own
 // marks and its own rim label (no host callout). Mockup: DCAP in draft.js (2026-10-22).
-Item {
+LookBase {
   id: face
-
-  required property var cfg
-  property var language: null
-  property real unit: 1
-  property string fontFamily: "monospace"
-  property var type: ({ caption: 10, subtitle: 13, title: 14, display: 24, displayLarge: 28 })
-  property var tools: []
-  property int index: 0
-  property real position: 0
-  property bool live: false
-  property string noteKind: ""
-  property var note: ({})
-  property real landY: -1
 
   // Contract additions (languages/README.md): a 400×400 plate in units, no host callout.
   readonly property size plateSize: Qt.size(400, 400)
   readonly property bool wantsCallout: false
   readonly property string kind: "face"
 
-  function u(px) { return px * unit }
-  readonly property color line: cfg.roles.line
-  readonly property color accent: cfg.roles.accent
-  readonly property color alert: cfg.roles.alert
-  function ink(a) { return Qt.rgba(line.r, line.g, line.b, a) }
-  readonly property var easeOut: language ? language.easeOut : [0.23, 1, 0.32, 1, 1, 1]
-  readonly property var easeInOut: language ? language.easeInOut : [0.77, 0, 0.175, 1, 1, 1]
-
-  readonly property int n: Math.max(1, tools.length)
   readonly property real step: 360 / n
   readonly property real cx: width / 2
   readonly property real cy: height / 2
 
-  readonly property bool levelShown: noteKind === "turn" && note.value !== undefined
-  readonly property int litCount: levelShown ? Drafting.litCount(note.value, 24) : 0
-  readonly property string stateDrawn: noteKind === "hint" ? "hint" : noteKind === "cant" ? "cant"
-                                     : levelShown ? "turn" : "ring"
-  readonly property real ringInk: noteKind === "cant" ? 0.35 : noteKind === "hint" ? 0.55 : 1
+  readonly property int litCount: litOf(24)
   readonly property Item rimLabel: rim
   readonly property Item selection: capsules.count > 0 ? capsules.itemAt(Math.min(index, capsules.count - 1)) : null
 
@@ -223,7 +197,7 @@ Item {
       objectName: "valueText"
       anchors.horizontalCenter: parent.horizontalCenter
       visible: face.levelShown
-      text: face.note.valueText !== undefined ? String(face.note.valueText) : String(face.note.value) + "%"
+      text: face.valueText
       textFormat: Text.PlainText
       font.family: face.fontFamily; font.pixelSize: face.u(28)
       color: face.accent
