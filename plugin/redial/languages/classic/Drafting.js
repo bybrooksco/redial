@@ -123,3 +123,58 @@ function titleBlock(ctx, w, h, u, color) {
   ctx.beginPath(); ctx.moveTo(w - u * 140, y); ctx.lineTo(w - u * 140, y + bh); ctx.stroke()
   return [w - u * 212, w - u * 130, h - u * 26]
 }
+
+// The state sign drawn in a size×size box: a hint's gesture (turn, press, hold, or a dot) in the
+// accent, or can't act (asleep: a crescent; otherwise a struck circle) in the alert colour.
+function sign(ctx, kind, note, size, accent, alert) {
+  var c = size / 2, k = size / 40, g = note ? note.gesture : ""
+  ctx.save(); ctx.lineWidth = 2.5 * k; ctx.lineCap = "round"
+  if (kind === "hint") {
+    ctx.strokeStyle = ink(accent, 1); ctx.fillStyle = ink(accent, 1)
+    if (g === "turn") {
+      ctx.fillStyle = ink(accent, 0.35); ctx.beginPath(); ctx.arc(c, c, 7 * k, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.arc(c, c, 14 * k, -Math.PI * 0.95, -Math.PI * 0.12); ctx.stroke()
+      var ax = c + Math.cos(-Math.PI * 0.12) * 14 * k, ay = c + Math.sin(-Math.PI * 0.12) * 14 * k
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + 0.5 * k, ay - 6.5 * k); ctx.moveTo(ax, ay); ctx.lineTo(ax - 6.5 * k, ay - 0.5 * k); ctx.stroke()
+    } else if (g === "press") {
+      ctx.beginPath(); ctx.arc(c, c, 7 * k, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.arc(c, c, 13 * k, 0, Math.PI * 2); ctx.stroke()
+    } else if (g === "hold") {
+      ctx.beginPath(); ctx.arc(c, c, 7 * k, 0, Math.PI * 2); ctx.fill()
+      ctx.strokeStyle = ink(accent, 0.25); ctx.beginPath(); ctx.arc(c, c, 15 * k, 0, Math.PI * 2); ctx.stroke()
+      ctx.strokeStyle = ink(accent, 1); ctx.beginPath(); ctx.arc(c, c, 15 * k, -Math.PI / 2, Math.PI * 0.9); ctx.stroke()
+    } else {
+      ctx.beginPath(); ctx.arc(c, c, 4 * k, 0, Math.PI * 2); ctx.fill()
+    }
+  } else if (kind === "cant") {
+    ctx.strokeStyle = ink(alert, 1); ctx.fillStyle = ink(alert, 1)
+    if (note && note.reason === "asleep") {
+      ctx.beginPath(); ctx.arc(c - 1 * k, c, 13 * k, 0, Math.PI * 2); ctx.fill()
+      ctx.globalCompositeOperation = "destination-out"
+      ctx.beginPath(); ctx.arc(c + 6 * k, c - 5 * k, 11 * k, 0, Math.PI * 2); ctx.fill()
+      ctx.globalCompositeOperation = "source-over"
+    } else {
+      ctx.beginPath(); ctx.arc(c, c, 13 * k, 0, Math.PI * 2); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(c - 9 * k, c + 9 * k); ctx.lineTo(c + 9 * k, c - 9 * k); ctx.stroke()
+    }
+  }
+  ctx.restore()
+}
+
+// The construction lines every round look shares: the centre cross run to the plate edge with
+// nodes at its ends, and two level lines tangent to the inner ring.
+function construction(ctx, w, h, cx, cy, rIn, rRule, left, color) {
+  line(ctx, 0, cy, w, cy, color, 0.13, 1); line(ctx, cx, 0, cx, h, color, 0.13, 1)
+  node(ctx, w - 10, cy, 3, color, 0.35); node(ctx, cx, 10, 2.5, color, 0.3); node(ctx, cx, h - 10, 2.5, color, 0.3)
+  line(ctx, left, cy - rIn, cx + rRule, cy - rIn, color, 0.07, 1)
+  line(ctx, left, cy + rIn, cx + rRule, cy + rIn, color, 0.07, 1)
+}
+
+// A rounded rectangle (capsule when r = w/2) centred on the origin, as a path on ctx.
+function capsulePath(ctx, w, h, r) {
+  var x = -w / 2, y = -h / 2
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.arc(x + w - r, y + r, r, -Math.PI / 2, 0)
+  ctx.lineTo(x + w, y + h - r); ctx.arc(x + w - r, y + h - r, r, 0, Math.PI / 2)
+  ctx.lineTo(x + r, y + h); ctx.arc(x + r, y + h - r, r, Math.PI / 2, Math.PI)
+  ctx.lineTo(x, y + r); ctx.arc(x + r, y + r, r, Math.PI, Math.PI * 1.5); ctx.closePath()
+}
