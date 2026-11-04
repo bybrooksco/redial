@@ -178,3 +178,9 @@ function capsulePath(ctx, w, h, r) {
   ctx.lineTo(x + r, y + h); ctx.arc(x + r, y + h - r, r, Math.PI / 2, Math.PI)
   ctx.lineTo(x, y + r); ctx.arc(x + r, y + r, r, Math.PI, Math.PI * 1.5); ctx.closePath()
 }
+
+// An annular sector from r0 to r1 between angles a0 and a1 (degrees), as a path on ctx.
+function sectorPath(ctx, cx, cy, r0, r1, a0, a1) {
+  var s = a0 * Math.PI / 180, e = a1 * Math.PI / 180
+  ctx.beginPath(); ctx.arc(cx, cy, r1, s, e, false); ctx.arc(cx, cy, r0, e, s, true); ctx.closePath()
+}
