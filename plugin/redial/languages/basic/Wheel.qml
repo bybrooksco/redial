@@ -146,7 +146,7 @@ LookBase {
         anchors.centerIn: parent
         width: parent.width - look.u(28)
         visible: look.noteKind === "hint" || look.noteKind === "cant"
-        look: look
+        host: look
         big: 22; small: 15; signSize: 38
         ink: look.p.ink; soft: look.p.soft
       }
