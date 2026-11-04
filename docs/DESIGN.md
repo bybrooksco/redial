@@ -387,9 +387,19 @@ others (the diagram is in the project vault; the contract is in
   `Color` singleton) and checks contrast: a theme red that does not reach 3:1 on the
   ground falls back to the next warm slot, then to the ink.
 - **A language is a folder** (`languages/<name>/Language.qml` plus one file per
-  look). The face `Loader` takes a look from the active language first and falls back
-  to the built-in file; a missing or broken language falls back to `classic`, so a
-  half-finished one never blanks the overlay.
+  look), and **it offers only the looks it ships**. Every face and layout (deck,
+  carousel, toast) is a language look loaded through one `Loader`; `LookResolve.js`
+  picks the file. A look the language lacks draws its `defaultLook` (no borrowing
+  from another language, so what you pick is what that language drew); a look that
+  fails to load draws the default, a failed default draws classic's Classic, and a
+  missing or broken language falls back to `classic`, so the overlay is never blank.
+  `lookCount` is the tag a language library will list.
+- **Two languages ship.** re:dial classic (ten looks: drafting plates, hairlines,
+  leaders to a callout) and re:dial basic (nine looks, working name: soft filled
+  plates with their own type, three bundled OFL faces cut to Latin static weights).
+  A look declares its `plateSize` and draws its own plate and its own states
+  (turning, hint, can't act); only the `omarchy` layout still hands states to the
+  desktop's OSD.
 - **Looks import nothing from the Omarchy shell.** The host passes the spacing unit,
   font and type sizes in, which is what lets a standalone host run them later.
 - **re:dial classic** keeps Classic's plate and makes it cheaper: the lit sector is a
@@ -402,6 +412,11 @@ others (the diagram is in the project vault; the contract is in
   the Omarchy look passes its own bottom margin, the OSD slot).
 
 ## Faces and layouts
+
+The notes below describe the looks as they were before Phase 3 (2026-11), when Deck,
+Carousel and Toast were drawn inline in `DialMenu.qml`. They are now language looks
+(`languages/<name>/{Deck,Carousel,Toast}.qml`) ported from the 2026-10-22 mockups;
+the reasoning (constant-width row, fixed columns) carried over.
 
 - **Carousel** is a lower-detail restyle of the row-of-cards idea. It is not
   routed through the face `Loader`, because it isn't circular and the dial face

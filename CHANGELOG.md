@@ -6,6 +6,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **A second design language, re:dial basic** (working name): soft filled plates, from round two of the 2026-10-22 mockups. Nine looks (Capsule, Gauge, Pie, Sundial, Repair tag, Finger wheel, Deck, Carousel, Toast; no Classic), each drawing the ring and all three states in its own frame. Switch with Design language on the Look page. It bundles Barlow Semi Condensed, Fraunces and Bricolage Grotesque under the SIL Open Font License (Latin static weights, licences beside them). Tested in `tests/qml/tst_basic_*.qml`.
+- **re:dial classic draws every look**: Capsule, Gauge, Pie, Deck, Carousel and Toast redrawn as drafting plates, plus three new faces: **Sundial** (tools are hours; the sun follows the hand a breath behind), **Repair tag** (a checklist tag; a level punches holes; can't act stamps it) and **Finger wheel** (a rotary dial that is the hand and spins back onto the chosen hole). Tested in `tests/qml/tst_classic_*.qml`.
+- `lookCount` on every language: how many looks it ships, the tag a future language library lists.
 - **Dial | Pen tabs** at the top of the settings window. The Dial keeps its pages (Look, Feel, Every setting, Help); the Pen tab holds the Surface Pen controls, moved off the Feel page and grouped by how you use them: away from screen (tail button), on screen while hovering (barrel button), and on screen in contact (eraser).
 - `pen.eraser_scroll_speed` (0.25 to 4, default 1): scales every app's eraser scroll speed. On the Pen page as Slow, Normal, Fast and Faster.
 
@@ -17,6 +20,12 @@ versions follow [Semantic Versioning](https://semver.org/).
 - **Waybar module** for desktops without Omarchy: `redial-bar` (status, battery and click summary; left-click opens settings, right-click restarts the daemon), with the block to paste in `config/waybar.snippet.jsonc`.
 - The default ring leaves out the tools that can't act on this desktop: on GNOME, KDE and COSMIC, the window tools (no window backend yet) and Settings when no settings window is installed. `tools.json` says which tools work here (`works_here`), and the settings window greys the rest.
 - Without Omarchy, holding the dial names each tool you pass in a notification, so the ring is never invisible.
+
+### Changed
+- **A language offers only the looks it ships.** Settings lists the language's own looks (plus Omarchy's OSD layout); a look the config names but the language lacks draws the language's default look instead of borrowing another language's.
+- **Every look draws turning, hints and can't act itself**, including Deck, Carousel and Toast, so those no longer go to Omarchy's OSD; only the `omarchy` layout keeps the OSD.
+- Deck, Carousel and Toast are language looks now, not inline layouts. `capsuleFillet`, `capsuleSpan` and `deck.cardWidth`/`cardHeight`/`gap` are gone (an old config's values are ignored); each look sizes its own plate.
+- The self-installer's size guard is 800 KB (the bundled faces add about 200 KB).
 
 ### Fixed
 - Dictation no longer reports success when it failed. The "voxtype toggled" notice used to appear even when voxtype was not running (for example, its GPU driver failed to load after a kernel update). `run()` now returns whether the command worked, and a failed toggle shows "Dictation unavailable". Tested in `tests/test_dial.py` (`DictationNotice`).
