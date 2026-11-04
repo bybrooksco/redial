@@ -23,8 +23,11 @@ QtObject {
 
   // Bundled OFL faces (fonts/, each with its licence). A face that fails to load is "", and the
   // looks fall back to the host's font.
-  readonly property FontLoader _fraunces: FontLoader { source: "fonts/fraunces/Fraunces.ttf" }
-  readonly property FontLoader _bricolage: FontLoader { source: "fonts/bricolage/BricolageGrotesque.ttf" }
+  // Static weights cut to the Latin range (fonttools instancer + pyftsubset); the full variable
+  // fonts are at github.com/google/fonts. Static files keep the weight drawn certain.
+  readonly property FontLoader _fraunces: FontLoader { source: "fonts/fraunces/Fraunces-SemiBold.ttf" }
+  readonly property FontLoader _bricolage: FontLoader { source: "fonts/bricolage/BricolageGrotesque-SemiBold.ttf" }
+  readonly property FontLoader _bricolageBold: FontLoader { source: "fonts/bricolage/BricolageGrotesque-ExtraBold.ttf" }
   readonly property FontLoader _barlow: FontLoader { source: "fonts/barlow/BarlowSemiCondensed-Regular.ttf" }
   readonly property FontLoader _barlowSemi: FontLoader { source: "fonts/barlow/BarlowSemiCondensed-SemiBold.ttf" }
   readonly property FontLoader _barlowBold: FontLoader { source: "fonts/barlow/BarlowSemiCondensed-Bold.ttf" }

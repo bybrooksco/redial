@@ -70,7 +70,7 @@ LookBase {
 
     Column {
       anchors.verticalCenter: parent.verticalCenter
-      width: parent.width - look.u(56) - right.width - look.u(12)
+      width: parent.width - look.u(56) - trailing.width - look.u(12)
       Text {
         id: nameText
         width: parent.width; elide: Text.ElideRight
@@ -94,7 +94,7 @@ LookBase {
     }
 
     Item {
-      id: right
+      id: trailing
       anchors.verticalCenter: parent.verticalCenter
       width: look.levelShown ? valueText.width : look.message ? 0 : dotRow.width
       height: look.u(30)

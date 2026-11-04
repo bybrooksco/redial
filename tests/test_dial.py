@@ -4800,7 +4800,8 @@ class SelfInstaller(unittest.TestCase):
 
     def test_it_is_one_file_a_few_hundred_kilobytes_with_a_checksum(self):
         size = os.path.getsize(self.installer)
-        self.assertLess(size, 600_000)  # small enough to attach to an email
+        # small enough to attach to an email; ~200 KB of it is basic's three OFL faces (Latin subsets)
+        self.assertLess(size, 800_000)
         self.assertGreater(size, 20_000)
         r = subprocess.run(
             ["sha256sum", "-c", os.path.basename(self.installer) + ".sha256"],
