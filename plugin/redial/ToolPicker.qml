@@ -9,6 +9,7 @@ import qs.Ui
 import "ConfigText.js" as ConfigText
 import "ActionGroups.js" as ActionGroups
 import "StylePresets.js" as StylePresets
+import "LookResolve.js" as LookResolve
 
 // Pick and reorder which of the daemon's tools are active, and where the overlay sits.
 //
@@ -110,7 +111,8 @@ Item {
     var out = []
     for (var i = 0; i < languageFolders.count; i++) {
       var n = String(languageFolders.get(i, "fileName"))
-      out.push({ key: n, label: n === "classic" ? "re:dial classic" : n.charAt(0).toUpperCase() + n.slice(1) })
+      // re:dial's own languages carry the re:dial name ("basic" is a working name)
+      out.push({ key: n, label: (n === "classic" || n === "basic") ? "re:dial " + n : n.charAt(0).toUpperCase() + n.slice(1) })
     }
     return out.length ? out : [ { key: "classic", label: "re:dial classic" } ]
   }
@@ -514,22 +516,25 @@ Item {
     }
   }
 
-  // One picker across all seven overlay options, though four are a "face" and three a "layout".
-  // Writes both keys together so neither is left stale.
-  readonly property var appearanceOptions: [
-    { key: "classic",  label: "Classic",       layout: "dial",     face: "classic" },
-    { key: "capsule",  label: "Capsule",       layout: "dial",     face: "capsule" },
-    { key: "pie",      label: "Pie Wheel",     layout: "dial",     face: "pie" },
-    { key: "gauge",    label: "Gauge",         layout: "dial",     face: "gauge" },
-    { key: "carousel", label: "Carousel",      layout: "carousel", face: "" },
-    { key: "toast",    label: "Minimal Toast", layout: "toast",    face: "" },
-    { key: "omarchy",  label: "Omarchy",       layout: "omarchy",  face: "" }
-  ]
+  // The looks the chosen design language ships (LookResolve.offered), plus the Omarchy OSD layout.
+  // A language offers only its own looks; nothing is borrowed from another one.
+  Loader {
+    id: pickedLanguage
+    source: "languages/" + root.cfgValue("language", "classic") + "/Language.qml"
+  }
+  readonly property var appearanceOptions: LookResolve.offered(pickedLanguage.item).map(LookResolve.option)
   readonly property string appearanceChoice: {
     var l = (configDoc && configDoc.layout) ? String(configDoc.layout) : "dial"
     var f = (configDoc && configDoc.face) ? String(configDoc.face) : "classic"
-    if (l !== "dial") return (l === "carousel" || l === "toast" || l === "omarchy") ? l : "classic"
-    return (f === "pie" || f === "gauge" || f === "capsule") ? f : "classic"
+    return LookResolve.choice(l, f)
+  }
+  // After a language switch the saved look may be one the new language lacks: write its default
+  // once, so the picker and the overlay agree on what is drawn.
+  onAppearanceOptionsChanged: {
+    var lang = pickedLanguage.item
+    if (!lang || !lang.looks) return
+    var keys = appearanceOptions.map(function (o) { return o.key })
+    if (keys.indexOf(appearanceChoice) < 0 && lang.defaultLook) setAppearance(LookResolve.option(lang.defaultLook))
   }
   function setAppearance(opt) {
     writeConfig(function (o) {

@@ -29,6 +29,16 @@ TestCase {
     verify(!Presets.drawn("backing", "dial", "classic", "none"))
   }
 
+  function test_new_faces_use_the_classic_controls() {
+    var faces = ["sundial", "tag", "wheel"]
+    for (var i = 0; i < faces.length; i++) {
+      verify(Presets.drawn("callout", "dial", faces[i], "rect"), faces[i] + " callout")
+      verify(Presets.drawn("density", "dial", faces[i], "rect"), faces[i] + " density")
+      verify(Presets.drawn("weight", "dial", faces[i], "rect"), faces[i] + " weight")
+      verify(Presets.drawn("constructionLines", "dial", faces[i], "rect"), faces[i] + " construction")
+    }
+  }
+
   function test_swatches_are_theme_references_never_hex() {
     compare(Presets.SWATCHES.length, 20)
     for (var s of Presets.SWATCHES) verify(s.indexOf("#") < 0, s)

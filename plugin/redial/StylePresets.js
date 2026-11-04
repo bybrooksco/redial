@@ -46,6 +46,8 @@ function weightOf(dial) {
 // layout, face, plate: as Settings.qml resolves them.
 function drawn(what, layout, face, plate) {
   var dial = layout === "dial"
+  // the drafted faces are laid out like Classic: a plate with a callout column
+  if (face === "sundial" || face === "tag" || face === "wheel") face = "classic"
   if (what === "colors") return layout !== "omarchy"
   if (what === "weight") return dial && face !== "pie"
   if (what === "density" || what === "callout") return dial && (face === "classic" || face === "capsule")

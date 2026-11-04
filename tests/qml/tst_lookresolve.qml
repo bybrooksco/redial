@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../../plugin/redial/LookResolve.js" as LookResolve
+import "../../plugin/redial/languages/classic" as Classic
 
 // Which file draws a look. A language offers only the looks it ships; nothing is borrowed from
 // another language. A broken look draws the language's default, and a broken default draws
@@ -16,6 +17,8 @@ TestCase {
              toast: "Toast.qml" }
   })
   readonly property string guard: "languages/classic/Classic.qml"
+
+  Classic.Language { id: classicLanguage }
 
   function test_own_look_wins() {
     compare(LookResolve.resolve("languages/basic", basic, "pie", false), "languages/basic/Pie.qml")
@@ -57,5 +60,34 @@ TestCase {
   function test_layout_the_language_lacks_has_no_language_look() {
     var classicNow = { defaultLook: "classic", looks: { classic: "Classic.qml" } }
     compare(LookResolve.resolve("languages/classic", classicNow, "deck", false), "")
+  }
+
+  function test_lookCount_matches_looks() {
+    compare(classicLanguage.lookCount, Object.keys(classicLanguage.looks).length)
+    verify(classicLanguage.looks[classicLanguage.defaultLook] !== undefined, "the default is a look it ships")
+  }
+
+  function test_new_faces_are_valid_and_unknown_is_classic() {
+    compare(LookResolve.validFace("sundial"), "sundial")
+    compare(LookResolve.validFace("tag"), "tag")
+    compare(LookResolve.validFace("wheel"), "wheel")
+    compare(LookResolve.validFace("capsule"), "capsule")
+    compare(LookResolve.validFace("teapot"), "classic")
+    compare(LookResolve.validFace(undefined), "classic")
+  }
+
+  function test_option_writes_layout_and_face_together() {
+    var o = LookResolve.option("wheel")
+    compare(o.label, "Finger wheel"); compare(o.layout, "dial"); compare(o.face, "wheel")
+    var d = LookResolve.option("deck")
+    compare(d.layout, "deck"); compare(d.face, "")
+    compare(LookResolve.option("omarchy").layout, "omarchy")
+  }
+
+  function test_choice_names_the_look_the_config_draws() {
+    compare(LookResolve.choice("dial", "tag"), "tag")
+    compare(LookResolve.choice("carousel", "tag"), "carousel")
+    compare(LookResolve.choice("omarchy", "tag"), "omarchy")
+    compare(LookResolve.choice("dial", "teapot"), "classic")
   }
 }

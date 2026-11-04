@@ -36,3 +36,26 @@ function offered(language) {
   var keys = language && language.looks ? Object.keys(language.looks) : []
   return keys.concat(["omarchy"])
 }
+
+// Every look name a language may ship, with the label the Settings picker shows. Faces are drawn in
+// the dial layout; the others are layouts of their own. The omarchy layout is the desktop's OSD.
+var LABELS = { classic: "Classic", capsule: "Capsule", pie: "Pie Wheel", gauge: "Gauge",
+               sundial: "Sundial", tag: "Repair tag", wheel: "Finger wheel",
+               deck: "Deck", carousel: "Carousel", toast: "Minimal Toast", omarchy: "Omarchy" }
+var FACES = ["classic", "capsule", "pie", "gauge", "sundial", "tag", "wheel"]
+
+function validFace(v) {
+  return FACES.indexOf(String(v)) >= 0 ? String(v) : "classic"
+}
+
+// A picker option: the config's layout and face written together, so neither is left stale.
+function option(key) {
+  var face = FACES.indexOf(key) >= 0
+  return { key: key, label: LABELS[key] || key, layout: face ? "dial" : key, face: face ? key : "" }
+}
+
+// The picker key for what the config draws now.
+function choice(layout, face) {
+  if (layout === "omarchy" || LAYOUTS.indexOf(layout) >= 0) return layout
+  return validFace(face)
+}
