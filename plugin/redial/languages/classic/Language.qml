@@ -9,9 +9,13 @@ import QtQuick
 QtObject {
   readonly property string name: "re:dial classic"
 
-  // The looks this language draws, by `face` name. A look it does not list falls back to the
-  // built-in one, so a language can start with a single look.
+  // The looks this language ships, by face or layout name. It offers only these: a look it does not
+  // list is not borrowed from another language.
   readonly property var looks: ({ "classic": "Classic.qml" })
+  // Drawn when the config names a look this language does not ship (see LookResolve.js).
+  readonly property string defaultLook: "classic"
+  // How many looks the language ships: the tag a language library lists. Derived, so it cannot drift.
+  readonly property int lookCount: Object.keys(looks).length
 
   // Motion character: crisp and mechanical. Strong ease-out for things arriving, ease-in-out for
   // things moving on screen (Emil Kowalski's curves); closing is always quicker than opening.

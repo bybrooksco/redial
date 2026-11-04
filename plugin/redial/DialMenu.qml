@@ -9,6 +9,7 @@ import qs.Ui
 import "Placement.js" as Place
 import "Notes.js" as Notes
 import "Peek.js" as Peek
+import "LookResolve.js" as LookResolve
 
 // re:dial tool dashboard.
 //
@@ -284,7 +285,7 @@ Item {
     // Deck: the dashboard surface the cards ride in.
     Rectangle {
       id: deck
-      visible: root.layout === "deck"
+      visible: root.layout === "deck" && !faceLoader.layoutLook
       width: Math.min(root.visibleSpan + root.pad * 2, parent.width - root.edgeMargin * 2)
       height: root.pad * 2 + root.headerH + Style.space(6) + root.cardH
       radius: Style.cornerRadius
@@ -449,7 +450,7 @@ Item {
     // See docs/DESIGN.md#faces-and-layouts.
     Rectangle {
       id: carousel
-      visible: root.layout === "carousel"
+      visible: root.layout === "carousel" && !faceLoader.layoutLook
       readonly property int cardSmall: Style.space(64)
       readonly property int cardLarge: Style.space(104)
       width: row.implicitWidth + Style.space(40)
@@ -555,7 +556,7 @@ Item {
     // distance-to-next-tool feedback that circular and ordered layouts show.
     Item {
       id: toast
-      visible: root.layout === "toast"
+      visible: root.layout === "toast" && !faceLoader.layoutLook
       readonly property var activeTool: root.tools.length > root.index ? root.tools[root.index] : null
       // dots never sets `width`, so read implicitWidth/implicitHeight (as Carousel's row is).
       width: Math.max(pill.width, dots.implicitWidth)
@@ -821,12 +822,17 @@ Item {
     // slab any more, because the selection is called out on the ring itself.
     Item {
       id: plate
-      visible: root.layout === "dial"
+      visible: root.layout === "dial" || faceLoader.layoutLook
       // Classic is landscape because its callout column sits beside the dial;
       // the capsule face carries its callout on the rim and so is square.
-      readonly property bool classic: cfg.face === "classic"
-      width: classic ? Style.space(880) : Style.space(760)
-      height: classic ? Style.space(640) : width
+      readonly property bool classic: cfg.face === "classic" && root.layout === "dial"
+      // A language look that declares its size draws its own plate, marks and title block; the
+      // host adds only the callout column when the look asks for it (languages/README.md).
+      readonly property var look: faceLoader.item
+      readonly property bool ownPlate: look !== null && look.plateSize !== undefined
+      readonly property bool wantsCallout: plate.classic || (ownPlate && look.wantsCallout === true)
+      width: ownPlate ? Style.space(look.plateSize.width) : classic ? Style.space(880) : Style.space(760)
+      height: ownPlate ? Style.space(look.plateSize.height) : classic ? Style.space(640) : width
 
       readonly property int edge: Style.space(24)
 
@@ -854,7 +860,7 @@ Item {
       // over arbitrary desktop content can wash out, and it is one config value
       // away rather than a redesign.
       Rectangle {
-        visible: cfg.plate === "disc"
+        visible: cfg.plate === "disc" && !plate.ownPlate
         anchors.centerIn: parent
         // Hugs the face's declared content radius plus a margin; faces that declare none fall
         // back to full-square sizing.
@@ -870,7 +876,7 @@ Item {
                        cfg.backgroundColor.b, cfg.plateOpacity)
       }
       Rectangle {
-        visible: cfg.plate === "rect"
+        visible: cfg.plate === "rect" && !plate.ownPlate
         anchors.fill: parent
         // The classic plate takes the colour scheme's ground; a light plate is opaque, because
         // desktop text showing through vellum reads as dirt. Other faces keep the theme colours.
@@ -915,43 +921,44 @@ Item {
       // one config and one daemon.
       Loader {
         id: faceLoader
-        anchors.fill: plate.classic ? undefined : parent
+        anchors.fill: plate.classic && !plate.ownPlate ? undefined : parent
         // Classic keeps its own landscape placement: the dial is left-aligned
         // and the space to its right carries the leader out to the callout.
-        height: plate.classic ? Style.space(580) : 0
-        width: plate.classic ? Style.space(880) : 0
-        x: plate.classic ? Style.space(30) : 0
-        anchors.verticalCenter: plate.classic ? parent.verticalCenter : undefined
+        readonly property bool classicPlace: plate.classic && !plate.ownPlate
+        height: classicPlace ? Style.space(580) : 0
+        width: classicPlace ? Style.space(880) : 0
+        x: classicPlace ? Style.space(30) : 0
+        anchors.verticalCenter: classicPlace ? parent.verticalCenter : undefined
         // One contract, four faces now. Unknown/missing names fall back to
         // Classic, same as before this map existed - a bad config value
         // degrades to the safe default rather than an empty Loader.
-        readonly property var faceFiles: ({
-          "classic": "languages/classic/Classic.qml",
-          "capsule": "FaceCapsule.qml",
-          "pie": "FacePie.qml",
-          "gauge": "FaceGauge.qml"
-        })
-        // setSource rather than `source:`, because the faces declare cfg as a
-        // required property and those must be supplied at construction - a
-        // binding applied in onLoaded arrives one frame too late.
-        // The language draws the faces it lists (languages/<name>/); any other face falls back to
-        // the built-in file.
-        // True when the face came from a language folder: those take the host's metrics below.
+        // Which file draws the look: LookResolve.js. A language offers only the looks it ships; a
+        // look it lacks draws its defaultLook, and a look that fails to load draws the default
+        // (then re:dial classic's Classic) so the overlay is never blank.
         property bool languageLook: false
+        // True when a language draws the deck, carousel or toast layout itself.
+        readonly property bool layoutLook: item !== null && root.layout !== "dial" && languageLook
+        property bool failed: false
         function reload() {
-          var own = root.language && root.language.looks ? root.language.looks[cfg.face] : undefined
-          var file = own ? languageLoader.dir + "/" + own : (faceFiles[cfg.face] || faceFiles.classic)
-          languageLook = file.indexOf("languages/") === 0
+          var name = LookResolve.lookName(root.layout, cfg.face)
+          var file = name === "" ? "" : LookResolve.resolve(languageLoader.dir, root.language, name, failed)
+          languageLook = file !== ""
+          if (file === "") { setSource(""); return }
           setSource(file, { "cfg": cfg })
         }
+        onStatusChanged: if (faceLoader.status === Loader.Error && !faceLoader.failed) { faceLoader.failed = true; faceLoader.reload() }
         Component.onCompleted: reload()
         Connections {
           target: cfg
-          function onFaceChanged() { faceLoader.reload() }
+          function onFaceChanged() { faceLoader.failed = false; faceLoader.reload() }
+        }
+        Connections {
+          target: root
+          function onLayoutChanged() { faceLoader.failed = false; faceLoader.reload() }
         }
         Connections {
           target: languageLoader
-          function onLoaded() { faceLoader.reload() }
+          function onLoaded() { faceLoader.failed = false; faceLoader.reload() }
         }
         onLoaded: {
             item.tools = Qt.binding(function () { return root.tools })
@@ -1012,8 +1019,10 @@ Item {
       // face landscape.
       Column {
         id: callout
-        visible: plate.classic && cfg.showCallout && faceLoader.item !== null
-        x: faceLoader.x + faceLoader.height + Style.space(56)
+        visible: plate.wantsCallout && cfg.showCallout && faceLoader.item !== null
+        x: plate.ownPlate && plate.look.calloutX !== undefined
+           ? faceLoader.x + Style.space(plate.look.calloutX)
+           : faceLoader.x + faceLoader.height + Style.space(56)
         // Its first line sits where the leader lands, clamped so a selection at the top or bottom
         // cannot push it off the plate or onto the title block (the leader then bends to meet it).
         y: {
