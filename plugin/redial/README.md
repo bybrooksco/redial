@@ -3,62 +3,16 @@
 An on-screen tool menu for the Microsoft Surface Dial, as an Omarchy shell
 plugin. Driven over IPC and a socket by the `redial-hypr` daemon.
 
-Four layouts, same data and same IPC — pick one from the settings window's
-**Appearance** section (applies immediately, no restart), or set `layout`
-(and `face`, for `dial`) by hand in `config.json`:
+Every look is drawn by the chosen **design language** (`language`: `classic` or `basic`; see
+`languages/README.md`). A language offers only the looks it ships, and nothing is borrowed from
+another language. Pick a look from the settings window's **Appearance** section (applies
+immediately, no restart), or set `layout` (and `face`, for `dial`) by hand in `config.json`:
 
-- **`dial`** — a radial instrument face, in one of four styles chosen by `face`:
-
-  - **`classic`** (default) — the original instrument in a rectangular window.
-    Horizontal labels on the circumference, concentric rings, sector spokes, a
-    graduated bar scale, and an elbowed leader out to a callout column beside
-    the dial. That column is why this face is landscape.
-  - **`capsule`** — tools as radial pills on a round backing (below).
-  - **`pie`** — full-bleed pie wedges, game-menu style (Overwatch/GTA-style
-    weapon wheel). No rings, no scale, no callout — the wedge you're pointing
-    at *is* the selection. Icon on every wedge; the hub carries the selected
-    tool's name, value and click hint, the only text on the face.
-  - **`gauge`** — tools laid across a 180° dome with a needle, like a car
-    speedometer. The middle ground between Classic's density and Pie/Carousel/
-    Toast's full minimalism: still reads as a precision instrument, without
-    the rings/hairlines/callout column.
-
-  The backing follows the face unless `plate` is set explicitly (`classic` →
-  `rect`, `gauge` → `none` since it draws its own dome band, `capsule`/`pie`
-  → `disc`).
-
-  Note on `capsule` at small tool counts: the pills are laid out radially, so
-  with five tools they sit far apart on a large circumference. `capsuleSpan`
-  widens them to close the gaps, but the capsule keeps a fixed radial length,
-  so pushing it far squares the shape off rather than lengthening the pill.
-
-  Tools are **capsules arranged radially**
-  around the rim: outline when idle, filled and enlarged when selected, with the
-  label set on the capsule and the click action as a secondary line beside it. A
-  thin leader runs from the centre to the selection. Round, with no rectangular
-  frame.
-
-  The interior rings each carry a different reading rather than decoration:
-
-  | Ring | Carries |
-  |---|---|
-  | fine dash scale | rotation, the honest 0.1° readout; the selected sector takes the accent |
-  | value arc | the active tool's value — drawn **only** when the tool has one, so its presence is itself information |
-  | slot ticks | one per tool, marking the angular divisions |
-- **`deck`** — a horizontal card rail along a screen edge, every tool the
-  same size.
-- **`carousel`** — a friendlier restyle of the same row-of-cards idea:
-  fewer visual details, and the selected card is larger than the rest. One
-  animated position drives every card's size, and the sizes are weighted so
-  they always sum to the same total, so the row never changes width mid-turn.
-  The icon is scaled rather than resized and the name fades in beneath it, so
-  nothing jumps.
-- **`toast`** — the smallest footprint: one pill naming the armed tool (icon,
-  name, click hint) plus a dot-pagination strip below it, the same idea as a
-  phone's "3 of 6" onboarding screens. No needle, no ring, no per-tool
-  layout math — the tradeoff is that it gives up the free "how far to the
-  next tool" feedback every other layout/face shows just by being circular
-  or ordered.
+- **`dial`** — a round instrument, in the face chosen by `face`: `classic` (default; the
+  instrument with a callout column beside it), `capsule`, `pie`, `gauge`, `sundial`, `tag`
+  (repair tag) or `wheel` (finger wheel).
+- **`deck`**, **`carousel`**, **`toast`** — the layouts that aren't round: a fan of sheets, a
+  slide rule, a single title block.
 - **`omarchy`** — one card in the same visual language as Omarchy's own volume
   OSD: the shell's `popups` border and text colours, the accent bar, the same
   bottom-centre slot. Icon, tool name, then a value bar (Volume, Brightness) or
@@ -147,15 +101,9 @@ only place coupled to Omarchy's palette.
 
 ## Shape and placement
 
-`capsuleFillet` (0–1) is the corner fillet on the tool capsules, expressed as a
-fraction of the largest radius the shape allows: `1` gives a stadium — a circle
-if the capsule is square — and `0` a hard box. One continuous number rather than
-a set of named shapes.
-
-`plate` chooses the backing: `disc` (default), `none`, or `rect` (the older
-rectangular plate with corner registration marks). `none` is the most minimal
-but was measured to leave hairlines and labels unreadable over a terminal, so
-the default is `disc`; switching is one config value, not a redesign.
+`plate` is the backing behind a look that does not draw its own plate (only Classic):
+`rect` (default, with corner registration marks), `disc` or `none`. Every other look draws its
+own plate, marks and title block.
 
 `anchor` places the overlay — `bottom` by default. Both layouts honour it.
 
@@ -166,28 +114,14 @@ to Position) -- it applies immediately, no restart. The deck layout is not scale
 Bottom matters for reach: on a large panel operated one-handed, the bottom edge
 is the reachable one, and a centred overlay collides with the bar.
 
-## Faces
+## Looks
 
-`languages/classic/Classic.qml` (the Classic look of re:dial classic), `FaceCapsule.qml`,
-`FacePie.qml` and `FaceGauge.qml` are peers behind a `Loader` (`DialMenu.qml`'s `faceFiles`
-map, after the active language's own `looks`), sharing one contract (`cfg`, `tools`, `index`,
-`position`, `live`; language looks also get `language`, `unit`, `fontFamily`, `type`) and
-everything outside
-the face: settings, socket, IPC, plate, anchor, daemon. `carousel`, `toast` and `omarchy` are **not** faces — they're not circular, so the `dial` contract
-(`angleOf()`, a square Canvas) would fight them rather than fit them; they're
-two more top-level `layout` values instead, hardcoded directly in
-`DialMenu.qml` next to `deck`, which was never a face either.
-
-Faces are separate components rather than branches in one file because they
-differ in geometry, in what the interior rings (if any) mean, and in where
-the callout lives — gating that together would be a parallel implementation
-tangled into a single scope. `FacePie.qml`/`FaceGauge.qml` reuse
-`FaceCapsule.qml`'s/the Classic look's exact `angleOf()`/needle-
-interpolation math rather than re-deriving it — `FaceGauge.qml` is the one
-exception, since its 180°-dome topology genuinely isn't the same problem as
-a full circle. Adding a fifth face means adding a file, a `faceFiles` entry
-and a `face` value; if the shared drawing keeps growing, hoist the common
-helpers rather than copying them again.
+Each look is one file in its language's folder (`languages/<name>/`), listed in that language's
+`Language.qml` `looks` map and loaded by `DialMenu.qml`'s face `Loader` through `LookResolve.js`.
+A look gets one contract (`languages/README.md`) and everything outside it stays shared:
+settings, socket, IPC, anchor, daemon. A look that fails to load draws its language's default
+look; a failed default draws re:dial classic's Classic, so the overlay is never blank. The
+`omarchy` layout is not a language look: it is the shell's own OSD box.
 
 ## Tools
 

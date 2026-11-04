@@ -4344,7 +4344,7 @@ class OverlayNotes(Base):
 
     def test_a_look_that_does_not_draw_states_leaves_them_to_omarchy(self):
         with open(self.cfg, "w") as f:
-            json.dump({"face": "pie"}, f)
+            json.dump({"layout": "omarchy"}, f)   # the shell's OSD box draws no states
         m.guide_say("Now press it")
         self.assertEqual(self.notes.sent, [])
         self.assertEqual(OSDS, [{"message": "Now press it", "duration": 3500}])
@@ -4522,6 +4522,21 @@ class OverlaySocket(unittest.TestCase):
 
     def test_the_overlay_leaves_levels_and_hints_to_notifications(self):
         self.assertFalse(m.overlay_draws_states())
+
+    def gate(self, layout, face):
+        doc = {"layout": layout, "face": face}
+        with unittest.mock.patch.object(m, "omarchy_shell", lambda: True), \
+             unittest.mock.patch.object(m, "live_config", lambda: doc), \
+             unittest.mock.patch.dict(os.environ, {"DIAL_MENU_LAYOUT": ""}):
+            return m.overlay_draws_states()
+
+    def test_states_go_to_the_overlay_for_every_language_layout(self):
+        for layout in ("dial", "deck", "carousel", "toast"):
+            for face in ("classic", "pie", "wheel"):
+                self.assertTrue(self.gate(layout, face), (layout, face))
+
+    def test_omarchy_layout_keeps_the_osd(self):
+        self.assertFalse(self.gate("omarchy", "classic"))
 
 
 class UinputKeys(unittest.TestCase):

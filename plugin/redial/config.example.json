@@ -50,16 +50,7 @@
     "labels": true,
     "glyphs": true,
     "callout": true,
-    "capsuleFillet": 1.0,
-    "_capsuleFillet": "0..1 corner fillet on the tool capsules, as a fraction of the largest radius the shape allows. 1 = stadium (a circle when the capsule is square), 0 = hard box, anything between = rounded rectangle. One continuous number, not a set of modes.",
-    "_guides": "constructionLines draws faint spokes between tool sectors; crosshair draws a small cross inside the hub. Both are off by default and both stay inside the face - nothing runs past the backing.",
-    "capsuleSpan": 0.14,
-    "_capsuleSpan": "0..1 capsule width as a fraction of the arc each tool owns (capsule face only). Higher closes the gaps between pills, but the capsule keeps a fixed radial length, so past ~0.35 it squares off and at capsuleFillet 1 becomes a circle."
-  },
-  "deck": {
-    "cardWidth": 150,
-    "cardHeight": 170,
-    "gap": 14
+    "_guides": "constructionLines draws faint spokes between tool sectors; crosshair draws a small cross inside the hub. Both are off by default and both stay inside the face - nothing runs past the backing."
   },
   "pen": {
     "_comment": "Surface Pen support shares this daemon. Harmless with no pen attached; set false for a dial-only install. tail_clicks and barrel apply live -- no daemon restart needed.",

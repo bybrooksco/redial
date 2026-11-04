@@ -1894,14 +1894,14 @@ def overlay_note(kind, doc):
 def overlay_draws_states():
     """Whether the overlay's chosen look draws these states itself.
 
-    shortcut: only re:dial classic's Classic face does so far; once the other looks draw them
-    (Phase 3) the overlay should say what it draws instead of the daemon reading the config.
+    Every language look does (dial faces, deck, carousel, toast); the omarchy layout is the
+    shell's own OSD box and leaves them to Omarchy's OSD.
     """
     if not omarchy_shell():
         return False  # redial-overlay draws only the ring; levels and hints stay notifications
     doc = live_config()
     layout = os.environ.get("DIAL_MENU_LAYOUT") or cfg_str(doc, "layout", MENU_LAYOUT)
-    return layout == "dial" and cfg_str(doc, "face", "classic") == "classic"
+    return layout in ("dial", "deck", "carousel", "toast")
 
 
 def turn_note(name, value=None, text=None):

@@ -17,14 +17,11 @@ function lookName(layout, face) {
   return LAYOUTS.indexOf(layout) >= 0 ? layout : ""
 }
 
-// The file for `name`, or "" when the host draws it itself.
-// shortcut: a layout the language lacks returns "" so DialMenu's own deck/carousel/toast block
-// draws it; remove once those blocks are deleted (plan Task 11).
+// The file that draws `name` in this language.
 function resolve(dir, language, name, failed) {
   if (!language || !language.looks) return GUARD
   var looks = language.looks
   if (!failed && looks[name]) return dir + "/" + looks[name]
-  if (!failed && LAYOUTS.indexOf(name) >= 0) return ""
   if (failed && name === language.defaultLook) return GUARD
   var fallback = looks[language.defaultLook]
   return fallback ? dir + "/" + fallback : GUARD

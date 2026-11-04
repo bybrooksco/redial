@@ -36,12 +36,7 @@
         { "key": "dial.barWidthMajor", "type": "number", "default": 2, "min": 0.5, "max": 12, "step": 0.5, "unit": "px", "label": "Major tick weight" },
         { "key": "dial.barWidthActive", "type": "number", "default": 2.5, "min": 0.5, "max": 16, "step": 0.5, "unit": "px", "label": "Lit tick weight" },
         { "key": "dial.needleWidth", "type": "number", "default": 2, "min": 0.5, "max": 12, "step": 0.5, "unit": "px", "label": "Needle weight" },
-        { "key": "dial.ringWidth", "type": "number", "default": 1, "min": 0.5, "max": 8, "step": 0.5, "unit": "px", "label": "Ring weight" },
-        { "key": "dial.capsuleFillet", "type": "number", "default": 1, "min": 0, "max": 1, "step": 0.05, "label": "Capsule rounding", "help": "Capsule face only." },
-        { "key": "dial.capsuleSpan", "type": "number", "default": 0.14, "min": 0.05, "max": 1, "step": 0.01, "label": "Capsule width", "help": "Capsule face only." },
-        { "key": "deck.cardWidth", "type": "number", "default": 150, "min": 80, "max": 400, "step": 10, "unit": "px", "label": "Card width", "help": "Deck layout only." },
-        { "key": "deck.cardHeight", "type": "number", "default": 170, "min": 80, "max": 400, "step": 10, "unit": "px", "label": "Card height", "help": "Deck layout only." },
-        { "key": "deck.gap", "type": "number", "default": 14, "min": 0, "max": 80, "step": 2, "unit": "px", "label": "Card gap", "help": "Deck layout only." }
+        { "key": "dial.ringWidth", "type": "number", "default": 1, "min": 0.5, "max": 8, "step": 0.5, "unit": "px", "label": "Ring weight" }
       ]
     },
     {

@@ -55,11 +55,17 @@ TestCase {
     compare(LookResolve.lookName("omarchy", "pie"), "")
   }
 
-  // Transitional until every language ships deck, carousel and toast (see the plan's ledger):
-  // a layout the language lacks is drawn by the host's own block, not by a substitute face.
-  function test_layout_the_language_lacks_has_no_language_look() {
-    var classicNow = { defaultLook: "classic", looks: { classic: "Classic.qml" } }
-    compare(LookResolve.resolve("languages/classic", classicNow, "deck", false), "")
+  // A layout is a look like any other: one the language lacks draws its default (nothing is
+  // borrowed, and the host has no layout of its own any more).
+  function test_layout_the_language_lacks_draws_its_default() {
+    var faceOnly = { defaultLook: "classic", looks: { classic: "Classic.qml" } }
+    compare(LookResolve.resolve("languages/x", faceOnly, "deck", false), "languages/x/Classic.qml")
+  }
+
+  function test_classic_ships_every_look() {
+    compare(classicLanguage.lookCount, 10)
+    var all = ["classic", "capsule", "pie", "gauge", "sundial", "tag", "wheel", "deck", "carousel", "toast"]
+    for (var i = 0; i < all.length; i++) verify(classicLanguage.looks[all[i]] !== undefined, all[i])
   }
 
   function test_lookCount_matches_looks() {

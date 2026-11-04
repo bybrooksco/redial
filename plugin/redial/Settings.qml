@@ -66,21 +66,12 @@ Item {
       "barWidthActive": 2.5,
       "needleWidth": 2,
       "ringWidth": 1,
-      "_capsuleFillet": "0..1 corner fillet on the tool capsules, as a fraction of the largest radius the shape allows: 1 = stadium (circle when square), 0 = hard box",
-      "capsuleFillet": 1.0,
-      "_capsuleSpan": "0..1 - capsule width as a fraction of the arc each tool owns. Higher closes the gaps between pills. Note the capsule keeps a fixed radial length, so pushing this far past ~0.35 squares it off and, at capsuleFillet 1, turns it into a circle.",
-      "capsuleSpan": 0.14,
       "constructionLines": true,
       "crosshair": false,
       "registrationMarks": true,
       "labels": true,
       "glyphs": true,
       "callout": true
-    },
-    "deck": {
-      "cardWidth": 150,
-      "cardHeight": 170,
-      "gap": 14
     }
   })
 
@@ -203,16 +194,11 @@ Item {
     return LookResolve.validFace(get("face"))
   }
 
-  // The backing follows the face unless the config names one explicitly: the
-  // classic instrument was drawn for its rectangular window, capsule and pie
-  // for a disc, gauge draws its own dome band so a disc/rect behind it would
-  // just show through the gap below the arc. Setting "plate" always wins.
+  // The host's backing behind a look that does not draw its own plate (only Classic): its
+  // rectangular window unless the config names another. Every other look draws its own plate.
   readonly property string plate: {
     var v = doc && doc.plate !== undefined ? String(doc.plate) : ""
-    if (v === "none" || v === "disc" || v === "rect") return v
-    if (face === "classic" || face === "sundial" || face === "tag" || face === "wheel") return "rect"
-    if (face === "gauge") return "none"
-    return "disc"
+    return v === "none" || v === "disc" || v === "rect" ? v : "rect"
   }
   // Motion: three speeds used by every animation, all zero when reduce_motion is on (config key
   // or Feel page), so nothing slides or scales. Reduced motion means gentler, not none: the
@@ -233,8 +219,6 @@ Item {
   readonly property real barWidthActive: num("dial.barWidthActive", 0.5, 16)
   readonly property real needleWidth: num("dial.needleWidth", 0.5, 12)
   readonly property real ringWidth: num("dial.ringWidth", 0.5, 8)
-  readonly property real capsuleFillet: num("dial.capsuleFillet", 0.0, 1.0)
-  readonly property real capsuleSpan: num("dial.capsuleSpan", 0.05, 1.0)
   // reference_lines is the one switch for all three; the dial.* keys still tune each when it is on
   readonly property bool constructionLines: referenceLines && get("dial.constructionLines") === true
   readonly property bool crosshair: referenceLines && get("dial.crosshair") === true
@@ -242,10 +226,6 @@ Item {
   readonly property bool showLabels: get("dial.labels") === true
   readonly property bool showGlyphs: get("dial.glyphs") === true
   readonly property bool showCallout: get("dial.callout") === true
-
-  readonly property int cardWidth: num("deck.cardWidth", 80, 400)
-  readonly property int cardHeight: num("deck.cardHeight", 80, 400)
-  readonly property int cardGap: num("deck.gap", 0, 80)
 
   // ------------------------------------------------------------------- load
   function load(raw) {

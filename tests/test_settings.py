@@ -62,6 +62,19 @@ class Config(unittest.TestCase):
             with open(path) as f:
                 self.assertEqual(json.load(f), {"overlay_style": "card"})
 
+    def test_old_capsule_keys_are_ignored(self):
+        # Keys from the retired built-in faces and inline deck: the config still loads, and saving
+        # it leaves them alone (nothing reads them any more; they are the user's to delete).
+        old = {"dial": {"capsuleFillet": 0.5, "capsuleSpan": 0.2}, "deck": {"cardWidth": 150, "gap": 14}}
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "config.json")
+            s.write_config(old, path)
+            doc, why = s.read_config(path)
+            self.assertIsNone(why)
+            out = s.merged(doc, ["Volume"], "strip")
+            self.assertEqual(out["dial"], old["dial"])
+            self.assertEqual(out["deck"], old["deck"])
+
 
 class Ring(unittest.TestCase):
     def test_without_active_tools_the_ring_is_the_defaults(self):
