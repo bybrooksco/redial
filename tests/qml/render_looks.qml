@@ -4,7 +4,7 @@ import "lookkit"
 import "lookkit/kit.js" as Kit
 
 // Renders one language look in each state to PNGs for comparing against the mockups.
-// Run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qml tests/qml/render_looks.qml -- <language> <look>
+// Run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qml tests/qml/render_looks.qml -- <language> <look> [dark]
 // Writes /tmp/redial-render/<language>-<look>-{ring,turn,hint,cant}.png
 Window {
   id: win
@@ -22,7 +22,12 @@ Window {
   ]
   property int at: 0
 
-  FakeCfg { id: cfg; motionBase: 0; motionFast: 0 }
+  FakeCfg {
+    id: cfg
+    motionBase: 0; motionFast: 0
+    roles: win.args[2] === "dark" ? { ground: "#151614", line: "#ecebe4", accent: "#de6145", alert: "#f0a35a" }
+                                  : { ground: "#f3f0e7", line: "#1c1e21", accent: "#c4452a", alert: "#9a3412" }
+  }
   Loader {
     id: language
     source: "../../plugin/redial/languages/" + win.lang + "/Language.qml"
