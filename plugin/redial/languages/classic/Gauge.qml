@@ -24,7 +24,7 @@ LookBase {
   // Where the needle is headed: the chosen tool (live: the hand's position), the level, or zero.
   readonly property real wrapped: ((position % n) + n) % n
   readonly property real target: levelShown ? a0 + level * 2.7
-                                : noteKind !== "" ? a0
+                                : noteKind === "hint" || noteKind === "cant" ? a0
                                 : Math.min(a0 + span, live ? ang(wrapped) : ang(index))
   // The hand drives the needle directly while live; otherwise a spring (k 600, d 28) carries it,
   // except with motion off or across more than 200° (the wrap), where it lands at once.

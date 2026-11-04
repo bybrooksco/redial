@@ -76,6 +76,12 @@ Item {
     function test_one_and_twelve_tools() {
       var one = make(Kit.eight.slice(0, 1))
       compare(one.selection.x, 52)
+      compare(one.ruleEnd, 52 + 7 * 76, "one tool still gets a full rule for the figures, name and sheet")
+      one.noteKind = "turn"; one.note = { name: "Volume", value: 42 }
+      compare(one.selection.x, 52 + 0.42 * 7 * 76, "the level cursor reads 42% of the rule")
+      var two = make(Kit.eight.slice(0, 2))
+      two.noteKind = "turn"; two.note = { name: "Volume", value: 42 }
+      compare(two.selection.x, 52 + 0.42 * 7 * 76)
       var many = make(Kit.twelve())
       verify(many.pitch < 76, "twelve tools fit the plate")
       many.index = 11

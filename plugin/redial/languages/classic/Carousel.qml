@@ -20,7 +20,9 @@ LookBase {
   readonly property real x0: u(52)
   // 76 units between tools, closer when more than eight would run off the plate.
   readonly property real pitch: n > 1 ? Math.min(u(76), (width - 2 * x0) / (n - 1)) : u(76)
-  readonly property real ruleEnd: x0 + pitch * (n - 1)
+  // The rule is never shorter than eight tools' worth, so with one or two tools the level's figures,
+  // the name row and the sheet number still have room.
+  readonly property real ruleEnd: x0 + Math.max(pitch * (n - 1), u(76) * 7)
   readonly property real ruleTop: u(34)
   readonly property real ruleBot: u(98)
   readonly property real mid: (ruleTop + ruleBot) / 2
@@ -39,7 +41,7 @@ LookBase {
     stepEase.enabled = true
   }
   onLiveChanged: if (!live) { stepEase.enabled = false; steppedP = index; stepEase.enabled = true }
-  readonly property real cursorX: levelShown ? x0 + level / 100 * pitch * (n - 1)
+  readonly property real cursorX: levelShown ? x0 + level / 100 * (ruleEnd - x0)
                                  : noteKind === "hint" ? x0
                                  : x0 + Math.min(n - 1, live ? wrapped : steppedP) * pitch
 

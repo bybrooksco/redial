@@ -23,7 +23,7 @@ LookBase {
 
   readonly property real wrapped: ((position % n) + n) % n
   readonly property real target: levelShown ? a0 + level * 2.7
-                                : noteKind !== "" ? a0
+                                : noteKind === "hint" || noteKind === "cant" ? a0
                                 : Math.min(a0 + span, live ? ang(wrapped) : ang(index))
   readonly property bool springs: !live && cfg.motionBase > 0
   property real needleDeg: a0

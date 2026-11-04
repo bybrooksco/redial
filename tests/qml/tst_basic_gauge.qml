@@ -33,7 +33,9 @@ Item {
     }
     function test_turn_without_value_keeps_ring() {
       var look = make()
+      look.index = 3
       look.noteKind = "turn"; look.note = { name: "Tabs" }
+      compare(look.target, look.ang(3), "the needle stays on the chosen tool, not at zero")
       compare(look.litCount, 0); compare(look.stateDrawn, "ring")
       verify(look.selection.visible)
     }

@@ -434,7 +434,7 @@ Item {
       visible: root.layout !== "omarchy"   // every other layout is a language look
       // Classic is landscape because its callout column sits beside the dial;
       // the capsule face carries its callout on the rim and so is square.
-      readonly property bool classic: cfg.face === "classic" && root.layout === "dial"
+      readonly property bool classic: root.layout === "dial" && LookResolve.drawsClassic(faceLoader.source)
       // A language look that declares its size draws its own plate, marks and title block; the
       // host adds only the callout column when the look asks for it (languages/README.md).
       readonly property var look: faceLoader.item
@@ -502,7 +502,7 @@ Item {
       // Corner registration marks belong to the rectangular plate; a disc has
       // no corners to register.
       Repeater {
-        model: (cfg.plate === "rect" && cfg.registrationMarks) ? 4 : 0
+        model: (cfg.plate === "rect" && cfg.registrationMarks && !plate.ownPlate) ? 4 : 0
         delegate: Item {
           id: mark
           required property int index
@@ -545,7 +545,7 @@ Item {
         // look it lacks draws its defaultLook, and a look that fails to load draws the default
         // (then re:dial classic's Classic) so the overlay is never blank.
         property bool languageLook: false
-        property bool failed: false
+        property int failed: 0   // load attempts that failed: see LookResolve.resolve
         function reload() {
           var name = LookResolve.lookName(root.layout, cfg.face)
           var file = name === "" ? "" : LookResolve.resolve(languageLoader.dir, root.language, name, failed)
@@ -553,19 +553,19 @@ Item {
           if (file === "") { setSource(""); return }
           setSource(file, { "cfg": cfg })
         }
-        onStatusChanged: if (faceLoader.status === Loader.Error && !faceLoader.failed) { faceLoader.failed = true; faceLoader.reload() }
+        onStatusChanged: if (faceLoader.status === Loader.Error && faceLoader.failed < 2) { faceLoader.failed += 1; faceLoader.reload() }
         Component.onCompleted: reload()
         Connections {
           target: cfg
-          function onFaceChanged() { faceLoader.failed = false; faceLoader.reload() }
+          function onFaceChanged() { faceLoader.failed = 0; faceLoader.reload() }
         }
         Connections {
           target: root
-          function onLayoutChanged() { faceLoader.failed = false; faceLoader.reload() }
+          function onLayoutChanged() { faceLoader.failed = 0; faceLoader.reload() }
         }
         Connections {
           target: languageLoader
-          function onLoaded() { faceLoader.failed = false; faceLoader.reload() }
+          function onLoaded() { faceLoader.failed = 0; faceLoader.reload() }
         }
         onLoaded: {
             item.tools = Qt.binding(function () { return root.tools })

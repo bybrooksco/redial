@@ -36,6 +36,16 @@ TestCase {
     compare(LookResolve.resolve("languages/basic", basic, "capsule", true), guard)
   }
 
+  // Attempts count up: 0 the configured look, 1 the default, 2 the guard.
+  function test_failed_look_then_failed_default_is_the_crash_guard() {
+    compare(LookResolve.resolve("languages/basic", basic, "pie", 1), "languages/basic/Capsule.qml")
+    compare(LookResolve.resolve("languages/basic", basic, "pie", 2), guard, "pie failed, then capsule failed")
+  }
+  function test_drawsClassic_is_the_file_drawn_not_the_face_named() {
+    verify(LookResolve.drawsClassic("file:///x/languages/classic/Classic.qml"))
+    verify(!LookResolve.drawsClassic("file:///x/languages/basic/Capsule.qml"), "basic with face classic draws Capsule")
+    verify(!LookResolve.drawsClassic(""))
+  }
   function test_null_language_is_the_crash_guard() {
     compare(LookResolve.resolve("languages/basic", null, "pie", false), guard)
   }
