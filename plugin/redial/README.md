@@ -275,7 +275,8 @@ and every number is clamped to a safe range (text or true/false means the defaul
 | `reduce_motion` | Turn off sliding and scaling on the dial display; everything moves instantly. The overlay still fades in and out briefly, which moves nothing. | `false` | true / false |
 | `deadzone` | Ignore small turns: after a pause the dial must turn this many counts before anything happens, so a bump or a tremor does nothing. A deliberate turn loses only that lead-in (the counts are released together, not dropped). `0` is off. | `0` | 0 to 100 |
 | `menu_latch` | Tap menu: hold until the menu opens, let go, then turn and click to choose. Turning while still holding works as before. For anyone who cannot hold and turn at once. | `false` | true / false |
-| `menu_timeout_ms` | How long an untouched tap menu waits before closing without changing anything. | `8000` | 3000 to 12000 |
+| `menu_timeout_ms` | How long an untouched tap menu waits before closing without changing anything. A slider on the Feel page. | `8000` | 3000 to 12000 |
+| `keep_awake` | Stops the dial's 5-minute sleep while it is connected (a silent read once a minute). Uses more battery. Experimental. | `false` | true / false |
 
 Notes:
 

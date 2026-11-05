@@ -303,6 +303,81 @@ Item {
     }
   }
 
+  // A number on a scale: drag, or arrow keys when focused. Saves on release, not every step.
+  component SliderRow: Column {
+    id: sliderRow
+    property var cfg
+    property string title: ""
+    property string help: ""
+    property real from: 0
+    property real to: 1
+    property real stepSize: 1
+    property real current: 0
+    property var format: function (v) { return String(v) }
+    signal picked(real value)
+    onCurrentChanged: slider.value = current  // dragging breaks the binding; follow outside edits
+    width: parent ? parent.width : 0
+    spacing: Style.space(6)
+
+    Text {
+      text: sliderRow.title + "   " + sliderRow.format(slider.value)
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      font.bold: true
+      font.capitalization: Font.AllUppercase
+      font.letterSpacing: Style.space(1.2)
+      color: sliderRow.cfg.soft(0.6)
+    }
+
+    Slider {
+      id: slider
+      width: parent.width
+      height: Style.space(32)
+      from: sliderRow.from
+      to: sliderRow.to
+      stepSize: sliderRow.stepSize
+      snapMode: Slider.SnapAlways
+      value: sliderRow.current
+      Accessible.name: sliderRow.title
+      function commit() { if (value !== sliderRow.current) sliderRow.picked(value) }
+      onPressedChanged: if (!pressed) commit()
+      onMoved: if (!pressed) commit()  // keyboard steps
+      background: Rectangle {
+        x: slider.leftPadding
+        y: slider.topPadding + slider.availableHeight / 2 - height / 2
+        width: slider.availableWidth
+        height: Math.max(1, Style.space(1))
+        color: Util.alpha(sliderRow.cfg.lineColor, 0.55)
+        Rectangle {
+          width: slider.visualPosition * parent.width
+          height: Math.max(2, Style.space(2))
+          anchors.verticalCenter: parent.verticalCenter
+          color: sliderRow.cfg.accentColor
+        }
+      }
+      handle: Rectangle {
+        x: slider.leftPadding + slider.visualPosition * (slider.availableWidth - width)
+        y: slider.topPadding + slider.availableHeight / 2 - height / 2
+        implicitWidth: Style.space(18)
+        implicitHeight: Style.space(18)
+        radius: width / 2
+        color: slider.pressed ? sliderRow.cfg.accentColor : "transparent"
+        border.width: slider.activeFocus ? Math.max(2, Style.space(2)) : Math.max(1, Style.space(1))
+        border.color: slider.activeFocus || slider.pressed ? sliderRow.cfg.accentColor : sliderRow.cfg.lineColor
+      }
+    }
+
+    Text {
+      width: parent.width
+      wrapMode: Text.WordWrap
+      visible: text !== ""
+      text: sliderRow.help
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      color: sliderRow.cfg.soft(0.5)
+    }
+  }
+
   // One colour role as a grid of swatches: Auto (the colour scheme's own), the theme's roles and
   // its 16 slots. A hex written by hand matches no swatch, and the note says so.
   component SwatchRow: Column {
@@ -2034,16 +2109,26 @@ Item {
               current: root.cfgValue("menu_latch", false)
               onPicked: key => root.setConfigKey("menu_latch", key)
             }
-            ChoiceRow {
+            SliderRow {
               visible: root.page === "feel" && root.cfgValue("menu_latch", false) === true
               cfg: root.cfg
               title: "Tap menu closes after"
-              unit: " ms"
               help: "How long an untouched tap-menu waits before closing without changing anything."
-              options: [ { key: 5000, label: "5 s" }, { key: 8000, label: "8 s" },
-                         { key: 12000, label: "12 s" } ]
+              from: 3000
+              to: 12000
+              stepSize: 500
               current: root.cfgValue("menu_timeout_ms", 8000)
-              onPicked: key => root.setConfigKey("menu_timeout_ms", key)
+              format: v => (v / 1000).toFixed(1) + " s"
+              onPicked: value => root.setConfigKey("menu_timeout_ms", value)
+            }
+            ChoiceRow {
+              visible: root.page === "feel"
+              cfg: root.cfg
+              title: "Keep the dial awake"
+              help: "The dial sleeps after 5 minutes untouched, and only a press wakes it. On keeps it awake while this computer is on and the dial is connected. Uses more battery. Experimental: not yet proven on the dial."
+              options: [ { key: false, label: "Off" }, { key: true, label: "On" } ]
+              current: root.cfgValue("keep_awake", false)
+              onPicked: key => root.setConfigKey("keep_awake", key)
             }
 
             // What a single / double / triple click does with any tool (unless the tool has its own,

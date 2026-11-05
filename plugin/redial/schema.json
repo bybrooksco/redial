@@ -50,6 +50,7 @@
         { "key": "hold_ms", "type": "number", "default": 400, "min": 200, "max": 1500, "step": 50, "unit": "ms", "label": "Hold to open the tool menu" },
         { "key": "menu_latch", "type": "bool", "default": false, "label": "Tap menu", "help": "Let go once it opens, then turn and click to choose." },
         { "key": "menu_timeout_ms", "type": "number", "default": 8000, "min": 3000, "max": 12000, "step": 500, "unit": "ms", "label": "Tap menu closes after" },
+        { "key": "keep_awake", "type": "bool", "default": false, "label": "Keep the dial awake", "help": "Stops the 5-minute sleep while this computer is on and the dial is connected. Uses more battery. Experimental." },
         { "key": "return_buzz", "type": "bool", "default": true, "label": "Buzz on return to Volume" },
         { "key": "osd", "type": "bool", "default": true, "label": "Show what turning does", "help": "Levels, window names and track position on screen." },
         { "key": "guide", "type": "bool", "default": true, "label": "Hints while you learn" },

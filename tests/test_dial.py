@@ -2557,6 +2557,50 @@ class StatusLoop(Base):
         self.assertEqual(writes, [80, 79])
 
 
+    def test_keep_awake_pokes_once_a_minute_only_when_on_and_attached(self):
+        fx = Fixture(self)
+        fx.set(m, "dial_bluetooth", lambda: (True, 80))
+        fx.set(m, "write_status", lambda doc: None)
+        fx.set(m, "kick_dial", lambda *a: None)  # never touch the real Bluetooth link
+
+        def pokes(cfg, attached):
+            now, sent = [0.0], []
+            fx.set(m.time, "monotonic", lambda: now[0])
+            fx.set(m, "HAPTIC", types.SimpleNamespace(keep_awake=lambda: sent.append(now[0])))
+            fx.set(m, "live_config", lambda: cfg)
+            fx.set(m, "_status", {"attached": attached})
+
+            def sleep(secs):  # each pass is 30 s; stop after t=0, 30, 60
+                now[0] += 30
+                if now[0] > 60:
+                    raise StopLoop
+
+            fx.set(m.time, "sleep", sleep)
+            with self.assertRaises(StopLoop):
+                m.status_loop(interval=0)
+            return sent
+
+        self.assertEqual(pokes({}, True), [])  # off by default
+        self.assertEqual(pokes({"keep_awake": True}, False), [])  # asleep: nothing to keep up
+        self.assertEqual(pokes({"keep_awake": True}, True), [0.0, 60.0])
+
+    def test_haptics_worker_turns_the_sentinel_into_a_silent_read(self):
+        h = m.Haptics.__new__(m.Haptics)  # no worker thread
+        calls, items = [], [None, (3, 120)]
+        h.q = types.SimpleNamespace(
+            put_nowait=items.append, get=lambda: items.pop(0) if items else (_ for _ in ()).throw(StopLoop)
+        )
+        items.clear()
+        h._open = lambda: True
+        h._fire = lambda *p: calls.append(p)
+        h._poke = lambda: calls.append("poke")
+        h.keep_awake()
+        items.append((3, 120))
+        with self.assertRaises(StopLoop):
+            h._worker()
+        self.assertEqual(calls, ["poke", (3, 120)])
+
+
 class StuckWatchTest(Base):
     def test_kicks_only_after_stuck_window_then_backs_off_and_resets_on_attach(self):
         w = m.StuckWatch()

@@ -298,6 +298,11 @@ MENU_STEP = 60  # counts per menu-highlight change
 # --- haptics --------------------------------------------------------------
 HAPTIC_WAVEFORM = 3  # ordinal 3 == CLICK; 4 and 5 feel the same, unused
 HAPTIC_MIN_GAP = 0.10  # never fire ticks closer than this, or they smear.
+# Keep-awake: the firmware sleeps 5:00 after the last touch (daemon log, 7 drops, 2026-10/11).
+# A silent GET_FEATURE of report 0x02 (the haptic waveform list) is read well inside that.
+# shortcut: unproven that a host read resets the firmware timer; test with the dial, then drop "Experimental".
+KEEP_AWAKE_S = 60.0
+HIDIOCGFEATURE_64 = (3 << 30) | (64 << 16) | (ord("H") << 8) | 0x07
 # 100ms is the measured floor: clicks stayed countable
 # down to group E (100ms) in hand testing 2026-08-28.
 
@@ -1553,12 +1558,34 @@ class Haptics:
                 pass
             self.fd = None
 
+    def _poke(self):
+        """Read feature report 0x02: no motor, no input, just traffic on the link."""
+        buf = bytearray(64)
+        buf[0] = 0x02
+        try:
+            fcntl.ioctl(self.fd, HIDIOCGFEATURE_64, buf)
+            self.poke_warned = False
+        except OSError as exc:
+            if not getattr(self, "poke_warned", False):
+                log(f"keep-awake read failed ({exc}); keep_awake does nothing until it works")
+            self.poke_warned = True
+
     def _worker(self):
         while True:
-            repeat, period = self.q.get()
+            pattern = self.q.get()
             if not self._open():
                 continue
-            self._fire(repeat, period)
+            if pattern is None:
+                self._poke()
+            else:
+                self._fire(*pattern)
+
+    def keep_awake(self):
+        """Queue one silent keep-awake read (handled by the worker, which owns the fd)."""
+        try:
+            self.q.put_nowait(None)
+        except queue.Full:
+            pass
 
     def fire(self, pattern, rate_limit=True):
         """Queue one haptic pattern. A pattern is a single output report --
@@ -4711,9 +4738,13 @@ def kick_dial(why="self-heal: Bluetooth connected but no input device"):
 
 def status_loop(interval=5):
     """Keep status.json current: on any change, and as a heartbeat otherwise."""
-    last_doc, last_at = None, 0.0
+    last_doc, last_at, last_poke = None, 0.0, -math.inf
     stuck = StuckWatch()
     while True:
+        if _status["attached"] and live_bool("keep_awake", False):
+            if time.monotonic() - last_poke >= KEEP_AWAKE_S:
+                HAPTIC.keep_awake()
+                last_poke = time.monotonic()
         connected, battery = dial_bluetooth()
         if stuck.feed(connected, _status["attached"], time.monotonic()):
             kick_dial()
