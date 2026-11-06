@@ -52,6 +52,7 @@ Item {
     Text {
       id: titleText
       width: parent.width; elide: Text.ElideRight
+      wrapMode: Text.WordWrap; maximumLineCount: 2
       text: card.title; textFormat: Text.PlainText
       font.family: card.host.face; font.pixelSize: card.host.u(15); font.weight: Font.DemiBold
       color: card.host.tone.ink
