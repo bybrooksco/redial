@@ -39,16 +39,16 @@ LookBase {
   NumberAnimation { id: release; target: look; property: "releaseT"; from: 0; to: 1; duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: look.easeDrawer }
   onLiveChanged: {
     if (live) { release.stop(); releaseT = 1; return }
-    var from = -position * step, rest = -_holes * step
-    _holes += Math.round((from - rest) / 360) * -360 / step
+    var from = position * step, rest = _holes * step
+    _holes += Math.round((from - rest) / 360) * 360 / step
     _releaseFrom = from
     if (cfg.motionBase > 0) release.restart(); else releaseT = 1
   }
-  readonly property real restDeg: noteKind === "cant" || noteKind === "hint" ? 0 : -_holes * step
-  readonly property real wheelDeg: live ? -position * step
+  readonly property real restDeg: noteKind === "cant" || noteKind === "hint" ? 0 : _holes * step
+  readonly property real wheelDeg: live ? position * step
                                  : releaseT < 1 ? _releaseFrom + (restDeg - _releaseFrom) * releaseT
                                  : restDeg
-  readonly property real turned: ((-wheelDeg % 360) + 360) % 360
+  readonly property real turned: ((wheelDeg % 360) + 360) % 360
   readonly property int picked: live ? Math.round(((position % n) + n) % n) % n : chosen
 
   // ---- the dial (ring, hint, can't act) ----
@@ -65,7 +65,7 @@ LookBase {
       model: look.tools.length
       delegate: Rectangle {
         required property int index
-        readonly property var at: Basic.polar(look.c, look.c, look.u(114), look.stop + index * look.step)
+        readonly property var at: Basic.polar(look.c, look.c, look.u(114), look.stop - index * look.step)
         x: at[0] - width / 2; y: at[1] - height / 2; width: look.u(50); height: width; radius: width / 2
         color: look.p.hole
       }
@@ -77,7 +77,7 @@ LookBase {
     delegate: Text {
       id: g
       required property int index
-      readonly property var at: Basic.polar(look.c, look.c, look.u(114), look.stop + g.index * look.step + look.wheelDeg)
+      readonly property var at: Basic.polar(look.c, look.c, look.u(114), look.stop - g.index * look.step + look.wheelDeg)
       x: at[0] - width / 2; y: at[1] - height / 2
       visible: look.cfg.showGlyphs
       opacity: look.noteKind === "cant" ? 0.3 : 1

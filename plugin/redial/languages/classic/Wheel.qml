@@ -39,16 +39,16 @@ LookBase {
   NumberAnimation { id: release; target: face; property: "releaseT"; from: 0; to: 1; duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.32, 0.72, 0, 1, 1, 1] }
   onLiveChanged: {
     if (live) { release.stop(); releaseT = 1; return }
-    var from = -position * step, rest = -_holes * step
-    _holes += Math.round((from - rest) / 360) * -360 / step   // the rest angle nearest the hand
+    var from = position * step, rest = _holes * step
+    _holes += Math.round((from - rest) / 360) * 360 / step   // the rest angle nearest the hand
     _releaseFrom = from
     if (cfg.motionBase > 0) release.restart(); else releaseT = 1
   }
-  readonly property real restDeg: noteKind === "cant" || noteKind === "hint" ? 0 : -_holes * step
-  readonly property real wheelDeg: live ? -position * step
+  readonly property real restDeg: noteKind === "cant" || noteKind === "hint" ? 0 : _holes * step
+  readonly property real wheelDeg: live ? position * step
                                  : releaseT < 1 ? _releaseFrom + (restDeg - _releaseFrom) * releaseT
                                  : restDeg
-  readonly property real turned: ((-wheelDeg % 360) + 360) % 360
+  readonly property real turned: ((wheelDeg % 360) + 360) % 360
 
   readonly property var leadFrom: levelShown ? Drafting.polar(cx, cy, u(160), -90 + level * 3.6) : Drafting.polar(cx, cy, u(141), stop)
   readonly property var leadKnee: levelShown ? Drafting.polar(cx, cy, u(184), -90 + level * 3.6) : Drafting.polar(cx, cy, u(186), stop)
@@ -110,7 +110,7 @@ LookBase {
         ctx.reset()
         Drafting.ring(ctx, c, c, face.u(150), L, 0.5, 1.2)
         for (var i = 0; i < face.tools.length; i++) {
-          var h = Drafting.polar(c, c, face.u(112), face.stop + i * face.step)
+          var h = Drafting.polar(c, c, face.u(112), face.stop - i * face.step)
           Drafting.ring(ctx, h[0], h[1], face.u(24), L, 0.55, 1)
           Drafting.line(ctx, h[0] - face.u(28), h[1], h[0] - face.u(24), h[1], L, 0.3, 1)
           Drafting.line(ctx, h[0] + face.u(24), h[1], h[0] + face.u(28), h[1], L, 0.3, 1)
@@ -122,7 +122,7 @@ LookBase {
       delegate: Text {
         id: glyph
         required property int index
-        readonly property var at: Drafting.polar(0, 0, face.u(112), face.stop + glyph.index * face.step)
+        readonly property var at: Drafting.polar(0, 0, face.u(112), face.stop - glyph.index * face.step)
         x: at[0] - width / 2; y: at[1] - height / 2
         rotation: -face.wheelDeg
         visible: face.cfg.showGlyphs

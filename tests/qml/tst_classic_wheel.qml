@@ -40,7 +40,7 @@ Item {
     function test_selection_follows_index() {
       var look = make()
       look.index = 3
-      compare(look.selection.rotation, -3 * 45)
+      compare(look.selection.rotation, 3 * 45)
       compare(look.turned, 135)
     }
 
@@ -48,7 +48,7 @@ Item {
       var look = make(Kit.eight, movingComponent)
       look.live = true
       look.position = 2.5
-      compare(look.selection.rotation, -2.5 * 45, "the wheel is the hand")
+      compare(look.selection.rotation, 2.5 * 45, "the wheel is the hand")
     }
 
     function test_release_spins_to_the_chosen_hole() {
@@ -57,8 +57,8 @@ Item {
       look.index = 3
       look.position = 2.6
       look.live = false
-      verify(Math.abs(look.selection.rotation - (-3 * 45)) > 1, "it eases, not snaps")
-      tryCompare(look.selection, "rotation", -3 * 45, 1000)
+      verify(Math.abs(look.selection.rotation - (3 * 45)) > 1, "it eases, not snaps")
+      tryCompare(look.selection, "rotation", 3 * 45, 1000)
     }
 
     function test_turn_with_value_lights_scale() {
@@ -91,7 +91,7 @@ Item {
       compare(one.selection.rotation, 0)
       var many = make(Kit.twelve())
       many.index = 11
-      compare(many.selection.rotation, 30, "11 of 12 is one hole back, the short way")
+      compare(many.selection.rotation, -30, "11 of 12 is one hole back, the short way")
     }
 
     function test_markup_name_is_plain() {
