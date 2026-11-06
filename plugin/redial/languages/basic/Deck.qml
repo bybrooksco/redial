@@ -66,6 +66,7 @@ LookBase {
       id: cardItem
       host: look
       framed: false
+      stateLines: 3
       maxWidth: look.cardW
       y: look.u(40)
     }

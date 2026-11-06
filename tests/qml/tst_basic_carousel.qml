@@ -83,5 +83,11 @@ Item {
       var look = make()
       verify(look.card.y > 100); verify(look.card.y + look.card.height <= look.height)
     }
+      function test_tool_count_change_keeps_the_choice_centred() {
+      var look = make()
+      look.live = true; look.position = 9; look.index = 1; look.live = false   // a full turn and one
+      look.tools = Kit.eight.slice(0, 5)
+      compare(centreSlot(look).tool, 1)
+    }
   }
 }

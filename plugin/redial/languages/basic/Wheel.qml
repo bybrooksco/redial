@@ -46,6 +46,12 @@ LookBase {
     _releaseFrom = from
     if (cfg.motionBase > 0) release.restart(); else releaseT = 1
   }
+  // A new tool list (Settings edits it while the look stays loaded): land on the choice at once.
+  onNChanged: {
+    var to = Math.max(0, Math.min(index, n - 1))
+    release.stop(); releaseT = 1
+    _holes = to; _lastIndex = to
+  }
   readonly property real restDeg: noteKind === "cant" || noteKind === "hint" ? 0 : _holes * step
   readonly property real wheelDeg: live ? position * step
                                  : releaseT < 1 ? _releaseFrom + (restDeg - _releaseFrom) * releaseT

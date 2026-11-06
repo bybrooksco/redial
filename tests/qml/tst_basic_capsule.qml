@@ -114,5 +114,30 @@ Item {
       verify(look.card.x + look.card.width <= look.width, "card right edge " + (look.card.x + look.card.width))
     }
     function test_track_is_segmented() { compare(make().segmented, true) }
+      function test_tool_count_change_lands_on_the_choice() {
+      var look = make()
+      look.index = 2
+      tryCompare(look.selection, "rotation", 90, 1000)
+      look.tools = Kit.eight.slice(0, 5)
+      compare(look.selection.rotation, 2 * 72, "re-based to the new spacing at once")
+      look.index = 3
+      tryCompare(look.selection, "rotation", 3 * 72, 1000)
+    }
+    function test_tool_count_shrinking_under_the_choice_clamps() {
+      var look = make()
+      look.index = 7
+      tryCompare(look.selection, "rotation", -45, 1000)
+      look.tools = Kit.eight.slice(0, 3)
+      compare(look.chosen, 2)
+      verify(Math.abs((((look.selection.rotation % 360) + 360) % 360) - 240) < 0.6, "marker on tool 2: " + look.selection.rotation)
+    }
+    function test_long_hint_wraps_instead_of_cutting() {
+      var look = make()
+      look.noteKind = "hint"
+      look.note = { prompt: "Too fast or slow? Menu > Setup > re:dial > Feel", line: "This app turns scrolling into prompt history", gesture: "press" }
+      var t = Kit.texts(look.card)
+      for (var i = 0; i < t.length; i++) if (t[i].visible) compare(t[i].truncated, false, "'" + t[i].text + "' is cut")
+      verify(look.card.y >= 0 && look.card.y + look.card.height <= look.height, "the card stays on the plate")
+    }
   }
 }

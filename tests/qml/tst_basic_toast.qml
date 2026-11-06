@@ -69,5 +69,10 @@ Item {
       compare(look.card.title, "Volume")
       verify(look.card.x + look.card.width <= look.width)
     }
+      function test_a_long_hint_uses_the_whole_pill() {
+      var look = make()
+      look.noteKind = "hint"; look.note = { prompt: "Too fast or slow? Menu > Setup > re:dial > Feel", gesture: "press" }
+      verify(look.card.width > look.card.maxWidth - 1, look.card.width + " < " + look.card.maxWidth)
+    }
   }
 }

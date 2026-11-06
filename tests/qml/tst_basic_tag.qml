@@ -91,5 +91,12 @@ Item {
       var t = Kit.texts(look)
       for (var i = 0; i < t.length; i++) compare(t[i].textFormat, Text.PlainText)
     }
+      function test_tool_count_change_keeps_the_choice_in_the_middle() {
+      var look = make()
+      look.live = true; look.position = 9; look.index = 1; look.live = false   // a full turn and one
+      look.tools = Kit.eight.slice(0, 5)
+      compare(middleRow(look).tool, 1)
+      compare(middleRow(look).on, true)
+    }
   }
 }

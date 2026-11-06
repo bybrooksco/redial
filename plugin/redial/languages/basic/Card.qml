@@ -28,7 +28,14 @@ Item {
 
   readonly property real pad: host.u(12)
   readonly property real signSize: host.u(28)
-  readonly property real textNatural: Math.max(titleText.implicitWidth, lineText.implicitWidth,
+  // A hint or can't act is an instruction: it wraps rather than cut (a one-line card still elides).
+  readonly property bool says: kind === "hint" || kind === "cant"
+  property int stateLines: 4          // a fixed-height card (Deck) asks for fewer
+  readonly property int lines: says && titleLines > 1 ? stateLines : titleLines
+  // Measured apart from the laid-out text, whose implicitWidth is already elided to the card.
+  TextMetrics { id: titleNat; font: titleText.font; text: card.title }
+  TextMetrics { id: lineNat; font: lineText.font; text: card.line }
+  readonly property real textNatural: Math.max(titleNat.advanceWidth, lineNat.advanceWidth,
                                                dotCount > 0 ? dots.implicitWidth : 0)
   readonly property real lead: signShown ? signSize + host.u(10) : 0
   implicitWidth: Math.min(maxWidth, Math.max(host.u(104), lead + textNatural + 2 * pad))
@@ -57,7 +64,7 @@ Item {
     Text {
       id: titleText
       width: parent.width; elide: Text.ElideRight
-      wrapMode: Text.WordWrap; maximumLineCount: card.titleLines
+      wrapMode: Text.WordWrap; maximumLineCount: card.lines
       text: card.title; textFormat: Text.PlainText
       font.family: card.host.face; font.pixelSize: card.host.u(15); font.weight: Font.DemiBold
       color: card.host.tone.ink
@@ -65,6 +72,7 @@ Item {
     Text {
       id: lineText
       width: parent.width; elide: Text.ElideRight
+      wrapMode: Text.WordWrap; maximumLineCount: card.says && card.titleLines > 1 ? 3 : 1
       visible: text !== ""
       text: card.line; textFormat: Text.PlainText
       font.family: card.host.face; font.pixelSize: card.host.u(10.5)

@@ -40,6 +40,12 @@ LookBase {
     stepEase.enabled = false; steppedPos = position; stepEase.enabled = true
     steppedPos = chosen + n * Math.round((position - chosen) / n)
   }
+  // A new tool list (Settings edits it while the look stays loaded): land on the choice at once.
+  onNChanged: {
+    var to = Math.max(0, Math.min(index, n - 1))
+    stepEase.enabled = false; steppedPos = to; stepEase.enabled = true
+    _lastIndex = to
+  }
   readonly property real listPos: live ? position : steppedPos
   readonly property int base: Math.floor(listPos)
   readonly property real frac: listPos - base

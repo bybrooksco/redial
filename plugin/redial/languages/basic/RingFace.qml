@@ -45,6 +45,12 @@ LookBase {
     var want = chosen * seg
     steppedDeg = want + 360 * Math.round((liveDeg - want) / 360)
   }
+  // A new tool list (Settings edits it while the look stays loaded): land on the choice at once.
+  function _rebase() {
+    var to = Math.max(0, Math.min(index, n - 1))   // index, not chosen: the binding can lag
+    stepEase.enabled = false; steppedDeg = to * 360 / n; stepEase.enabled = true
+    _lastIndex = to
+  }
   readonly property real markerDeg: live ? liveDeg : steppedDeg
 
   readonly property Item selection: marker
@@ -147,7 +153,7 @@ LookBase {
   function repaint() { track.requestPaint(); fill.requestPaint(); markerArt.requestPaint() }
   onWidthChanged: repaint()
   onHeightChanged: repaint()
-  onNChanged: repaint()
+  onNChanged: { _rebase(); repaint() }
   onToneChanged: repaint()
   onSegmentedChanged: repaint()
   onLevelChanged: fill.requestPaint()

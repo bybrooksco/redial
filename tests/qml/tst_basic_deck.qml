@@ -63,5 +63,12 @@ Item {
       var t = Kit.texts(look)
       for (var i = 0; i < t.length; i++) compare(t[i].textFormat, Text.PlainText)
     }
+      function test_a_long_hint_stays_on_the_front_card() {
+      var look = make()
+      look.noteKind = "hint"
+      look.note = { prompt: "Too fast or slow? Menu > Setup > re:dial > Feel", gesture: "press", step: 1, steps: 3 }
+      wait(50)   // let the wrapped column lay out
+      verify(look.card.y + look.card.height <= look.cardH + 0.5, (look.card.y + look.card.height) + " > " + look.cardH)
+    }
   }
 }

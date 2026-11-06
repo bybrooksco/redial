@@ -140,5 +140,11 @@ Item {
       verify(t.length > 0)
       for (var i = 0; i < t.length; i++) compare(t[i].textFormat, Text.PlainText, "Text " + i + " " + t[i].text)
     }
+      function test_tool_count_change_keeps_the_choice_at_the_stop() {
+      var look = make()
+      look.live = true; look.position = 9; look.index = 1; look.live = false   // a full turn and one
+      look.tools = Kit.eight.slice(0, 5)
+      compare(((look.turned % 360) + 360) % 360, 72)
+    }
   }
 }
