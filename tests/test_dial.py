@@ -5391,5 +5391,22 @@ def tool_index_all(name):
     return [t["name"] for t in m.TOOLS].index(name)
 
 
+
+class LanguageFiles(unittest.TestCase):
+    """The shell can't resolve a sibling QML file used as a property type (basic looks drew an empty plate)."""
+
+    def test_no_property_typed_as_a_sibling_qml_file(self):
+        root = os.path.join(HERE, "..", "plugin", "redial", "languages")
+        for lang in sorted(os.listdir(root)):
+            folder = os.path.join(root, lang)
+            if not os.path.isdir(folder):
+                continue
+            names = [f[:-4] for f in os.listdir(folder) if f.endswith(".qml")]
+            pattern = re.compile(r"\bproperty\s+(%s)\b" % "|".join(map(re.escape, names)))
+            for f in names:
+                with open(os.path.join(folder, f + ".qml")) as fh:
+                    hit = pattern.search(fh.read())
+                self.assertIsNone(hit, "%s/%s.qml types a property as %s" % (lang, f, hit and hit.group(1)))
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

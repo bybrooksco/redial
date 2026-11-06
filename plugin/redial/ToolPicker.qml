@@ -597,7 +597,7 @@ Item {
     id: pickedLanguage
     source: "languages/" + root.cfgValue("language", "classic") + "/Language.qml"
   }
-  readonly property var appearanceOptions: LookResolve.offered(pickedLanguage.item).map(LookResolve.option)
+  readonly property var appearanceOptions: LookResolve.offered(pickedLanguage.item).map(function (k) { return LookResolve.option(k, pickedLanguage.item) })
   readonly property string appearanceChoice: {
     var l = (configDoc && configDoc.layout) ? String(configDoc.layout) : "dial"
     var f = (configDoc && configDoc.face) ? String(configDoc.face) : "classic"
@@ -609,7 +609,7 @@ Item {
     var lang = pickedLanguage.item
     if (!lang || !lang.looks) return
     var keys = appearanceOptions.map(function (o) { return o.key })
-    if (keys.indexOf(appearanceChoice) < 0 && lang.defaultLook) setAppearance(LookResolve.option(lang.defaultLook))
+    if (keys.indexOf(appearanceChoice) < 0 && lang.defaultLook) setAppearance(LookResolve.option(lang.defaultLook, lang))
   }
   function setAppearance(opt) {
     writeConfig(function (o) {

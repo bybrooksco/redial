@@ -54,9 +54,11 @@ function validFace(v) {
 }
 
 // A picker option: the config's layout and face written together, so neither is left stale.
-function option(key) {
+// `language` (optional) may rename a look in its own `labels`.
+function option(key, language) {
   var face = FACES.indexOf(key) >= 0
-  return { key: key, label: LABELS[key] || key, layout: face ? "dial" : key, face: face ? key : "" }
+  var own = language && language.labels ? language.labels[key] : undefined
+  return { key: key, label: own || LABELS[key] || key, layout: face ? "dial" : key, face: face ? key : "" }
 }
 
 // The picker key for what the config draws now.

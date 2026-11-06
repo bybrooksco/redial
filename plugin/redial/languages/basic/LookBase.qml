@@ -44,4 +44,18 @@ Item {
   // How far the ring sets back behind a hint and can't act.
   readonly property real ringInk: noteKind === "cant" ? 0.28 : noteKind === "hint" ? 0.5 : 1
   function litOf(n) { return levelShown ? Basic.litCount(note.value, n) : 0 }
+
+  // The quiet track (docs/superpowers/specs/2026-11-06-redial-basic-language-design.md).
+  readonly property real trackW: u(8)
+  readonly property real iconGap: u(20)      // an icon's centre sits this far inside the track's centre line
+  readonly property real iconPx: u(13)
+  readonly property real iconOnPx: u(16)
+  readonly property real plateRadius: u(16)
+  readonly property real trackInk: noteKind === "hint" || noteKind === "cant" ? 0.5 : 1
+  readonly property bool iconsShown: stateDrawn === "ring"
+  // The card's ring line: "3 / 10 · mute".
+  function cardLine(i) {
+    var h = tools[i] ? String(tools[i].hint || "") : ""
+    return (i + 1) + " / " + tools.length + (h !== "" ? " · " + h : "")
+  }
 }

@@ -14,6 +14,8 @@ QtObject {
                                   "sundial": "Sundial.qml", "tag": "Tag.qml", "wheel": "Wheel.qml",
                                   "deck": "Deck.qml", "carousel": "Carousel.qml", "toast": "Toast.qml" })
   readonly property string defaultLook: "capsule"
+  // Picker labels that differ from the shared ones (LookResolve.LABELS): classic's tag is still a Repair tag.
+  readonly property var labels: ({ tag: "List" })
   readonly property int lookCount: Object.keys(looks).length
 
   readonly property var easeOut: [0.23, 1, 0.32, 1, 1, 1]

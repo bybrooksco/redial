@@ -24,6 +24,12 @@ function arc(ctx, cx, cy, r, a0, a1, color, width) {
   ctx.arc(cx, cy, r, a0 * Math.PI / 180, a1 * Math.PI / 180, a1 < a0); ctx.stroke()
 }
 
+// A round-capped straight stroke.
+function bar(ctx, x0, y0, x1, y1, color, width) {
+  ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = "round"
+  ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke()
+}
+
 // The state sign in a size×size box, soft and filled: a hint's gesture in `accent`, can't act in
 // `alert` (asleep: a crescent; otherwise a struck circle).
 function sign(ctx, kind, note, size, accent, alert) {

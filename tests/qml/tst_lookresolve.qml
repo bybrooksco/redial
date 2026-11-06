@@ -92,6 +92,12 @@ TestCase {
     compare(LookResolve.validFace(undefined), "classic")
   }
 
+  function test_option_prefers_the_language_label() {
+    compare(LookResolve.option("tag", { labels: { tag: "List" } }).label, "List")
+    compare(LookResolve.option("tag", null).label, "Repair tag")
+    compare(LookResolve.option("tag", {}).label, "Repair tag")
+  }
+
   function test_option_writes_layout_and_face_together() {
     var o = LookResolve.option("wheel")
     compare(o.label, "Finger wheel"); compare(o.layout, "dial"); compare(o.face, "wheel")
