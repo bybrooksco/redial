@@ -93,9 +93,9 @@ Rules a look follows:
 Besides the tool ring every look draws three states (`noteKind`): turning (a value), a hint, and
 "can't act". re:dial classic draws them in drafting terms: the scale lit to the level with a
 dimension arc, a revision cloud round the hint, section hatching for can't act, and the title block
-naming the state (`NOTE 2/6`, `STATUS: ASLEEP`). re:dial basic draws them inside each look's own
-frame: a meter (lit capsules, a filled pill, punched holes, the sun up its arc), a message with the
-gesture's sign, and for can't act a sign or stamp. Only the `omarchy` layout leaves them to the
+naming the state (`NOTE 2/6`, `STATUS: ASLEEP`). re:dial basic draws them on its track: a level
+fills the track like a progress bar; a hint or can't act mutes the track and shows the sign, with
+the words in the look's card. Only the `omarchy` layout leaves them to the
 desktop's OSD; see the plugin README, "States".
 
 ## re:dial classic
@@ -108,11 +108,18 @@ and scale stay because they carry information.
 
 ## re:dial basic
 
-Soft and filled (round two of the 2026-10-22 mockups; the name is provisional). Every look sits on a
-plate of its own with rounded shapes, tones mixed from the four roles (`Tones.js`: rim, surface,
-card, track, muted, soft, ink, plus a paper set for the tag and the wheel's card), and readable type.
-It ships nine looks and no Classic; `defaultLook` is `capsule`. Three faces are bundled under the
-SIL Open Font License (each folder in `basic/fonts/` has its licence): Barlow Semi Condensed for
-every look, Fraunces for the Sundial, Bricolage Grotesque for the Repair tag. They are static
-weights cut to the Latin range to keep the installer small; a name outside it, or a face that fails
-to load, falls back to the host's font.
+The quiet track (working name; spec: `docs/superpowers/specs/2026-11-06-redial-basic-language-design.md`).
+Every look is **a track, and a marker on it**: one thin track (8 units, the `track` tone, round
+caps), an accent segment marking the choice, each tool's own icon one step (20 units) inside the
+track on that tool's exact position, and one shared card (`Card.qml`) for the words. The looks
+differ only in the track's shape: a segmented ring (Capsule, the default), a ring with a wedge
+(Pie), a ring of holes that turns under a fixed stop (Finger wheel), a half arc with a sun
+(Sundial), a 270° arc (Gauge), a vertical bar (List; its key stays `tag`, and the language's
+`labels` names it), a straight bar (Carousel), a fan of cards (Deck) and a pill (Toast).
+
+Flat theme tones only (`Tones.js`: ground, card, track, muted, ink, accent, onaccent, alert): no
+rims, shadows, outlines or per-look materials. One bundled face, Barlow Semi Condensed, under the
+SIL Open Font License (`basic/fonts/barlow/`), cut to the Latin range; a face that fails to load
+falls back to the host's font. A look's plate keeps its size in every state. Shared pieces:
+`LookBase.qml` (contract properties and the track metrics), `Card.qml`, `Icon.qml`, `Sign.qml`, and
+the two track bases `RingFace.qml` (Capsule, Pie) and `ArcFace.qml` (Sundial, Gauge).

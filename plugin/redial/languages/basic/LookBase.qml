@@ -23,7 +23,6 @@ Item {
 
   function u(px) { return px * unit }
   readonly property var tone: Tones.tones(cfg.roles)
-  readonly property var paperTone: Tones.paper(cfg.roles)
   // The language's face, or the host's when the bundled one did not load.
   readonly property string face: language && language.faceStandard !== "" ? language.faceStandard : fontFamily
   readonly property var easeOut: language ? language.easeOut : [0.23, 1, 0.32, 1, 1, 1]
@@ -41,8 +40,6 @@ Item {
   readonly property string valueText: note.valueText !== undefined ? String(note.valueText) : String(Math.round(level)) + "%"
   readonly property string stateDrawn: noteKind === "hint" ? "hint" : noteKind === "cant" ? "cant"
                                      : levelShown ? "turn" : "ring"
-  // How far the ring sets back behind a hint and can't act.
-  readonly property real ringInk: noteKind === "cant" ? 0.28 : noteKind === "hint" ? 0.5 : 1
   function litOf(n) { return levelShown ? Basic.litCount(note.value, n) : 0 }
 
   // The quiet track (docs/superpowers/specs/2026-11-06-redial-basic-language-design.md).

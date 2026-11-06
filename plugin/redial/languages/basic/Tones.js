@@ -27,19 +27,9 @@ function ratio(a, b) {
 // Whichever of the two reads better on `bg`.
 function onColour(bg, a, b) { return ratio(a, bg) >= ratio(b, bg) ? a : b }
 
-// The standard set: plate (ground), its rim, surfaces, cards, tracks, and text strengths.
+// The set: plate (ground), the card, the track, and text strengths.
 function tones(roles) {
   var g = roles.ground, l = roles.line
-  return { ground: g, rim: mix(g, l, 0.06), surface: mix(g, l, 0.10), card: mix(g, l, 0.13),
-           track: mix(g, l, 0.10), muted: mix(g, l, 0.35), soft: mix(g, l, 0.70), ink: l,
-           accent: roles.accent, onaccent: onColour(roles.accent, g, l), alert: roles.alert }
-}
-
-// The paper set (the repair tag, the wheel's card): the scheme turned over, line-coloured paper
-// with ground-coloured ink, so a tag reads as a real tag on any scheme.
-function paper(roles) {
-  var g = roles.ground, l = roles.line
-  return { paper: l, surface: mix(l, g, 0.10), ink: g, soft: mix(g, l, 0.20), muted: mix(g, l, 0.55),
-           string: mix(g, l, 0.55), hole: mix(g, "#000000", 0.3), chrome: mix(l, g, 0.30),
+  return { ground: g, card: mix(g, l, 0.13), track: mix(g, l, 0.10), muted: mix(g, l, 0.35), ink: l,
            accent: roles.accent, onaccent: onColour(roles.accent, g, l), alert: roles.alert }
 }

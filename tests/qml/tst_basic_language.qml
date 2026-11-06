@@ -24,17 +24,16 @@ TestCase {
   }
 
   function test_bundled_faces_load() {
-    tryVerify(function () { return lang.faceSundial !== "" && lang.faceTag !== "" && lang.faceStandard !== "" }, 3000)
+    tryVerify(function () { return lang.faceStandard !== "" }, 3000)
     compare(lang.faceStandard, "Barlow Semi Condensed")
-    compare(lang.faceSundial, "Fraunces")
+    verify(lang.faceSundial === undefined && lang.faceTag === undefined, "one face only")
   }
 
   function test_tones_step_from_ground_toward_line() {
     var t = Tones.tones(roles)
     compare(t.ground, "#222222"); compare(t.ink, "#c2c2b0")
-    compare(t.rim, Tones.mix("#222222", "#c2c2b0", 0.06))
-    verify(Tones.luminance(t.surface) > Tones.luminance(t.rim) && Tones.luminance(t.card) > Tones.luminance(t.surface))
-    verify(Tones.luminance(t.soft) > Tones.luminance(t.muted))
+    compare(t.track, Tones.mix("#222222", "#c2c2b0", 0.10))
+    verify(Tones.luminance(t.card) > Tones.luminance(t.track) && Tones.luminance(t.muted) > Tones.luminance(t.card))
   }
 
   function test_onaccent_is_the_more_readable_of_ground_and_line() {
@@ -45,12 +44,6 @@ TestCase {
   function test_ratio_matches_the_wcag_formula() {
     compare(Tones.ratio("#000000", "#ffffff").toFixed(2), "21.00")
     compare(Tones.ratio("#777777", "#777777"), 1)
-  }
-
-  function test_paper_turns_the_scheme_over() {
-    var p = Tones.paper(roles)
-    compare(p.paper, "#c2c2b0"); compare(p.ink, "#222222")
-    verify(Tones.luminance(p.hole) < Tones.luminance("#222222"), "a hole is darker than the ground")
   }
 
   function test_labels_rename_tag_only_here() { compare(lang.labels.tag, "List") }

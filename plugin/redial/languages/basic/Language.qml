@@ -1,9 +1,9 @@
 import QtQuick
 
-// re:dial basic: the soft design language (round two). Filled shapes on a rimmed plate instead of
-// lines on vellum: capsules, wedges, discs and cards in tones mixed from the colour scheme
-// (Tones.js), a large readable name in the middle, and bundled faces for the three newest looks.
-// See ../README.md for the look contract.
+// re:dial basic: the quiet track (docs/superpowers/specs/2026-11-06-redial-basic-language-design.md).
+// Every look is a thin track and an accent marker on it, the tools' own icons one step inside the
+// track, and one shared card for the words; looks differ only in the track's shape. Flat theme
+// tones (Tones.js), one face (Barlow Semi Condensed). See ../README.md for the look contract.
 QtObject {
   id: language
   readonly property string name: "re:dial basic"
@@ -27,13 +27,8 @@ QtObject {
   // looks fall back to the host's font.
   // Static weights cut to the Latin range (fonttools instancer + pyftsubset); the full variable
   // fonts are at github.com/google/fonts. Static files keep the weight drawn certain.
-  readonly property FontLoader _fraunces: FontLoader { source: "fonts/fraunces/Fraunces-SemiBold.ttf" }
-  readonly property FontLoader _bricolage: FontLoader { source: "fonts/bricolage/BricolageGrotesque-SemiBold.ttf" }
-  readonly property FontLoader _bricolageBold: FontLoader { source: "fonts/bricolage/BricolageGrotesque-ExtraBold.ttf" }
   readonly property FontLoader _barlow: FontLoader { source: "fonts/barlow/BarlowSemiCondensed-Regular.ttf" }
   readonly property FontLoader _barlowSemi: FontLoader { source: "fonts/barlow/BarlowSemiCondensed-SemiBold.ttf" }
   readonly property FontLoader _barlowBold: FontLoader { source: "fonts/barlow/BarlowSemiCondensed-Bold.ttf" }
-  readonly property string faceSundial: _fraunces.status === FontLoader.Ready ? _fraunces.name : ""
-  readonly property string faceTag: _bricolage.status === FontLoader.Ready ? _bricolage.name : ""
   readonly property string faceStandard: _barlow.status === FontLoader.Ready ? _barlow.name : ""
 }
