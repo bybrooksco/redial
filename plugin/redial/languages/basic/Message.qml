@@ -5,7 +5,7 @@ import "Basic.js" as Basic
 // prompt or title, its line, and step dots for a guided hint.
 Column {
   id: msg
-  required property LookBase host
+  required property Item host
   property real big: 21
   property real small: 14
   property real signSize: 36
