@@ -3,25 +3,27 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "Basic.js" as Basic
 
-// re:dial basic: the Finger wheel look, a rotary phone dial. The wheel is the hand: it follows the
-// dial directly, so the brass ring at the finger stop always frames the armed tool; let go and it
-// spins back onto the chosen hole. The centre is a paper card. Turning is a smaller ring meter.
-// Mockup: WHL in index.html.
+// re:dial basic: the Finger wheel look on the quiet track (spec 2026-11-06). Each tool's icon sits
+// in a hole on the track; the whole track turns with the hand (no easing: the wheel is the hand)
+// under a fixed accent stop, so the hole at the stop is the armed tool. Let go and it eases onto
+// the chosen hole. Clockwise turn, clockwise wheel (54a2e24). The shared card sits at the right.
 LookBase {
   id: look
 
-  readonly property bool meterShown: stateDrawn === "turn"
-  readonly property size plateSize: meterShown ? Qt.size(264, 264) : Qt.size(336, 336)
+  readonly property size plateSize: Qt.size(340, 248)
   readonly property bool wantsCallout: false
   readonly property string kind: "face"
 
-  readonly property var p: paperTone
-  readonly property real c: width / 2
+  readonly property real cx: u(112)
+  readonly property real cy: u(124)
+  readonly property real r: u(76)
   readonly property real stop: 40   // the finger stop, at about 4 o'clock
   readonly property real step: 360 / n
   readonly property int litCount: litOf(100)
   readonly property Item selection: wheel
-  property alias meter: meterArt
+  readonly property alias holes: holeRep
+  readonly property Item stopMark: stopArt
+  readonly property Item card: cardItem
 
   // The chosen hole, counted the short way round so the wheel never spins the long way.
   property real _holes: 0
@@ -51,181 +53,108 @@ LookBase {
   readonly property real turned: ((wheelDeg % 360) + 360) % 360
   readonly property int picked: live ? Math.round(((position % n) + n) % n) % n : chosen
 
-  // ---- the dial (ring, hint, can't act) ----
-  Rectangle { visible: !look.meterShown; anchors.fill: parent; radius: width / 2; color: look.tone.rim }
-  Rectangle { visible: !look.meterShown; anchors.fill: parent; anchors.margins: look.u(8); radius: width / 2; color: look.tone.ground }
+  Rectangle { z: -1; anchors.fill: parent; radius: look.plateRadius; color: look.tone.ground }
+
+  // A level fills the track from the top, clockwise; the wheel's holes hide meanwhile.
+  Canvas {
+    id: fill
+    z: 1
+    anchors.fill: parent
+    visible: look.levelShown
+    renderStrategy: Canvas.Cooperative
+    onPaint: {
+      var ctx = getContext("2d")
+      ctx.reset()
+      if (look.level > 0) Basic.arc(ctx, look.cx, look.cy, look.r, -90, -90 + look.level * 3.6, String(look.tone.accent), look.trackW)
+    }
+  }
+
+  // The wheel: the track and its holes, turned by the hand.
   Item {
     id: wheel
-    visible: !look.meterShown
-    anchors.fill: parent
+    x: look.cx; y: look.cy
     rotation: look.wheelDeg
-    opacity: look.noteKind === "cant" ? 0.3 : 1
-    Rectangle { anchors.fill: parent; anchors.margins: look.u(18); radius: width / 2; color: look.tone.surface }
+    Canvas {
+      id: trackArt
+      width: look.r * 2 + look.trackW * 2; height: width
+      x: -width / 2; y: -height / 2
+      opacity: look.trackInk
+      renderStrategy: Canvas.Cooperative
+      onPaint: {
+        var ctx = getContext("2d"), c = width / 2
+        ctx.reset()
+        ctx.beginPath(); ctx.strokeStyle = String(look.tone.track); ctx.lineWidth = look.trackW
+        ctx.arc(c, c, look.r, 0, Math.PI * 2); ctx.stroke()
+      }
+    }
     Repeater {
+      id: holeRep
       model: look.tools.length
-      delegate: Rectangle {
+      delegate: Item {
+        id: hole
         required property int index
-        readonly property var at: Basic.polar(look.c, look.c, look.u(114), look.stop - index * look.step)
-        x: at[0] - width / 2; y: at[1] - height / 2; width: look.u(50); height: width; radius: width / 2
-        color: look.p.hole
+        readonly property real a: (look.stop - hole.index * look.step) * Math.PI / 180
+        readonly property bool on: hole.index === look.picked
+        width: look.u(26); height: width
+        x: Math.cos(a) * look.r - width / 2; y: Math.sin(a) * look.r - height / 2
+        visible: look.iconsShown
+        Rectangle {
+          anchors.fill: parent; radius: width / 2
+          color: look.tone.ground
+          border.color: hole.on ? look.tone.accent : look.tone.track
+          border.width: hole.on ? look.u(2.5) : look.u(1.5)
+        }
+        Icon {
+          host: look; i: hole.index; on: hole.on
+          px: look.iconPx
+          cx: hole.width / 2; cy: hole.height / 2
+          rotation: -look.wheelDeg
+        }
       }
     }
   }
-  // The glyphs ride the holes but stay upright.
-  Repeater {
-    model: look.meterShown ? 0 : look.tools.length
-    delegate: Text {
-      id: g
-      required property int index
-      readonly property var at: Basic.polar(look.c, look.c, look.u(114), look.stop - g.index * look.step + look.wheelDeg)
-      x: at[0] - width / 2; y: at[1] - height / 2
-      visible: look.cfg.showGlyphs
-      opacity: look.noteKind === "cant" ? 0.3 : 1
-      text: look.toolIcon(g.index); textFormat: Text.PlainText
-      font.family: look.fontFamily; font.pixelSize: look.u(20)
-      color: look.tone.ink
-    }
-  }
-  // The brass ring at the stop, and the finger stop.
+
+  // The finger stop: fixed, outside the wheel, just past the armed hole.
   Canvas {
     id: stopArt
-    visible: !look.meterShown
     anchors.fill: parent
+    visible: look.iconsShown && look.tools.length > 0
     renderStrategy: Canvas.Cooperative
     onPaint: {
-      var ctx = getContext("2d"), c = look.c, a = String(look.tone.accent), f = Basic.polar(c, c, look.u(114), look.stop)
+      var ctx = getContext("2d"), a = (look.stop + 15) * Math.PI / 180
       ctx.reset()
-      ctx.globalAlpha = look.noteKind === "cant" ? 0.3 : 1
-      ctx.strokeStyle = a; ctx.lineWidth = look.u(4)
-      ctx.beginPath(); ctx.arc(f[0], f[1], look.u(28), 0, Math.PI * 2); ctx.stroke()
-      ctx.globalAlpha = 1
-      var s = Basic.polar(c, c, look.u(150), look.stop + 26)
-      ctx.save(); ctx.translate(s[0], s[1]); ctx.rotate((look.stop + 26 + 90) * Math.PI / 180)
-      ctx.fillStyle = a; ctx.beginPath(); ctx.roundedRect(-look.u(8), -look.u(24), look.u(16), look.u(44), look.u(8), look.u(8)); ctx.fill()
-      ctx.fillStyle = "#ffffff"; ctx.globalAlpha = 0.35
-      ctx.beginPath(); ctx.roundedRect(-look.u(3), -look.u(18), look.u(4), look.u(30), look.u(2), look.u(2)); ctx.fill()
-      ctx.restore()
-    }
-  }
-  // The centre card: chrome rim, paper face.
-  Rectangle {
-    visible: !look.meterShown
-    readonly property real r: look.u(look.noteKind === "" || look.noteKind === "turn" ? 78 : 96)
-    x: look.c - r - look.u(5); y: look.c - r - look.u(5); width: (r + look.u(5)) * 2; height: width; radius: width / 2
-    color: look.p.chrome
-    Rectangle {
-      anchors.fill: parent; anchors.margins: look.u(5); radius: width / 2
-      color: look.p.paper
-      Column {
-        anchors.centerIn: parent
-        width: parent.width - look.u(28)
-        visible: look.stateDrawn === "ring"
-        Text {
-          width: parent.width; horizontalAlignment: Text.AlignHCenter
-          text: "re:dial"; textFormat: Text.PlainText
-          font.family: look.face; font.pixelSize: look.u(12); font.weight: Font.DemiBold; font.letterSpacing: look.u(0.4)
-          color: look.p.soft
-        }
-        Text {
-          width: parent.width; horizontalAlignment: Text.AlignHCenter
-          wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight
-          text: look.toolName(look.picked); textFormat: Text.PlainText
-          font.family: look.face; font.pixelSize: look.u(28); font.weight: Font.Bold
-          lineHeight: 1.05
-          color: look.p.ink
-        }
-        Text {
-          width: parent.width; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
-          topPadding: look.u(4)
-          text: look.pressText(look.picked); textFormat: Text.PlainText
-          font.family: look.face; font.pixelSize: look.u(15)
-          color: look.p.soft
-        }
-      }
-      Message {
-        anchors.centerIn: parent
-        width: parent.width - look.u(28)
-        visible: look.noteKind === "hint" || look.noteKind === "cant"
-        host: look
-        big: 22; small: 15; signSize: 38
-        ink: look.p.ink; soft: look.p.soft
-      }
+      Basic.bar(ctx, look.cx + Math.cos(a) * (look.r + look.u(17)), look.cy + Math.sin(a) * (look.r + look.u(17)),
+                look.cx + Math.cos(a) * (look.r + look.u(27)), look.cy + Math.sin(a) * (look.r + look.u(27)),
+                String(look.tone.accent), look.u(5))
     }
   }
 
-  // ---- turning: the ring meter ----
-  Rectangle { visible: look.meterShown; anchors.fill: parent; radius: width / 2; color: look.tone.ground }
-  Canvas {
-    id: meterArt
-    visible: look.meterShown
-    anchors.fill: parent
-    renderStrategy: Canvas.Cooperative
-    property real shown: look.level
-    Behavior on shown { enabled: look.cfg.motionFast > 0; NumberAnimation { duration: look.cfg.motionFast; easing.type: Easing.BezierSpline; easing.bezierCurve: look.easeOut } }
-    onShownChanged: requestPaint()
-    onPaint: {
-      var ctx = getContext("2d"), c = look.c, t = look.tone
-      ctx.reset()
-      ctx.fillStyle = String(t.ink)
-      for (var i = 0; i < 20; i++) {
-        var q = Basic.polar(c, c, look.u(125), -90 + i * 18)
-        ctx.globalAlpha = 0.45; ctx.beginPath(); ctx.arc(q[0], q[1], look.u(i % 5 ? 1.6 : 2.6), 0, Math.PI * 2); ctx.fill()
-      }
-      ctx.globalAlpha = 1
-      ctx.strokeStyle = String(t.surface); ctx.lineWidth = look.u(14)
-      ctx.beginPath(); ctx.arc(c, c, look.u(110), 0, Math.PI * 2); ctx.stroke()
-      if (shown > 0.2) Basic.arc(ctx, c, c, look.u(110), -90, -90 + shown * 3.6, String(t.accent), look.u(14))
-    }
+  Text {
+    z: 3
+    visible: look.levelShown
+    x: look.cx - width / 2; y: look.cy - height / 2
+    text: look.valueText; textFormat: Text.PlainText
+    font.family: look.face; font.pixelSize: look.u(26); font.weight: Font.DemiBold
+    color: look.tone.ink
   }
-  Rectangle {
-    visible: look.meterShown
-    x: look.c - look.u(102); y: look.c - look.u(102); width: look.u(204); height: width; radius: width / 2
-    color: look.p.chrome
-    Rectangle {
-      anchors.fill: parent; anchors.margins: look.u(5); radius: width / 2
-      color: look.p.paper
-      Column {
-        anchors.centerIn: parent
-        width: parent.width - look.u(28)
-        Text {
-          width: parent.width; horizontalAlignment: Text.AlignHCenter
-          text: "re:dial"; textFormat: Text.PlainText
-          font.family: look.face; font.pixelSize: look.u(12); font.weight: Font.DemiBold
-          color: look.p.soft
-        }
-        Text {
-          width: parent.width; horizontalAlignment: Text.AlignHCenter
-          text: look.valueText; textFormat: Text.PlainText
-          font.family: look.face; font.pixelSize: look.u(look.valueText.length > 4 ? 44 : 60); font.weight: Font.Bold
-          color: look.p.ink
-        }
-        Row {
-          anchors.horizontalCenter: parent.horizontalCenter
-          spacing: look.u(8)
-          Text {
-            visible: look.cfg.showGlyphs
-            text: look.toolIcon(look.chosen); textFormat: Text.PlainText
-            font.family: look.fontFamily; font.pixelSize: look.u(21); color: look.p.ink
-          }
-          Text {
-            width: Math.min(implicitWidth, look.u(130)); elide: Text.ElideRight
-            text: String(look.note.name || ""); textFormat: Text.PlainText
-            font.family: look.face; font.pixelSize: look.u(21); font.weight: Font.DemiBold
-            color: look.p.ink
-          }
-        }
-        Text {
-          width: parent.width; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
-          text: look.pressText(look.chosen); textFormat: Text.PlainText
-          font.family: look.face; font.pixelSize: look.u(14)
-          color: look.p.soft
-        }
-      }
-    }
+  Sign {
+    z: 3
+    host: look
+    visible: look.stateDrawn === "hint" || look.stateDrawn === "cant"
+    x: look.cx - width / 2; y: look.cy - height / 2
+  }
+  Card {
+    id: cardItem
+    z: 3
+    host: look
+    x: look.u(220); y: look.cy - height / 2
+    maxWidth: look.width - x - look.u(12)
   }
 
-  function repaint() { stopArt.requestPaint(); meterArt.requestPaint() }
+  function repaint() { trackArt.requestPaint(); fill.requestPaint(); stopArt.requestPaint() }
   onWidthChanged: repaint()
+  onHeightChanged: repaint()
   onToneChanged: repaint()
-  onNoteKindChanged: repaint()
+  onLevelChanged: fill.requestPaint()
+  onLevelShownChanged: fill.requestPaint()
 }

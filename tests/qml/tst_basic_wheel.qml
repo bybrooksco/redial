@@ -32,10 +32,10 @@ Item {
 
     function test_plate_size() {
       var look = make()
-      compare(look.plateSize.width, 336); compare(look.plateSize.height, 336)
+      compare(look.plateSize.width, 340); compare(look.plateSize.height, 248)
       compare(look.wantsCallout, false); compare(look.kind, "face")
       look.noteKind = "turn"; look.note = { name: "Volume", value: 42 }
-      compare(look.plateSize.width, 264); compare(look.plateSize.height, 264, "turning is the small meter")
+      compare(look.plateSize.width, 340, "the plate never changes with the state")
     }
 
     function test_selection_follows_index() {
@@ -67,7 +67,7 @@ Item {
       look.noteKind = "turn"; look.note = { name: "Volume", value: 42, valueText: "42%" }
       compare(look.litCount, 42)
       compare(look.stateDrawn, "turn")
-      compare(look.meter.shown, 42)
+      verify(!look.holes.itemAt(0).visible, "the holes hide while a level fills the track")
     }
 
     function test_turn_without_value_keeps_ring() {
@@ -95,6 +95,43 @@ Item {
       var many = make(Kit.twelve())
       many.index = 11
       compare(many.selection.rotation, -30, "11 of 12 is one hole back, the short way")
+    }
+
+    function test_empty_tools_loads() {
+      var look = make([])
+      compare(look.stateDrawn, "ring")
+    }
+
+    function test_reduced_motion_release_snaps() {
+      var look = make()
+      look.live = true
+      look.index = 3
+      look.position = 2.6
+      look.live = false
+      compare(look.selection.rotation, 135)
+    }
+
+    function test_stop_mark_does_not_turn() {
+      var look = make()
+      var p = look.stopMark
+      verify(p !== undefined && p !== null, "there is a stop mark")
+      while (p) { verify(p !== look.selection, "the stop is outside the wheel"); p = p.parent }
+    }
+
+    function test_holes_sit_on_the_track_from_the_stop() {
+      var look = make()
+      for (var i = 0; i < 8; i++) {
+        var c = Kit.centre(look.holes.itemAt(i), look), dx = c[0] - 112, dy = c[1] - 124
+        verify(Math.abs(Math.sqrt(dx * dx + dy * dy) - 76) < 0.6, "hole " + i + " radius")
+        var a = Math.atan2(dy, dx) * 180 / Math.PI, want = 40 - i * 45
+        verify(Math.abs(((a - want) % 360 + 540) % 360 - 180) < 0.5, "hole " + i + " angle " + a + " vs " + want)
+      }
+    }
+
+    function test_card_names_the_choice() {
+      var look = make()
+      look.index = 4
+      compare(look.card.title, Kit.eight[4].name)
     }
 
     function test_markup_name_is_plain() {
