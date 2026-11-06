@@ -67,6 +67,11 @@ Item {
       card.showSign = true
       compare(card.signShown, true)
     }
+    function test_unframed_card_draws_no_background() {
+      compare(card.framed, true); compare(card.background.visible, true)
+      card.framed = false
+      compare(card.background.visible, false)
+    }
     function test_names_are_plain_text() {
       host.tools = [{ name: "<b>x", icon: "x" }]
       var t = Kit.texts(card)

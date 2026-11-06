@@ -8,6 +8,9 @@ Item {
   id: card
   required property Item host
   property bool showSign: false
+  property int titleLines: 2
+  property bool framed: true            // false: the look draws the card's frame itself (Toast's pill)
+  readonly property Item background: bg
   property real maxWidth: host.u(200)
   property string ringLine: host.cardLine(host.chosen)
 
@@ -33,7 +36,9 @@ Item {
   width: implicitWidth; height: implicitHeight
 
   Rectangle {
+    id: bg
     anchors.fill: parent
+    visible: card.framed
     radius: card.host.u(12)
     color: card.host.tone.card
   }
@@ -52,7 +57,7 @@ Item {
     Text {
       id: titleText
       width: parent.width; elide: Text.ElideRight
-      wrapMode: Text.WordWrap; maximumLineCount: 2
+      wrapMode: Text.WordWrap; maximumLineCount: card.titleLines
       text: card.title; textFormat: Text.PlainText
       font.family: card.host.face; font.pixelSize: card.host.u(15); font.weight: Font.DemiBold
       color: card.host.tone.ink

@@ -4,15 +4,15 @@ import "../../plugin/redial/languages/basic"
 import "lookkit"
 import "lookkit/kit.js" as Kit
 
-// re:dial basic's Carousel layout: a constant-width row of tiles in a tray (one scalar drives every
-// tile, so the row never changes width); a state becomes a compact card.
+// re:dial basic's Carousel layout on the quiet track (spec 2026-11-06): a straight track, icons
+// above it scrolling so the chosen tool is centred over a fixed accent marker, the card below.
 // Run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml
 Item {
   id: top
-  width: 588; height: 150
+  width: 340; height: 230
   FakeCfg { id: fakeCfg }
   Language { id: lang }
-  Component { id: lookComponent; Carousel { cfg: fakeCfg; language: lang; width: 588; height: 150 } }
+  Component { id: lookComponent; Carousel { cfg: fakeCfg; language: lang; width: 340; height: 230 } }
 
   TestCase {
     name: "BasicCarousel"
@@ -20,82 +20,68 @@ Item {
     function make(tools) {
       var look = createTemporaryObject(lookComponent, top)
       verify(look !== null, "the look loads with only QtQuick")
-      look.tools = tools || Kit.eight
+      look.tools = tools !== undefined ? tools : Kit.eight
       return look
     }
-    function rowWidth(look) {
-      var w = 0
-      for (var i = 0; i < look.tiles.count; i++) w += look.tiles.itemAt(i).width
-      return w
+    function centreSlot(look) {
+      for (var k = 0; k < look.slots.count; k++) if (look.slots.itemAt(k).slot === 0) return look.slots.itemAt(k)
+      return null
     }
 
     function test_listed_by_the_language() { compare(lang.looks["carousel"], "Carousel.qml") }
     function test_plate_size() {
       var look = make()
-      compare(look.plateSize.width, 588); compare(look.plateSize.height, 150)
+      compare(look.plateSize.width, 340); compare(look.plateSize.height, 230)
       compare(look.wantsCallout, false); compare(look.kind, "layout")
-      look.noteKind = "cant"; look.note = { title: "Asleep" }
-      compare(look.plateSize.width, 460, "a state is the compact card")
+      look.noteKind = "cant"; look.note = { reason: "asleep", title: "Asleep" }
+      compare(look.plateSize.width, 340, "the plate never changes with the state")
     }
-    function test_selection_follows_index() {
+    function test_chosen_icon_is_centred() {
       var look = make()
       look.index = 3
-      tryCompare(look, "p", 3)
-      compare(look.selection.tileIndex, 3)
-      compare(look.selection.width, 104, "the chosen tile is 56 + 48 wide")
-      compare(look.tiles.itemAt(0).width, 56)
+      tryCompare(look, "listPos", 3, 1000)
+      compare(centreSlot(look).tool, 3)
+      verify(Math.abs(Kit.centre(centreSlot(look), look)[0] - 170) < 0.6)
+      verify(Math.abs(Kit.centre(look.selection, look)[0] - 170) < 0.6, "the marker is under it")
     }
-    function test_wrap_is_one_tile_on() {
+    function test_each_tool_shows_once() {
       var look = make()
-      look.index = 7
-      tryCompare(look, "p", -1)
-      compare(look.selection.tileIndex, 7)
+      var seen = {}
+      for (var k = 0; k < look.slots.count; k++) {
+        var it = look.slots.itemAt(k)
+        if (!it.visible) continue
+        verify(seen[it.tool] === undefined, "tool " + it.tool + " shows twice")
+        seen[it.tool] = true
+      }
     }
     function test_live_follows_position_directly() {
       var look = make()
       look.live = true
       look.position = 2.5
-      compare(look.p, 2.5)
-      compare(look.tiles.itemAt(2).width, 80); compare(look.tiles.itemAt(3).width, 80)
-      var w = rowWidth(look)
-      look.position = 2.9
-      compare(rowWidth(look), w, "the row never changes width")
+      compare(look.listPos, 2.5)
     }
-    function test_turn_with_value_lights_scale() {
+    function test_wraps_the_short_way() {
+      var look = make()
+      look.index = 7
+      tryCompare(look, "listPos", -1, 1000)
+      look.index = 0
+      tryCompare(look, "listPos", 0, 1000)
+    }
+    function test_empty_tools_loads() { compare(make([]).stateDrawn, "ring") }
+    function test_turn_fills() {
       var look = make()
       look.noteKind = "turn"; look.note = { name: "Volume", value: 42, valueText: "42%" }
       compare(look.litCount, 42)
-      compare(look.stateDrawn, "turn")
-      compare(look.tiles.count, 0)
-      compare(look.selection.text, "Volume")
+      verify(!centreSlot(look).visible, "icons hide while a level fills the track")
     }
-    function test_turn_without_value_keeps_ring() {
+    function test_hint_puts_the_sign_in_the_card() {
       var look = make()
-      look.noteKind = "turn"; look.note = { name: "Tabs" }
-      compare(look.litCount, 0); compare(look.stateDrawn, "ring")
-      compare(look.tiles.count, 8)
+      look.noteKind = "hint"; look.note = { prompt: "Press", gesture: "press" }
+      compare(look.card.signShown, true)
     }
-    function test_hint_and_cant_states() {
+    function test_card_sits_below_the_track() {
       var look = make()
-      look.noteKind = "hint"; look.note = { prompt: "Turn to pick", gesture: "turn", step: 1, steps: 3 }
-      compare(look.stateDrawn, "hint"); compare(look.selection.text, "Turn to pick")
-      look.noteKind = "cant"; look.note = { reason: "asleep", title: "Asleep", line: "Press to wake" }
-      compare(look.stateDrawn, "cant"); compare(look.selection.text, "Asleep")
-    }
-    function test_one_and_twelve_tools() {
-      var one = make(Kit.eight.slice(0, 1))
-      compare(one.selection.tileIndex, 0)
-      var many = make(Kit.twelve())
-      verify(rowWidth(many) + 11 * 8 <= 588 - 36, "twelve tiles fit the tray: " + rowWidth(many))
-      many.index = 11
-      tryCompare(many, "p", -1)
-      compare(many.selection.tileIndex, 11)
-    }
-    function test_markup_name_is_plain() {
-      var look = make([{ icon: "a", name: "<b>x" }, { icon: "b", name: "<i>y" }])
-      var t = Kit.texts(look)
-      verify(t.length > 0)
-      for (var i = 0; i < t.length; i++) compare(t[i].textFormat, Text.PlainText, "Text " + i + " " + t[i].text)
+      verify(look.card.y > 100); verify(look.card.y + look.card.height <= look.height)
     }
   }
 }
