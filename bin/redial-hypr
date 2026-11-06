@@ -298,11 +298,16 @@ MENU_STEP = 60  # counts per menu-highlight change
 # --- haptics --------------------------------------------------------------
 HAPTIC_WAVEFORM = 3  # ordinal 3 == CLICK; 4 and 5 feel the same, unused
 HAPTIC_MIN_GAP = 0.10  # never fire ticks closer than this, or they smear.
-# Keep-awake: the firmware sleeps 5:00 after the last touch (daemon log, 7 drops, 2026-10/11).
-# A silent GET_FEATURE of report 0x02 (the haptic waveform list) is read well inside that.
-# shortcut: unproven that a host read resets the firmware timer; test with the dial, then drop "Experimental".
+# Keep-awake: the firmware sleeps at most 5:00 after the last touch (8 drops, 2026-10/11).
+# A host READ of a feature report does not reset that timer; a haptic write with waveform
+# NONE (ordinal 1) does, and the motor stays still (both tested on the dial 2026-11-06).
 KEEP_AWAKE_S = 60.0
-HIDIOCGFEATURE_64 = (3 << 30) | (64 << 16) | (ord("H") << 8) | 0x07
+HAPTIC_NONE = 1
+# Rotation stall: the dial sometimes stops sending turns while presses still arrive (2026-10-23,
+# 2026-11-06; raw hidraw showed nothing sent while turning). A menu held this long with no turn
+# at all is that stall, so the link is dropped and the dial reconnects turning again.
+STALL_HOLD_S = 3.0
+STALL_KICK_GAP_S = 30.0  # at most one stall reconnect per this many seconds
 # 100ms is the measured floor: clicks stayed countable
 # down to group E (100ms) in hand testing 2026-08-28.
 
@@ -1494,6 +1499,8 @@ class Haptics:
         self.fd = None
         self.warned = False
         self.last = 0.0
+        self.last_write = None  # monotonic time of the last report that reached the dial
+        self.poke_ok = False
         threading.Thread(target=self._worker, daemon=True).start()
 
     @staticmethod
@@ -1545,11 +1552,11 @@ class Haptics:
             self.fd = None
             return False
 
-    def _fire(self, repeat, period):
+    def _fire(self, repeat, period, waveform=HAPTIC_WAVEFORM):
         try:
-            self.fd.write(
-                bytes([0x01, repeat, HAPTIC_WAVEFORM, period & 0xFF, (period >> 8) & 0xFF])
-            )
+            self.fd.write(bytes([0x01, repeat, waveform, period & 0xFF, (period >> 8) & 0xFF]))
+            self.last_write = time.monotonic()
+            return True
         except OSError as exc:
             log(f"haptic write failed ({exc})")
             try:
@@ -1557,18 +1564,13 @@ class Haptics:
             except OSError:
                 pass
             self.fd = None
+            return False
 
     def _poke(self):
-        """Read feature report 0x02: no motor, no input, just traffic on the link."""
-        buf = bytearray(64)
-        buf[0] = 0x02
-        try:
-            fcntl.ioctl(self.fd, HIDIOCGFEATURE_64, buf)
-            self.poke_warned = False
-        except OSError as exc:
-            if not getattr(self, "poke_warned", False):
-                log(f"keep-awake read failed ({exc}); keep_awake does nothing until it works")
-            self.poke_warned = True
+        """Keep-awake: a haptic report with waveform NONE. The dial counts it as use; the motor stays still."""
+        if self._fire(0, 0, HAPTIC_NONE) and not self.poke_ok:
+            log("keep-awake: first silent haptic sent")
+            self.poke_ok = True
 
     def _worker(self):
         while True:
@@ -2948,11 +2950,13 @@ def _compile_assistant(spec):
     return start
 
 
-def _compile_reconnect(spec):
+def kick_dial_async(why):
     # In a thread: bluetoothctl can take seconds, and the dial's own read loop must not wait.
-    return lambda mag: threading.Thread(
-        target=kick_dial, args=("reconnect asked for",), daemon=True
-    ).start()
+    threading.Thread(target=kick_dial, args=(why,), daemon=True).start()
+
+
+def _compile_reconnect(spec):
+    return lambda mag: kick_dial_async("reconnect asked for")
 
 
 def _compile_wheel(spec):
@@ -4135,6 +4139,8 @@ class Dial:
         self.menu_latched = False  # menu stayed open after the opening press was released
         self.menu_moved = False  # the highlight left the starting tool since the menu opened
         self.menu_last = 0.0
+        self.raw_rot_at = None  # time of the last turn event of any size (before the dead zone)
+        self.stall_kick_at = -math.inf
         self.down_at = None
         self.pending_click = None
         self.pending_double = None  # second press seen; waiting to see if a third follows
@@ -4262,6 +4268,7 @@ class Dial:
         return value
 
     def on_rotate(self, value, now):
+        self.raw_rot_at = now
         value = self.through_deadzone(value, now)
         if not value:
             return  # inside the dead zone: not activity, so a twitch cannot hold a tool armed
@@ -4461,6 +4468,28 @@ class Dial:
             return
         self.pending_click = now + double_window()
 
+    def _stalled(self, now, held):
+        """Menu held with no turn at all: the dial's firmware stall (turns stop, presses don't).
+
+        Close the menu, keep the armed tool, and drop the link; the dial reconnects on the next
+        touch with turning back. Nothing on this side can see a stall otherwise: a stalled dial
+        and an untouched one are equally silent, so the hold is the user saying "it isn't turning".
+        """
+        self.menu = self.menu_latched = False
+        MENU_STREAM.close()
+        MENU_UI.close()
+        self.last_action = now
+        HAPTIC.fire(PAT_SELECT, rate_limit=False)  # felt while still holding: let go
+        if now - self.stall_kick_at < STALL_KICK_GAP_S:
+            return
+        self.stall_kick_at = now
+        turn = "none since start" if self.raw_rot_at is None else f"{now - self.raw_rot_at:.0f}s ago"
+        w = getattr(HAPTIC, "last_write", None)
+        haptic = "never" if w is None else f"{time.monotonic() - w:.0f}s ago"
+        log(f"stall: menu held {held:.1f}s with no turns; last turn {turn}, last haptic write {haptic}")
+        notify("Reconnecting the dial", "No turns arrived while you held it. Press once it's back.")
+        kick_dial_async("stall self-heal")
+
     def maybe_reload_tools(self, now):
         """Apply an edited tool list without a restart, only while idle."""
         if self.menu or self.down_at is not None or self.double_down:
@@ -4487,6 +4516,7 @@ class Dial:
         self.maybe_reload_tools(now)
         waits = [
             self._tick_hold(now),
+            self._tick_stall(now),
             self._tick_latched_menu(now),
             self._tick_single_click(now),
             self._tick_double_click(now),
@@ -4494,6 +4524,23 @@ class Dial:
         ]
         waits = [w for w in waits if w is not None]
         return min(waits) if waits else None
+
+    def _tick_stall(self, now):
+        """Held STALL_HOLD_S with the menu open and not one turn since the press: reconnect.
+
+        Fires while still held (a buzz says let go), so the release afterwards does nothing.
+        """
+        if self.down_at is None or not self.menu:
+            return None
+        if self.raw_rot_at is not None and self.raw_rot_at >= self.down_at:
+            return None  # it turned during this hold: the dial is fine
+        remain = (self.down_at + STALL_HOLD_S) - now
+        if remain > 0:
+            return remain
+        held = now - self.down_at
+        self.down_at = None
+        self._stalled(now, held)
+        return None
 
     def _tick_hold(self, now):
         """Open the tool menu once the button has been held long enough."""
@@ -4846,7 +4893,8 @@ def main():
         _status["attached"] = False
         # Dropped while in use: say so, or the next turn just does nothing. A dial that sleeps
         # on its own while idle says nothing; nobody is looking.
-        if attached_at < dial.last_action > time.monotonic() - DROP_IN_USE_S:
+        dropped_by_us = time.monotonic() - dial.stall_kick_at < DROP_IN_USE_S  # stall reconnect said so
+        if attached_at < dial.last_action > time.monotonic() - DROP_IN_USE_S and not dropped_by_us:
             cant_note("asleep", "Dial went to sleep", "Press it to wake it")
         dial.detach()
         lost_at = time.monotonic()

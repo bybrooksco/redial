@@ -276,7 +276,7 @@ and every number is clamped to a safe range (text or true/false means the defaul
 | `deadzone` | Ignore small turns: after a pause the dial must turn this many counts before anything happens, so a bump or a tremor does nothing. A deliberate turn loses only that lead-in (the counts are released together, not dropped). `0` is off. | `0` | 0 to 100 |
 | `menu_latch` | Tap menu: hold until the menu opens, let go, then turn and click to choose. Turning while still holding works as before. For anyone who cannot hold and turn at once. | `false` | true / false |
 | `menu_timeout_ms` | How long an untouched tap menu waits before closing without changing anything. A slider on the Feel page. | `8000` | 3000 to 12000 |
-| `keep_awake` | Stops the dial's 5-minute sleep while it is connected (a silent read once a minute). Uses more battery. Experimental. | `false` | true / false |
+| `keep_awake` | The dial sleeps on its own after at most 5 minutes untouched. On keeps it awake, for an always-there feel: once a minute the daemon sends a haptic report with waveform NONE, which the dial counts as use without moving the motor. Stops by itself when this computer sleeps or shuts down, since the daemon stops. Uses more battery. | `false` | true / false |
 
 Notes:
 
@@ -298,7 +298,8 @@ Those are the defaults. Options: `tool` (single only — the armed tool's own cl
 `paste`, `cut`, `select_all`, `redo`, `tab_next`, `tab_prev`, `fullscreen`, `float`, `mouse_left`, `mouse_right`,
 `mouse_middle`, `terminal`, `browser`, `files`, `assistant`, any `launch_<name>` you define, and `none`.
 `reconnect_dial` drops the dial's Bluetooth link so it reconnects on the next press: for the rare
-wake-up where clicks work but turning does nothing.
+stall where clicks work but turning does nothing. You rarely need it: holding the dial for 3 s
+without turning does the same (see Known issues).
 **`copy` and `paste` are terminal-aware:** in a terminal Ctrl+C means "interrupt" and would kill the
 running program, so they send Ctrl+Insert and Shift+Insert there (the same as Omarchy's own
 universal copy and paste); `select_all` and `redo` do nothing in a terminal. A terminal is any window
@@ -453,6 +454,19 @@ Until then: do not select Scroll over an agent terminal.
 until something downstream converts it back to keys. Any terminal on the
 alternate screen is a candidate, so a per-class guard is the durable answer
 rather than a fix aimed at one application.
+
+### Turning stops while clicks still work (self-heal 2026-11-06)
+
+Sometimes the dial's firmware stops sending turns while presses still arrive (seen 2026-10-23 after a
+wake, and 2026-11-06 mid-use). A raw capture showed the dial sending nothing at all while it was
+turned, so nothing on the computer can see it: a stalled dial and an untouched one are equally quiet.
+
+**Fix: hold the dial for 3 seconds without turning.** At the 3-second mark it buzzes once: let go.
+A held menu with not one turn count since the press is read as the stall: the menu closes, the armed
+tool stays, the link is dropped, and the dial reconnects on the next press with turning back. A
+healthy dial almost always sends a few tiny counts while held, and any count cancels it, so normal
+menu use (even a slow, thinking hold) is safe. At most once every 30 s. Each one is logged as `stall: ...` with
+the time since the last turn and the last haptic write, so a pattern can be found later.
 
 ## Prior art
 

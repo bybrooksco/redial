@@ -2482,6 +2482,25 @@ class MainLoop(Base):
         self.assertEqual(seen, [True])  # attached while pumping
         self.assertFalse(m._status["attached"])  # and cleared after
 
+    def test_a_drop_mid_use_says_asleep_but_not_after_our_own_stall_reconnect(self):
+        def notes(kicked):
+            fx = Fixture(self)
+            said = []
+            fx.set(m, "cant_note", lambda reason, *a: said.append(reason))
+
+            def pump(fh, dial):  # in use a moment ago, then the link drops
+                dial.last_action = m.time.monotonic()
+                if kicked:
+                    dial.stall_kick_at = m.time.monotonic()
+                raise OSError(19, "No such device")
+
+            fx.set(m, "pump", pump)
+            self.run_main(fx, [(pipe_with(), "/dev/event7")])
+            return said
+
+        self.assertEqual(notes(kicked=False), ["asleep"])
+        self.assertEqual(notes(kicked=True), [])
+
 
 class DeviceWatchTests(Base):
     def test_it_returns_as_soon_as_the_device_list_changes(self):
@@ -2599,6 +2618,88 @@ class StatusLoop(Base):
         with self.assertRaises(StopLoop):
             h._worker()
         self.assertEqual(calls, ["poke", (3, 120)])
+
+    def test_keep_awake_poke_is_a_none_waveform_write_logged_once(self):
+        # A read did not reset the dial's sleep timer (2026-11-06); a NONE-waveform write did.
+        fx = Fixture(self)
+        logs, wrote = [], []
+        fx.set(m, "log", logs.append)
+        h = m.Haptics.__new__(m.Haptics)
+        h.poke_ok, h.last_write = False, None
+        h.fd = types.SimpleNamespace(write=wrote.append)
+        h._poke()
+        h._poke()
+        self.assertEqual(wrote, [bytes([0x01, 0, m.HAPTIC_NONE, 0, 0])] * 2)
+        self.assertEqual(m.HAPTIC_NONE, 1)  # ordinal 1 is NONE; 3 would click the motor
+        self.assertEqual([x for x in logs if "keep-awake" in x], ["keep-awake: first silent haptic sent"])
+        self.assertIsNotNone(h.last_write)
+
+
+class RotationStall(Base):
+    """A menu held STALL_HOLD_S with no turn at all reconnects the dial (firmware stall)."""
+
+    def setUp(self):
+        super().setUp()
+        self.kicks = []
+        fx = Fixture(self)
+        fx.set(m, "kick_dial_async", self.kicks.append)
+        fx.set(m, "log", lambda msg: None)
+
+    def hold(self, d, start, secs, turn_at=None):
+        d.on_press(start)
+        d.tick(start + 0.5)  # the menu opens
+        self.assertTrue(d.menu)
+        if turn_at is not None:
+            d.on_rotate(1, start + turn_at)  # even one count, under the dead zone, is a turn
+        d.tick(start + secs)  # still held
+        d.on_release(start + secs + 0.05)
+
+    def test_long_hold_without_turning_reconnects_and_keeps_the_tool(self):
+        d = m.Dial()
+        d.tool = 1
+        self.hold(d, 0.0, m.STALL_HOLD_S + 0.1)
+        self.assertEqual(self.kicks, ["stall self-heal"])
+        self.assertFalse(d.menu)
+        self.assertEqual(d.tool, 1)
+
+    def test_it_fires_at_the_mark_while_still_held(self):
+        self.assertEqual(m.STALL_HOLD_S, 3.0)
+        d = m.Dial()
+        d.on_press(0.0)
+        d.tick(0.5)
+        self.assertAlmostEqual(d.tick(1.0), m.STALL_HOLD_S - 1.0)  # the loop wakes for it
+        d.tick(m.STALL_HOLD_S - 0.01)
+        self.assertEqual(self.kicks, [])
+        d.tick(m.STALL_HOLD_S)
+        self.assertEqual(self.kicks, ["stall self-heal"])
+        d.on_release(m.STALL_HOLD_S + 1)  # letting go afterwards does nothing more
+        self.assertFalse(d.menu)
+        self.assertEqual(d.tool, m.IDLE_TOOL)
+
+    def test_any_turn_during_the_hold_is_not_a_stall(self):
+        d = m.Dial()
+        self.hold(d, 0.0, m.STALL_HOLD_S + 1, turn_at=1.0)
+        self.assertEqual(self.kicks, [])
+
+    def test_a_turn_before_the_press_does_not_count(self):
+        d = m.Dial()
+        d.on_rotate(1, 0.0)
+        self.hold(d, 5.0, m.STALL_HOLD_S + 0.1)
+        self.assertEqual(self.kicks, ["stall self-heal"])
+
+    def test_a_short_hold_is_the_normal_menu(self):
+        d = m.Dial()
+        self.hold(d, 0.0, m.STALL_HOLD_S - 0.5)
+        self.assertEqual(self.kicks, [])
+
+    def test_repeated_stall_holds_kick_at_most_once_per_gap(self):
+        d = m.Dial()
+        self.hold(d, 0.0, m.STALL_HOLD_S + 0.1)
+        self.hold(d, 10.0, m.STALL_HOLD_S + 0.1)
+        self.assertEqual(len(self.kicks), 1)
+        self.assertFalse(d.menu, "the menu still closes when the kick is held back")
+        self.hold(d, m.STALL_KICK_GAP_S + 5, m.STALL_HOLD_S + 0.1)
+        self.assertEqual(len(self.kicks), 2)
 
 
 class StuckWatchTest(Base):
