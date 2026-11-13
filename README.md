@@ -61,6 +61,10 @@ and handles the permissions the dial needs. Update later with
 Or clone it anywhere and run `bash install.sh`, which does the same without
 `omarchy plugin add`.
 
+**Not on Omarchy?** (KDE Plasma, Ubuntu/GNOME, COSMIC, plain Hyprland, Sway, niri.) Run
+`bash install-generic.sh`. You get the dial, haptics, tools and pen buttons, without the on-screen
+overlay or settings window. `docs/PLATFORMS.md` says what works on each desktop.
+
 Run it inside your own Hyprland session — it needs that environment for
 `omarchy-shell`, and it asks for sudo itself only where it's actually needed
 (the udev rule, adding yourself to the `input` group). Nothing is ever run

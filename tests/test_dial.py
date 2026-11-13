@@ -25,6 +25,7 @@ import threading
 import time
 import types
 import unittest
+import unittest.mock
 
 # Importing the daemon writes manifests into its config dir; keep that off the real one.
 os.environ["DIAL_CONFIG_DIR"] = tempfile.mkdtemp()
@@ -45,6 +46,8 @@ def load_daemon():
 
 
 m = load_daemon()
+m.MENU_NOTES.PATH = None  # no test may reach the overlay running on this machine
+m.DEFAULT_TOOLS = m.default_tools(has_backlight=True)  # the same ring on a laptop and a desktop
 # What the daemon module looked like before any test touched it. Base restores every attribute a
 # test changed, so one test's stub can never leak into the next (one did: read_brightness).
 PRISTINE = dict(vars(m))
@@ -92,6 +95,8 @@ class Haptics:
 class Recorder:
     """Stands in for MENU_UI / MENU_STREAM."""
 
+    overlay = False
+
     def close(self):
         EVENTS.append("menu-closed")
 
@@ -108,9 +113,27 @@ class Recorder:
         POSITIONS.append(p)
 
 
+class Notes:
+    """Stands in for MENU_NOTES: records each note; `listening` says whether the overlay took it."""
+
+    def __init__(self, listening=False):
+        self.listening = listening
+        self.sent = []
+
+    def note(self, kind, doc):
+        if self.listening:
+            self.sent.append((kind, doc))
+        return self.listening
+
+    def turn_wait(self):
+        return 0.0
+
+
 def install_stubs(cfg_path):
     m.HAPTIC = Haptics()
     m.MENU_UI = m.MENU_STREAM = Recorder()
+    m.omarchy_shell = lambda: True  # the suite describes Omarchy; CI has no omarchy-shell
+    m.MENU_NOTES = Notes()
     m.key = lambda *k: EVENTS.append("KEY:" + "+".join(k))
     m.dictation_toggle = lambda: EVENTS.append("DICTATION")
     m.notify = lambda *a, **k: None
@@ -119,6 +142,9 @@ def install_stubs(cfg_path):
     _level_reset()
     m.run = m.launch = lambda cmd: EVENTS.append("EXEC:" + " ".join(cmd[:2]))
     m.hypr = lambda lua: EVENTS.append("HYPR:" + lua)
+    m.media_command = lambda op: EVENTS.append("MEDIA:" + op)  # never the real players here
+    m.settings_window_focused = lambda: True
+    m.focused_runs_suppressed_program = lambda: None  # never the real desktop's windows
     m.CONFIG_PATH = cfg_path
     m.ACTIONS.inline = True  # assert straight after a gesture, not after a worker thread
     m.TOOLS = m.build_tools(m.DEFAULT_TOOLS)  # what the daemon runs with and no config
@@ -179,7 +205,7 @@ class ToolLibrary(unittest.TestCase):
             "Undo",
             "Zoom",
             "Media",
-            "Word Nav",
+            "Text",
             "Arrow Keys",
             "Window Size",
             "Brightness",
@@ -211,7 +237,7 @@ class ClickGestures(Base):
 
     def test_custom_mapping(self):
         self.set_clicks({"double": "play_pause", "triple": "escape"})
-        self.assertEqual(self.gesture(2), ["EXEC:playerctl play-pause"])
+        self.assertEqual(self.gesture(2), ["MEDIA:play-pause"])
         self.assertEqual(self.gesture(3), ["KEY:Escape"])
 
     def test_triple_none_makes_double_instant(self):
@@ -258,6 +284,7 @@ class ClickGestures(Base):
         self.assertEqual(self.gesture(1), [])
 
     def test_single_override_disables_axis_toggle(self):
+        m.TOOLS = m.build_tools(m.TOOL_LIBRARY)  # Arrow Keys is off the default ring
         self.set_clicks({"single": "enter"})
         self.assertEqual(self.gesture(1, tool_index("Arrow Keys")), ["KEY:Return"])
 
@@ -329,11 +356,16 @@ class Seek(unittest.TestCase):
                 stdout="", stderr="No player" if self.rc else "", returncode=self.rc
             )
 
-        m.subprocess = types.SimpleNamespace(run=fake, Popen=subprocess.Popen)
-        m._seek_cache.update(at=0.0, args=[])
+        m.subprocess = types.SimpleNamespace(
+            run=fake, Popen=subprocess.Popen, SubprocessError=subprocess.SubprocessError
+        )
+        m._media.update(at=0.0, pick=None, last=None)
+        m._seek_warned = 0.0
         self.addCleanup(lambda: setattr(m, "subprocess", subprocess))
-        self.logs = []
+        self.logs, self.cants = [], []
         m.log = self.logs.append
+        m.cant_note = lambda *a: self.cants.append(a)
+        m.show_level = lambda kind: None
 
     def seeks(self):
         return [" ".join(c[1:]) for c in self.calls if "position" in c]
@@ -342,7 +374,7 @@ class Seek(unittest.TestCase):
         self.players = "jelly\tPlaying\n"
         for mag, secs in ((1, 5), (2, 10), (3, 20), (4, 40)):
             self.calls.clear()
-            m._seek_cache.update(at=0.0, args=[])
+            m._media["at"] = 0.0
             m.seek_media(True, mag)
             self.assertEqual(self.seeks(), [f"-p jelly position {secs}+"])
         self.calls.clear()
@@ -350,14 +382,39 @@ class Seek(unittest.TestCase):
         self.assertTrue(self.seeks()[0].endswith("position 5-"))
 
     def test_prefers_playing_over_paused(self):
-        self.players = "firefox\tPaused\nmpv\tPlaying\n"
+        self.players = "firefox.instance_1_2\tPaused\nmpv\tPlaying\n"
         m.seek_media(True, 1)
         self.assertIn("-p mpv", self.seeks()[0])
 
-    def test_falls_back_to_plain_playerctl(self):
+    def test_two_tabs_of_one_browser_are_told_apart(self):
+        # YouTube in one tab, Jellyfin in another: both "firefox", different instances.
+        self.players = "firefox.instance_1_2\tPaused\nfirefox.instance_1_9\tPlaying\n"
+        m.seek_media(True, 1)
+        self.assertIn("-p firefox.instance_1_9 ", self.seeks()[0] + " ")
+        ask = next(c for c in self.calls if c[:3] == ["playerctl", "-a", "metadata"])
+        self.assertIn("{{playerInstance}}", ask[-1])  # the instance, never the app name
+
+    def test_the_click_works_the_player_the_turn_scrubbed(self):
+        self.players = "vlc\tPaused\nchromium.instance9\tPlaying\n"
+        m.seek_media(True, 1)
+        PRISTINE["media_command"]("play-pause")  # pauses it
+        self.players = "vlc\tPaused\nchromium.instance9\tPaused\n"
+        PRISTINE["media_command"]("play-pause")  # and resumes the same one, not VLC
+        pp = [c for c in self.calls if "play-pause" in c]
+        self.assertEqual([c[2] for c in pp], ["chromium.instance9", "chromium.instance9"])
+
+    def test_with_two_playing_the_last_one_worked_stays(self):
+        self.assertEqual(m.pick_player([("a", "Playing"), ("b", "Playing")], "b"), "b")
+        self.assertEqual(m.pick_player([("a", "Playing"), ("b", "Playing")], None), "a")
+        self.assertEqual(m.pick_player([("a", "Stopped"), ("b", "Paused")], None), "b")
+        self.assertEqual(m.pick_player([("a", "Stopped")], None), "a")
+        self.assertIsNone(m.pick_player([], "gone"))
+
+    def test_nothing_playing_says_so_instead_of_guessing(self):
         self.players = ""
         m.seek_media(True, 1)
-        self.assertEqual(self.seeks(), ["position 5+"])
+        self.assertEqual(self.seeks(), [])
+        self.assertEqual(self.cants[0][1], "Media can't act")
 
     def test_player_lookup_is_cached(self):
         self.players = "mpv\tPlaying\n"
@@ -366,11 +423,54 @@ class Seek(unittest.TestCase):
         self.assertEqual(sum(1 for c in self.calls if c[:3] == ["playerctl", "-a", "metadata"]), 1)
 
     def test_failures_are_rate_limited(self):
+        self.players = "mpv\tPlaying\n"
         self.rc = 1
-        m._seek_warned = 0.0
         for _ in range(10):
             m.seek_media(True, 1)
         self.assertEqual(len(self.logs), 1)
+        self.assertEqual(len(self.cants), 1)
+
+    def test_the_readout_is_position_and_title(self):
+        self.calls.clear()
+
+        def fake(cmd, **kw):
+            return types.SimpleNamespace(
+                stdout="83000000\t166000000\tA song\n", stderr="", returncode=0
+            )
+
+        m.subprocess.run = fake
+        self.assertEqual(m.media_reading("vlc"), (50, "1:23 / 2:46  A song"))
+        m.subprocess.run = lambda cmd, **kw: types.SimpleNamespace(
+            stdout="0\t\tLive\n", stderr="", returncode=0
+        )
+        self.assertEqual(m.media_reading("vlc"), (None, "Live"))
+        self.assertIsNone(m.media_reading(None))
+
+
+class DictationNotice(unittest.TestCase):
+    """The notice must say whether voxtype actually answered, not just that we asked."""
+
+    def notice(self, rc, out):
+        shown = []
+        m.notify = lambda title, body="": shown.append(title)
+
+        def fake(cmd, **kw):
+            return types.SimpleNamespace(stdout=out, stderr="", returncode=rc)
+
+        with unittest.mock.patch.object(
+            m.subprocess, "run", fake
+        ):  # the real module; must not leak
+            m.dictation_toggle()
+        return shown
+
+    def test_running_voxtype_says_toggled(self):
+        self.assertEqual(self.notice(0, ""), ["\U0001f399  Dictation"])
+
+    def test_dead_voxtype_says_unavailable(self):
+        self.assertEqual(
+            self.notice(1, "Error: Voxtype daemon is not running"),
+            ["\U0001f399  Dictation unavailable"],
+        )
 
 
 class Brightness(unittest.TestCase):
@@ -717,7 +817,9 @@ class Notify(unittest.TestCase):
             return types.SimpleNamespace(stdout=reply, stderr="", returncode=0)
 
         m.subprocess = types.SimpleNamespace(run=fake)
-        m.shutil = types.SimpleNamespace(which=lambda n: "/x" if have_omarchy else None)
+        m.shutil = types.SimpleNamespace(
+            which=lambda n: "/x" if have_omarchy or n == "notify-send" else None
+        )
 
     def test_uses_omarchys_notifier(self):
         self.stub(True)
@@ -735,11 +837,13 @@ class Notify(unittest.TestCase):
         self.assertNotIn("-r", first)
         self.assertEqual(second[second.index("-r") + 1], "45")
 
-    def test_falls_back_to_notify_send(self):
+    def test_falls_back_to_notify_send_and_still_replaces(self):
         self.stub(False)
-        m._notify_sync("Title", "Body")
-        kind, cmd = self.calls[0]
-        self.assertEqual((kind, cmd[0]), ("run", "notify-send"))
+        m._notify_sync("One")
+        m._notify_sync("Two")
+        kind, cmd = self.calls[1]
+        self.assertEqual((kind, cmd[0]), ("sub", "notify-send"))
+        self.assertEqual(cmd[cmd.index("-r") + 1], "45")
 
     def test_a_non_numeric_reply_is_not_kept_as_an_id(self):
         self.stub(True, reply="oops\n")
@@ -873,30 +977,51 @@ class AutoReturn(Base):
 
     def test_default_is_the_original_six_seconds(self):
         self.write(None)
-        self.assertEqual(self.after("Scroll"), 6.0)
+        self.assertEqual(self.after("Undo"), 6.0)
 
     def test_a_configured_value_is_used_and_changes_apply_without_a_restart(self):
         self.write(15)
-        self.assertEqual(self.after("Scroll"), 15.0)
+        self.assertEqual(self.after("Undo"), 15.0)
         self.write(30)
-        self.assertEqual(self.after("Scroll"), 30.0)
+        self.assertEqual(self.after("Undo"), 30.0)
 
     def test_out_of_range_numbers_are_clamped(self):
         self.write(0.5)
-        self.assertEqual(self.after("Scroll"), m.DISARM_MIN_S)
+        self.assertEqual(self.after("Undo"), m.DISARM_MIN_S)
         self.write(100000)
-        self.assertEqual(self.after("Scroll"), m.DISARM_MAX_S)
+        self.assertEqual(self.after("Undo"), m.DISARM_MAX_S)
 
     def test_junk_means_the_default(self):
         for junk in ("long", True, None, [5], {"s": 5}, float("nan"), float("inf")):
             self.write(junk)
-            self.assertEqual(self.after("Scroll"), 6.0, repr(junk))
+            self.assertEqual(self.after("Undo"), 6.0, repr(junk))
 
     def test_a_tool_that_holds_a_modifier_is_capped(self):
         self.write(60)
         self.assertTrue(m.TOOLS[tool_index("Zoom")].get("hold_mod"))
         self.assertEqual(self.after("Zoom"), m.HOLD_MOD_DISARM_CAP_S)
-        self.assertEqual(self.after("Scroll"), 60.0)
+        self.assertEqual(self.after("Undo"), 60.0)
+
+    def test_reading_tools_stay_a_minute_but_never_shorter_than_yours(self):
+        self.write(None)
+        for name in ("Scroll", "Settings"):
+            self.assertEqual(self.after(name), m.READING_RETURN_S)
+        self.assertEqual(self.after("Undo"), 6.0)
+        self.write(200)
+        self.assertEqual(self.after("Scroll"), 200.0)
+
+    def test_tool_return_s_sets_one_tool_and_is_clamped(self):
+        for value, want in ((10, 10.0), (1, m.DISARM_MIN_S), (9999, m.DISARM_MAX_S)):
+            time.sleep(0.005)
+            with open(self.cfg, "w") as f:
+                json.dump({"auto_return_s": 20, "tool_return_s": {"Scroll": value}}, f)
+            self.assertEqual(self.after("Scroll"), want)
+            self.assertEqual(self.after("Undo"), 20.0)
+        time.sleep(0.005)
+        with open(self.cfg, "w") as f:
+            json.dump({"tool_return_s": {"Scroll": "long", "Undo": True}}, f)
+        self.assertEqual(self.after("Scroll"), m.READING_RETURN_S)
+        self.assertEqual(self.after("Undo"), 6.0)
 
     def test_the_cap_never_lengthens_a_short_setting(self):
         self.write(4)
@@ -910,17 +1035,17 @@ class AutoReturn(Base):
 
     def test_tick_returns_to_the_rest_tool_only_after_the_configured_time(self):
         self.write(15)
-        d = self.armed_dial("Scroll")
+        d = self.armed_dial("Undo")
         d.tick(7.0)  # past the old six seconds: still armed
-        self.assertEqual(d.tool, tool_index("Scroll"))
+        self.assertEqual(d.tool, tool_index("Undo"))
         d.tick(16.0)
         self.assertEqual(d.tool, m.IDLE_TOOL)
 
     def test_tick_with_no_config_still_returns_after_six_seconds(self):
         self.write(None)
-        d = self.armed_dial("Scroll")
+        d = self.armed_dial("Undo")
         d.tick(5.0)
-        self.assertEqual(d.tool, tool_index("Scroll"))
+        self.assertEqual(d.tool, tool_index("Undo"))
         d.tick(7.0)
         self.assertEqual(d.tool, m.IDLE_TOOL)
 
@@ -1596,6 +1721,33 @@ class Eraser(Base):
         self.assertTrue(self.ptr.scrolls)
         self.assertNotIn("KEY:Escape", EVENTS)
 
+    def test_scroll_starts_within_two_mm_and_replays_the_travel_before_it(self):
+        # A ~5mm dead zone made every scroll start late; nothing before the lock is dropped.
+        self.down(0.0)
+        for y in range(0, 41, 4):  # 40 units, ~2.2mm
+            self.abs(m.ABS_Y, y)
+        self.assertTrue(self.ptr.scrolls)
+        self.assertAlmostEqual(sum(self.ptr.scrolls), 40 * m.ERASER_SCROLL_GAIN["firefox"])
+
+    def test_a_short_scroll_is_not_a_tap(self):
+        self.down(0.0)
+        for y in range(0, 60, 4):
+            self.abs(m.ABS_Y, y)
+        self.up(0.2)
+        self.assertNotIn("KEY:Escape", EVENTS)
+
+    def test_scroll_speed_scales_the_class_gain(self):
+        self.configure(eraser_scroll_speed=2)
+        self.down(0.0)
+        for y in range(0, 101, 4):
+            self.abs(m.ABS_Y, y)
+        self.assertAlmostEqual(sum(self.ptr.scrolls), 100 * m.ERASER_SCROLL_GAIN["firefox"] * 2)
+
+    def test_a_bad_scroll_speed_falls_back_to_normal(self):
+        for bad in (0, 10, True, "fast"):
+            self.configure(eraser_scroll_speed=bad)
+            self.assertEqual(m.pen_eraser_config()[3], 1.0, bad)
+
     def test_scroll_is_suppressed_when_the_class_routes_to_keys(self):
         m.scroll_mode = lambda: "suppress"
         self.down(0.0)
@@ -1806,7 +1958,7 @@ class AxisToggle(Base):
         return list(EVENTS)
 
     def flip(self, d):
-        m.click_choice = lambda kind: "tool"
+        m.click_choice = lambda kind, tool=None: "tool"
         d.on_press(1.0)
         d.on_release(1.05)
         d.tick(3.0)
@@ -2089,6 +2241,17 @@ class DeviceDiscovery(Base):
         self.assertEqual(len(logs), 2)
         os.close(r)
 
+    def test_a_quiet_open_logs_nothing(self):
+        fx = Fixture(self)
+        logs = []
+        fx.set(m, "log", logs.append)
+        fx.set(m, "find_input", lambda name: "/nonexistent/event0")
+        m._open_failed.clear()
+        self.assertEqual(m.open_input("x", quiet=True), (None, "/nonexistent/event0"))
+        self.assertEqual(logs, [])
+        m.open_input("x")  # the retries ran out: now it is worth a line
+        self.assertEqual(len(logs), 1)
+
     def test_device_name_of_a_non_device_is_empty(self):
         r, w = os.pipe()
         self.addCleanup(os.close, r)
@@ -2235,13 +2398,15 @@ class VirtualPointerWrites(Base):
 class MainLoop(Base):
     """main: attach, pump, detach, retry; with the pen and status threads switched off."""
 
-    def run_main(self, fx, opens, sleeps=None, waits=None, stop_after_sleeps=1):
+    def run_main(self, fx, opens, sleeps=None, waits=None, stop_after_sleeps=1, quiets=None):
         """Run main over scripted opens; sleeps and device-list waits are recorded, not slept."""
         seq = iter(opens)
         sleeps = [] if sleeps is None else sleeps
         waits = [] if waits is None else waits
+        quiets = [] if quiets is None else quiets
 
-        def open_input(name):
+        def open_input(name, quiet=False):
+            quiets.append(quiet)
             nxt = next(seq)
             return nxt if nxt is not None else (None, None)
 
@@ -2287,10 +2452,12 @@ class MainLoop(Base):
     def test_a_listed_but_unopenable_dial_is_retried_quickly_then_waited_for(self):
         fx = Fixture(self)
         opens = [(None, "/dev/event7")] * (m.OPEN_RETRY_MAX + 1)
-        sleeps, waits = [], []
-        self.run_main(fx, opens, waits=waits, sleeps=sleeps, stop_after_sleeps=99)
+        sleeps, waits, quiets = [], [], []
+        self.run_main(fx, opens, waits=waits, sleeps=sleeps, stop_after_sleeps=99, quiets=quiets)
         self.assertEqual(sleeps, [m.OPEN_RETRY_S] * m.OPEN_RETRY_MAX)
         self.assertEqual(waits, [m.WATCH_SAFETY_S])
+        # the quick retries stay out of the log; only the open that outlasts them may log
+        self.assertEqual(quiets, [True] * m.OPEN_RETRY_MAX + [False])
 
     def test_after_a_detach_it_pauses_briefly_before_looking_again(self):
         fx = Fixture(self)
@@ -2320,6 +2487,25 @@ class MainLoop(Base):
         self.run_main(fx, [(fh, "/dev/event7")])
         self.assertEqual(seen, [True])  # attached while pumping
         self.assertFalse(m._status["attached"])  # and cleared after
+
+    def test_a_drop_mid_use_says_asleep_but_not_after_our_own_stall_reconnect(self):
+        def notes(kicked):
+            fx = Fixture(self)
+            said = []
+            fx.set(m, "cant_note", lambda reason, *a: said.append(reason))
+
+            def pump(fh, dial):  # in use a moment ago, then the link drops
+                dial.last_action = m.time.monotonic()
+                if kicked:
+                    dial.stall_kick_at = m.time.monotonic()
+                raise OSError(19, "No such device")
+
+            fx.set(m, "pump", pump)
+            self.run_main(fx, [(pipe_with(), "/dev/event7")])
+            return said
+
+        self.assertEqual(notes(kicked=False), ["asleep"])
+        self.assertEqual(notes(kicked=True), [])
 
 
 class DeviceWatchTests(Base):
@@ -2395,6 +2581,187 @@ class StatusLoop(Base):
             m.status_loop(interval=0)
         self.assertEqual(writes, [80, 79])
 
+    def test_keep_awake_pokes_once_a_minute_only_when_on_and_attached(self):
+        fx = Fixture(self)
+        fx.set(m, "dial_bluetooth", lambda: (True, 80))
+        fx.set(m, "write_status", lambda doc: None)
+        fx.set(m, "kick_dial", lambda *a: None)  # never touch the real Bluetooth link
+
+        def pokes(cfg, attached):
+            now, sent = [0.0], []
+            fx.set(m.time, "monotonic", lambda: now[0])
+            fx.set(m, "HAPTIC", types.SimpleNamespace(keep_awake=lambda: sent.append(now[0])))
+            fx.set(m, "live_config", lambda: cfg)
+            fx.set(m, "_status", {"attached": attached})
+
+            def sleep(secs):  # each pass is 30 s; stop after t=0, 30, 60
+                now[0] += 30
+                if now[0] > 60:
+                    raise StopLoop
+
+            fx.set(m.time, "sleep", sleep)
+            with self.assertRaises(StopLoop):
+                m.status_loop(interval=0)
+            return sent
+
+        self.assertEqual(pokes({}, True), [])  # off by default
+        self.assertEqual(pokes({"keep_awake": True}, False), [])  # asleep: nothing to keep up
+        self.assertEqual(pokes({"keep_awake": True}, True), [0.0, 60.0])
+
+    def test_haptics_worker_turns_the_sentinel_into_a_silent_read(self):
+        h = m.Haptics.__new__(m.Haptics)  # no worker thread
+        calls, items = [], [None, (3, 120)]
+        h.q = types.SimpleNamespace(
+            put_nowait=items.append,
+            get=lambda: items.pop(0) if items else (_ for _ in ()).throw(StopLoop),
+        )
+        items.clear()
+        h._open = lambda: True
+        h._fire = lambda *p: calls.append(p)
+        h._poke = lambda: calls.append("poke")
+        h.keep_awake()
+        items.append((3, 120))
+        with self.assertRaises(StopLoop):
+            h._worker()
+        self.assertEqual(calls, ["poke", (3, 120)])
+
+    def test_keep_awake_poke_is_a_none_waveform_write_logged_once(self):
+        # A read did not reset the dial's sleep timer (2026-11-06); a NONE-waveform write did.
+        fx = Fixture(self)
+        logs, wrote = [], []
+        fx.set(m, "log", logs.append)
+        h = m.Haptics.__new__(m.Haptics)
+        h.poke_ok, h.last_write = False, None
+        h.fd = types.SimpleNamespace(write=wrote.append)
+        h._poke()
+        h._poke()
+        self.assertEqual(wrote, [bytes([0x01, 0, m.HAPTIC_NONE, 0, 0])] * 2)
+        self.assertEqual(m.HAPTIC_NONE, 1)  # ordinal 1 is NONE; 3 would click the motor
+        self.assertEqual(
+            [x for x in logs if "keep-awake" in x], ["keep-awake: first silent haptic sent"]
+        )
+        self.assertIsNotNone(h.last_write)
+
+
+class RotationStall(Base):
+    """A menu held STALL_HOLD_S with no turn at all reconnects the dial (firmware stall)."""
+
+    def setUp(self):
+        super().setUp()
+        self.kicks = []
+        fx = Fixture(self)
+        fx.set(m, "kick_dial_async", self.kicks.append)
+        fx.set(m, "log", lambda msg: None)
+
+    def hold(self, d, start, secs, turn_at=None):
+        d.on_press(start)
+        d.tick(start + 0.5)  # the menu opens
+        self.assertTrue(d.menu)
+        if turn_at is not None:
+            d.on_rotate(1, start + turn_at)  # even one count, under the dead zone, is a turn
+        d.tick(start + secs)  # still held
+        d.on_release(start + secs + 0.05)
+
+    def test_long_hold_without_turning_reconnects_and_keeps_the_tool(self):
+        d = m.Dial()
+        d.tool = 1
+        self.hold(d, 0.0, m.STALL_HOLD_S + 0.1)
+        self.assertEqual(self.kicks, ["stall self-heal"])
+        self.assertFalse(d.menu)
+        self.assertEqual(d.tool, 1)
+
+    def test_it_fires_at_the_mark_while_still_held(self):
+        self.assertEqual(m.STALL_HOLD_S, 3.0)
+        d = m.Dial()
+        d.on_press(0.0)
+        d.tick(0.5)
+        self.assertAlmostEqual(d.tick(1.0), m.STALL_HOLD_S - 1.0)  # the loop wakes for it
+        d.tick(m.STALL_HOLD_S - 0.01)
+        self.assertEqual(self.kicks, [])
+        d.tick(m.STALL_HOLD_S)
+        self.assertEqual(self.kicks, ["stall self-heal"])
+        d.on_release(m.STALL_HOLD_S + 1)  # letting go afterwards does nothing more
+        self.assertFalse(d.menu)
+        self.assertEqual(d.tool, m.IDLE_TOOL)
+
+    def test_any_turn_during_the_hold_is_not_a_stall(self):
+        d = m.Dial()
+        self.hold(d, 0.0, m.STALL_HOLD_S + 1, turn_at=1.0)
+        self.assertEqual(self.kicks, [])
+
+    def test_a_turn_before_the_press_does_not_count(self):
+        d = m.Dial()
+        d.on_rotate(1, 0.0)
+        self.hold(d, 5.0, m.STALL_HOLD_S + 0.1)
+        self.assertEqual(self.kicks, ["stall self-heal"])
+
+    def test_a_short_hold_is_the_normal_menu(self):
+        d = m.Dial()
+        self.hold(d, 0.0, m.STALL_HOLD_S - 0.5)
+        self.assertEqual(self.kicks, [])
+
+    def test_repeated_stall_holds_kick_at_most_once_per_gap(self):
+        d = m.Dial()
+        self.hold(d, 0.0, m.STALL_HOLD_S + 0.1)
+        self.hold(d, 10.0, m.STALL_HOLD_S + 0.1)
+        self.assertEqual(len(self.kicks), 1)
+        self.assertFalse(d.menu, "the menu still closes when the kick is held back")
+        self.hold(d, m.STALL_KICK_GAP_S + 5, m.STALL_HOLD_S + 0.1)
+        self.assertEqual(len(self.kicks), 2)
+
+
+class StuckWatchTest(Base):
+    def test_kicks_only_after_stuck_window_then_backs_off_and_resets_on_attach(self):
+        w = m.StuckWatch()
+        self.assertFalse(w.feed(True, False, 0.0))
+        self.assertFalse(w.feed(True, False, m.STUCK_S - 0.1))
+        self.assertTrue(w.feed(True, False, m.STUCK_S))
+        self.assertFalse(w.feed(True, False, m.STUCK_S + 1))  # backing off
+        self.assertTrue(w.feed(True, False, m.STUCK_S + m.STUCK_BACKOFF_S[0]))
+        self.assertFalse(w.feed(True, True, 100.0))  # attached: reset
+        self.assertFalse(w.feed(False, False, 200.0))  # asleep is not stuck
+        self.assertFalse(w.feed(None, False, 300.0))  # unknown is not stuck
+        self.assertFalse(w.feed(True, False, 400.0))  # fresh window
+        self.assertTrue(w.feed(True, False, 400.0 + m.STUCK_S))
+
+    def test_reconnect_click_drops_the_link_off_the_read_loop(self):
+        fx = Fixture(self)
+        calls, threads = [], []
+
+        class Now:  # runs the thread's work at once, and records that a thread was asked for
+            def __init__(self, target, args, daemon):
+                threads.append(daemon)
+                self.run = lambda: target(*args)
+
+            def start(self):
+                self.run()
+
+        fx.set(m.threading, "Thread", Now)
+        fx.set(m, "dial_address", lambda: "BC:83:85:01:99:1A")
+        fx.set(m, "log", lambda msg: calls.append(("log", msg)))
+        fx.set(m.subprocess, "run", lambda cmd, **kw: calls.append(("run", cmd)))
+        spec = dict((a[0], a[3]) for a in m.CLICK_ACTIONS)["reconnect_dial"]
+        m.make_action(spec)(1)
+        self.assertEqual(threads, [True])
+        self.assertIn(("run", ["bluetoothctl", "disconnect", "BC:83:85:01:99:1A"]), calls)
+        self.assertTrue(any(c[0] == "log" and "reconnect asked for" in c[1] for c in calls))
+
+    def test_first_press_after_attach_logs_how_many_turns_arrived(self):
+        fx = Fixture(self)
+        logs = []
+        fx.set(m, "log", logs.append)
+        d = m.Dial()
+        d.rot_events = 17901
+        d.rot_at_attach = 17871
+        d.on_press(0.0)
+        d.on_release(0.05)
+        d.on_press(1.0)
+        d.on_release(1.05)
+        self.assertEqual(
+            [x for x in logs if x.startswith("first press")],
+            ["first press after attach: 30 rotation events"],
+        )
+
 
 class NarrowedErrors(Base):
     """The failures that used to be swallowed by a bare `except Exception` still degrade quietly,
@@ -2466,17 +2833,25 @@ class PointerTools(Base):
         d._arm(tool_index(name), 0.0)
         return d
 
-    # --- H Scroll
-    def test_h_scroll_sends_horizontal_wheel_not_vertical(self):
-        d = self.armed("H Scroll")
-        d.on_rotate(40, 0.0)
+    # --- Scroll sideways (H Scroll until 2026-10-23): a click flips it
+    def sideways(self):
+        d = self.armed("Scroll")
+        d.on_press(0.5)
+        d.on_release(0.55)
+        d.tick(2.0)
+        self.assertTrue(d.arrow_horizontal)
+        return d
+
+    def test_a_click_on_scroll_sends_the_horizontal_wheel_not_vertical(self):
+        d = self.sideways()
+        d.on_rotate(40, 3.0)
         self.assertEqual(self.ptr.scrolls, [])
         self.assertEqual(len(self.ptr.h_scrolls), 1)
 
-    def test_h_scroll_clockwise_is_right_and_counter_is_left(self):
-        d = self.armed("H Scroll")
-        d.on_rotate(40, 0.0)
-        d.on_rotate(-40, 1.0)
+    def test_sideways_scroll_clockwise_is_right_and_counter_is_left(self):
+        d = self.sideways()
+        d.on_rotate(40, 3.0)
+        d.on_rotate(-40, 4.0)
         right, left = self.ptr.h_scrolls
         self.assertGreater(right, 0)
         self.assertLess(left, 0)
@@ -2491,7 +2866,6 @@ class PointerTools(Base):
     def test_new_tools_are_not_in_the_default_ring(self):
         names = [t["name"] for t in m.build_tools(m.DEFAULT_TOOLS)]
         self.assertNotIn("Pointer", names)
-        self.assertNotIn("H Scroll", names)
 
     # --- Pointer
     def test_pointer_moves_sideways_until_flipped_then_up_and_down(self):
@@ -2542,13 +2916,42 @@ class PointerTools(Base):
         d.on_rotate(10, 3.0)
         self.assertEqual(d.last_action, 3.0)
 
-    def test_pointer_click_flips_the_axis(self):
+    def test_pointer_clicks_left_flips_on_a_double_and_right_clicks_on_a_triple(self):
+        with open(self.cfg, "w") as f:
+            json.dump({"clicks": {"double": "dictation", "triple": "enter"}}, f)
+        pointer = m.TOOLS[tool_index("Pointer")]
+        self.assertEqual(
+            [m.click_choice(k, pointer) for k in ("single", "double", "triple")],
+            ["mouse_left", "tool", "mouse_right"],
+        )
         d = self.armed("Pointer")
-        m.click_choice = lambda kind: "tool"
-        d.on_press(1.0)
-        d.on_release(1.05)
-        d.tick(3.0)
+        for t in (1.0, 1.1):  # a double click: the tool's own click, the axis flip
+            d.on_press(t)
+            d.on_release(t + 0.05)
+        d.tick(5.0)
         self.assertTrue(d.arrow_horizontal)
+
+    def test_your_clicks_for_one_tool_beat_its_own_then_fall_back_to_every_tool(self):
+        with open(self.cfg, "w") as f:
+            json.dump(
+                {
+                    "clicks": {"double": "dictation", "triple": "enter"},
+                    "tool_clicks": {
+                        "Pointer": {"triple": "copy", "double": "bogus"},
+                        "Scroll": {"double": "tool"},
+                    },
+                },
+                f,
+            )
+        pointer, scroll, zoom = (m.TOOLS[tool_index(n)] for n in ("Pointer", "Scroll", "Zoom"))
+        self.assertEqual(m.click_choice("triple", pointer), "copy")  # yours
+        self.assertEqual(
+            m.click_choice("double", pointer), "tool"
+        )  # a bad value keeps the tool's own
+        self.assertEqual(m.click_choice("double", scroll), "tool")  # "tool" is allowed per tool
+        self.assertEqual(m.click_choice("triple", scroll), "enter")  # every tool's
+        self.assertEqual(m.click_choice("double", zoom), "dictation")
+        self.assertEqual(m.click_choice("double"), "dictation")  # no tool: every tool's
 
     # --- virtual pointer output
     def test_virtual_pointer_move_emits_x_and_y_and_keeps_the_fraction(self):
@@ -2826,6 +3229,7 @@ class UninstallScript(unittest.TestCase):
 
     ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
     AUTOSTART = 'o.launch_on_start("waybar")\n-- my own line\n'
+    HYPRLAND = 'require("hypr.bindings")\n\n-- my own rule\no.window("qemu", { workspace = "5" })\n'
     MENU = "{\n  // Extend the menu.\n}\n"
 
     def setUp(self):
@@ -2847,6 +3251,7 @@ class UninstallScript(unittest.TestCase):
                 f.write(f'#!/bin/sh\necho "{name} $*" >> "{self.log}"\n{body}\n')
             os.chmod(path, 0o755)
         self.put(".config/hypr/autostart.lua", self.AUTOSTART)
+        self.put(".config/hypr/hyprland.lua", self.HYPRLAND)
         self.put(".config/omarchy/extensions/omarchy-menu.jsonc", self.MENU)
         self.env = {
             "HOME": self.home,
@@ -2888,6 +3293,9 @@ class UninstallScript(unittest.TestCase):
         self.assertTrue(self.exists(".local/bin/redial-hypr"))
         self.assertTrue(self.exists(".config/omarchy/plugins/redial/DialMenu.qml"))
         self.assertIn("redial-hypr", self.read(".config/hypr/autostart.lua"))
+        self.assertEqual(self.read(".config/hypr/hyprland.lua").count("^re:dial settings$"), 1)
+        self.install()  # a second install adds nothing twice
+        self.assertEqual(self.read(".config/hypr/hyprland.lua").count("^re:dial settings$"), 1)
         r = self.sh("uninstall.sh", "-y")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         for f in (
@@ -2900,6 +3308,7 @@ class UninstallScript(unittest.TestCase):
             self.assertFalse(self.exists(f".local/bin/{f}"), f)
         self.assertFalse(self.exists(".config/omarchy/plugins/redial"))
         self.assertEqual(self.read(".config/hypr/autostart.lua"), self.AUTOSTART)
+        self.assertEqual(self.read(".config/hypr/hyprland.lua"), self.HYPRLAND)
         self.assertEqual(self.read(".config/omarchy/extensions/omarchy-menu.jsonc"), self.MENU)
 
     def test_upgrading_from_the_surface_dial_beta_moves_everything_to_the_new_name(self):
@@ -3085,14 +3494,15 @@ class ToolDescriptions(Base):
         self.assertEqual([e["name"] for e in manifest], [t["name"] for t in m.TOOL_LIBRARY])
         for entry, tool in zip(manifest, m.TOOL_LIBRARY, strict=True):
             self.assertEqual(entry["description"], tool["description"])
-            self.assertEqual(entry["default"], tool.get("default", True))
+            self.assertEqual(entry["default"], tool in m.DEFAULT_TOOLS)
         self.assertFalse(next(e for e in manifest if e["name"] == "Pointer")["default"])
         self.assertTrue(next(e for e in manifest if e["name"] == "Volume")["default"])
 
 
 def _git_checkout_available():
     root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-    return os.path.isdir(os.path.join(root, ".git")) and shutil_which("git") is not None
+    # exists, not isdir: in a git worktree .git is a file
+    return os.path.exists(os.path.join(root, ".git")) and shutil_which("git") is not None
 
 
 def shutil_which(name):
@@ -3249,9 +3659,14 @@ class GuideTests(Base):
         self.path = os.path.join(self.tmp, "progress.json")
         self.now = [1000.0]
         self.said = []
+        self.metas = []
+
+    def say(self, text, meta=None):
+        self.said.append(text)
+        self.metas.append(meta)
 
     def guide(self, enabled=lambda: True):
-        return m.Guide(self.path, self.said.append, clock=lambda: self.now[0], enabled=enabled)
+        return m.Guide(self.path, self.say, clock=lambda: self.now[0], enabled=enabled)
 
     def steps(self, g, n):
         for _ in range(n):
@@ -3545,6 +3960,7 @@ class GuideModes(Base):
         self.path = os.path.join(self.tmp, "progress.json")
         self.now = [1000.0]
         self.said = []
+        self.metas = []
         self.mode = ["adaptive"]
         self.on = [True]
         self.lines = {
@@ -3553,10 +3969,14 @@ class GuideModes(Base):
             "Volume": {"intro": "Volume: turn it up", "click": "Volume: click to mute"},
         }
 
+    def say(self, text, meta=None):
+        self.said.append(text)
+        self.metas.append(meta)
+
     def guide(self):
         return m.Guide(
             self.path,
-            self.said.append,
+            self.say,
             clock=lambda: self.now[0],
             enabled=lambda: self.on[0],
             mode=lambda: self.mode[0],
@@ -3720,6 +4140,14 @@ class GuideModes(Base):
         g = self.tour()
         g.attached()
         self.assertEqual(self.said, ["Turn the dial"])
+
+    def test_tour_hints_carry_their_gesture_and_place(self):
+        g = self.tour()
+        g.attached()
+        self.steps(g, m.TOUR_TURN_STEPS)
+        n = len(m.TOUR_STEPS)
+        self.assertEqual(self.metas[0], {"gesture": "turn", "step": 1, "steps": n})
+        self.assertEqual(self.metas[1], {"gesture": "press", "step": 2, "steps": n})
 
     def test_the_other_styles_do_not_start_a_tour(self):
         for mode in ("adaptive", "discover"):
@@ -3977,6 +4405,109 @@ class PrivateFiles(unittest.TestCase):
         self.assertIsNone(stream.sock)
 
 
+class OverlayNotes(Base):
+    """Turning, hints and can't-act go to re:dial's own overlay, or to Omarchy's OSD without it."""
+
+    def setUp(self):
+        super().setUp()
+        self.notes = m.MENU_NOTES = Notes(listening=True)
+        OSDS.clear()
+
+    def listen(self):
+        """A real socket where the overlay would be.
+
+        Returns (stream, accepted-connection reader)."""
+        import socket as so
+
+        path = os.path.join(self.tmp, "redial.sock")
+        server = so.socket(so.AF_UNIX, so.SOCK_STREAM)
+        server.bind(path)
+        server.listen(1)
+        self.addCleanup(server.close)
+        stream = m.MenuStream()
+        stream.PATH = path
+        return stream, server
+
+    def test_a_note_is_one_json_line_after_its_kind(self):
+        stream, server = self.listen()
+        self.assertTrue(stream.note("hint", {"prompt": "Turn the dial", "gesture": "turn"}))
+        conn, _ = server.accept()
+        self.addCleanup(conn.close)
+        stream.close()
+        kind, _, body = conn.recv(4096).decode().rstrip("\n").partition(" ")
+        self.assertEqual(kind, "hint")
+        self.assertEqual(json.loads(body), {"prompt": "Turn the dial", "gesture": "turn"})
+
+    def test_with_nothing_listening_it_retries_only_now_and_then(self):
+        stream = m.MenuStream()
+        stream.PATH = os.path.join(self.tmp, "nobody.sock")
+        tries = []
+        real = stream.connect
+        stream.connect = lambda quiet=False: (tries.append(1), real(quiet))
+        for _ in range(50):
+            self.assertFalse(stream.note("turn", {"name": "Volume"}))
+        self.assertEqual(len(tries), 1)
+
+    def test_level_readouts_are_held_to_about_ten_a_second(self):
+        stream, server = self.listen()
+        self.assertEqual(stream.turn_wait(), 0.0, "not connected: no wait")
+        stream.note("turn", {"name": "Volume"})
+        self.assertGreater(stream.turn_wait(), 0.05)
+        stream.last_turn -= stream.TURN_INTERVAL
+        self.assertEqual(stream.turn_wait(), 0.0)
+
+    def test_a_volume_step_shows_its_level_on_the_overlay(self):
+        m.MenuUI = types.SimpleNamespace(_volume=lambda: (42, "42%"))
+        PRISTINE["_show_level"]("volume")
+        self.assertEqual(OSDS, [])
+        kind, doc = self.notes.sent[0]
+        self.assertEqual(kind, "turn")
+        self.assertEqual((doc["name"], doc["value"], doc["valueText"]), ("Volume", 42, "42%"))
+
+    def test_without_the_overlay_a_level_goes_to_omarchys_display(self):
+        self.notes.listening = False
+        m.MenuUI = types.SimpleNamespace(_volume=lambda: (42, "42%"))
+        PRISTINE["_show_level"]("volume")
+        self.assertEqual(OSDS, [{"icon": "volume", "progress": 42}])
+
+    def test_a_turned_tool_without_a_level_is_named(self):
+        d = m.Dial()
+        d.tool = next(i for i, t in enumerate(m.TOOLS) if t["name"] == "Zoom")
+        d.show_ack()
+        self.assertEqual(self.notes.sent[0][0], "turn")
+        self.assertEqual(self.notes.sent[0][1]["name"], "Zoom")
+        self.assertNotIn("value", self.notes.sent[0][1])
+
+    def test_a_hint_goes_to_the_overlay_with_its_gesture(self):
+        m.guide_say("Now press it", {"gesture": "press", "step": 2, "steps": 6})
+        self.assertEqual(
+            self.notes.sent,
+            [("hint", {"prompt": "Now press it", "gesture": "press", "step": 2, "steps": 6})],
+        )
+        self.assertEqual(OSDS, [])
+
+    def test_a_tool_that_cannot_act_says_why(self):
+        m.read_brightness = lambda d=None: None
+        m.backlight_device = lambda: None
+        m._bright_said[0] = -1e9
+        m.set_brightness(1, True)
+        kind, doc = self.notes.sent[0]
+        self.assertEqual((kind, doc["reason"]), ("cant", "tool"))
+        self.assertEqual(doc["line"], "No screen backlight on this machine")
+
+    def test_a_look_that_does_not_draw_states_leaves_them_to_omarchy(self):
+        with open(self.cfg, "w") as f:
+            json.dump({"layout": "omarchy"}, f)  # the shell's OSD box draws no states
+        m.guide_say("Now press it")
+        self.assertEqual(self.notes.sent, [])
+        self.assertEqual(OSDS, [{"message": "Now press it", "duration": 3500}])
+
+    def test_with_the_display_off_nothing_reaches_the_overlay(self):
+        m.osd_enabled = lambda: False
+        self.assertFalse(m.overlay_note("hint", {"prompt": "x"}))
+        self.assertEqual(self.notes.sent, [])
+
+
 class LaunchDoesNotWait(unittest.TestCase):
     def test_a_long_running_program_is_started_and_left_alone(self):
         t0 = time.monotonic()
@@ -4062,6 +4593,153 @@ class AtomicJsonWrites(unittest.TestCase):
         for name in ("tools.json", "clicks.json", "pen_clicks.json"):
             with open(os.path.join(os.path.dirname(cfg), name)) as f:
                 self.assertTrue(json.load(f), name)
+
+
+class WorksHere(unittest.TestCase):
+    """On GNOME, KDE and COSMIC the default ring leaves out the tools that can't act there."""
+
+    def setUp(self):
+        saved = dict(os.environ)
+        self.addCleanup(lambda: (os.environ.clear(), os.environ.update(saved)))
+        for k in ("DIAL_WM", "HYPRLAND_INSTANCE_SIGNATURE", "NIRI_SOCKET", "SWAYSOCK", "I3SOCK"):
+            os.environ.pop(k, None)
+
+    def names(self):
+        return [t["name"] for t in m.default_tools(False)]
+
+    def test_cosmic_has_no_window_tools_and_no_settings_without_its_window(self):
+        os.environ["XDG_CURRENT_DESKTOP"] = "COSMIC"
+        real = m.shutil.which
+        m.shutil.which = lambda n, *a, **k: None if n == "redial-settings" else real(n, *a, **k)
+        try:
+            self.assertEqual(self.names(), ["Volume", "Scroll", "Undo", "Zoom", "Media"])
+        finally:
+            m.shutil.which = real
+
+    def test_settings_stays_when_redial_settings_is_installed(self):
+        os.environ["XDG_CURRENT_DESKTOP"] = "KDE"
+        real = m.shutil.which
+        m.shutil.which = lambda n, *a, **k: "/x" if n == "redial-settings" else real(n, *a, **k)
+        try:
+            self.assertIn("Settings", self.names())
+            self.assertNotIn("Windows", self.names())
+        finally:
+            m.shutil.which = real
+
+    def test_hyprland_keeps_the_whole_ring(self):
+        os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = "x"
+        self.assertIn("Windows", self.names())
+        self.assertIn("Settings", self.names())
+
+
+class OverlaySocket(unittest.TestCase):
+    """Without omarchy-shell, MenuUI writes its calls to redial-overlay's socket."""
+
+    def setUp(self):
+        real = (m.MenuStream.PATH, m.omarchy_shell)
+        self.addCleanup(
+            lambda: (setattr(m.MenuStream, "PATH", real[0]), setattr(m, "omarchy_shell", real[1]))
+        )
+        m.omarchy_shell = lambda: False
+
+    def test_a_call_reaches_the_overlay(self):
+        import socket
+
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "redial.sock")
+            srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            srv.bind(path)
+            srv.listen(1)
+            got = []
+
+            def serve():
+                conn, _ = srv.accept()
+                got.append(conn.recv(4096))
+                conn.close()
+
+            t = threading.Thread(target=serve)
+            t.start()
+            m.MenuStream.PATH = path
+            ui = m.MenuUI()
+            ui._call("highlight", "4")
+            t.join(2)
+            srv.close()
+        self.assertTrue(ui.overlay)
+        self.assertEqual(got, [b"highlight 4\n"])
+
+    def test_no_overlay_running_is_not_an_error(self):
+        m.MenuStream.PATH = "/nonexistent/redial.sock"
+        ui = m.MenuUI()
+        ui._call("close")
+        self.assertFalse(ui.overlay)
+
+    def test_the_overlay_leaves_levels_and_hints_to_notifications(self):
+        self.assertFalse(m.overlay_draws_states())
+
+    def gate(self, layout, face):
+        doc = {"layout": layout, "face": face}
+        with (
+            unittest.mock.patch.object(m, "omarchy_shell", lambda: True),
+            unittest.mock.patch.object(m, "live_config", lambda: doc),
+            unittest.mock.patch.dict(os.environ, {"DIAL_MENU_LAYOUT": ""}),
+        ):
+            return m.overlay_draws_states()
+
+    def test_states_go_to_the_overlay_for_every_language_layout(self):
+        for layout in ("dial", "deck", "carousel", "toast"):
+            for face in ("classic", "pie", "wheel"):
+                self.assertTrue(self.gate(layout, face), (layout, face))
+
+    def test_omarchy_layout_keeps_the_osd(self):
+        self.assertFalse(self.gate("omarchy", "classic"))
+
+
+class UinputKeys(unittest.TestCase):
+    """Keys through the uinput keyboard, for desktops wtype can't type into."""
+
+    def kb(self):
+        kb = m.VirtualKeyboard()
+        kb.sent = []
+        kb._ensure = lambda: True
+        kb._emit = lambda code, value: kb.sent.append((code, value))
+        return kb
+
+    def test_every_built_in_key_name_has_a_code(self):
+        kb = self.kb()
+        names = "ctrl shift z 0 Page_Down Page_Up BackSpace Return Escape space Tab Left Up F12"
+        for name in names.split():
+            self.assertIsNotNone(kb.codes([name]), name)
+
+    def test_combo_presses_in_order_and_releases_in_reverse(self):
+        kb = self.kb()
+        self.assertTrue(kb.combo(["ctrl", "z"]))
+        self.assertEqual(kb.sent, [(29, 1), (44, 1), (44, 0), (29, 0)])
+
+    def test_uppercase_letter_adds_shift(self):
+        self.assertEqual(self.kb().codes(["A"]), [42, 30])
+
+    def test_unknown_name_is_not_sent_so_wtype_can_try(self):
+        kb = self.kb()
+        self.assertFalse(kb.combo(["ctrl", "XF86Launch5"]))
+        self.assertEqual(kb.sent, [])
+
+    def test_keycodes_match_the_kernel_table(self):
+        k = m.VirtualKeyboard.KEYS
+        self.assertEqual((k["F1"], k["F10"], k["F11"], k["F13"], k["F24"]), (59, 68, 87, 183, 194))
+        self.assertEqual((k["1"], k["0"], k["q"], k["m"]), (2, 11, 16, 50))
+
+    def test_desktops_without_a_backend_use_uinput(self):
+        saved = dict(os.environ)
+        try:
+            for k in ("DIAL_WM", "HYPRLAND_INSTANCE_SIGNATURE", "DIAL_KEYS"):
+                os.environ.pop(k, None)
+            os.environ["XDG_CURRENT_DESKTOP"] = "KDE"
+            self.assertTrue(m.uinput_keys())
+            os.environ["DIAL_KEYS"] = "wtype"
+            self.assertFalse(m.uinput_keys())
+        finally:
+            os.environ.clear()
+            os.environ.update(saved)
 
 
 class WindowManagerBackends(unittest.TestCase):
@@ -4277,7 +4955,9 @@ class SelfInstaller(unittest.TestCase):
 
     def test_it_is_one_file_a_few_hundred_kilobytes_with_a_checksum(self):
         size = os.path.getsize(self.installer)
-        self.assertLess(size, 600_000)  # small enough to attach to an email
+        # small enough to attach to an email;
+        # ~200 KB of it is basic's three OFL faces (Latin subsets)
+        self.assertLess(size, 800_000)
         self.assertGreater(size, 20_000)
         r = subprocess.run(
             ["sha256sum", "-c", os.path.basename(self.installer) + ".sha256"],
@@ -4406,11 +5086,12 @@ class SelfInstaller(unittest.TestCase):
 class NewControls(Base):
     """The tools and click actions added for driving a whole session from the dial."""
 
+    # v1 trimmed Word Nav, Arrow Keys and Window Size (still in the library) and added Settings
     ORIGINAL_DEFAULTS = [
         "Volume", "Windows", "Workspaces", "Scroll", "Undo", "Zoom",
-        "Media", "Word Nav", "Arrow Keys", "Window Size", "Brightness",
+        "Media", "Settings", "Brightness",
     ]  # fmt: skip
-    NEW_TOOLS = ["Focus", "Tabs", "Select", "Pages", "Tile Focus", "Move Window"]
+    NEW_TOOLS = ["Focus", "Tabs", "Text", "Pages", "Tile Focus", "Move Window"]
 
     def setUp(self):
         super().setUp()
@@ -4501,6 +5182,10 @@ class NewControls(Base):
         self.assertNotIn("close_window", have)
 
     # --- the tool library
+    def test_brightness_joins_the_default_ring_only_with_a_backlight(self):
+        self.assertIn("Brightness", [t["name"] for t in m.default_tools(True)])
+        self.assertNotIn("Brightness", [t["name"] for t in m.default_tools(False)])
+
     def test_the_default_tool_set_is_exactly_what_it_was(self):
         self.assertEqual([t["name"] for t in m.DEFAULT_TOOLS], self.ORIGINAL_DEFAULTS)
         with open(self.cfg, "w") as f:
@@ -4514,6 +5199,23 @@ class NewControls(Base):
         with open(self.cfg, "w") as f:
             json.dump({"active_tools": ["Volume", "Focus", "Tile Focus"]}, f)
         self.assertEqual([t["name"] for t in m.load_tools()], ["Volume", "Focus", "Tile Focus"])
+
+    def test_text_moves_then_a_click_selects_and_a_double_click_copies(self):
+        d = m.Dial()
+        d.tool = tool_index_all("Text")
+        EVENTS.clear()
+        d.on_rotate(60, 0.0)
+        self.assertEqual(EVENTS, ["KEY:ctrl+Right"])
+        self.assertEqual(m.click_choice("double", m.TOOLS[d.tool]), "copy")
+        d._native_click(1.0)  # what Text's single click does
+        EVENTS.clear()
+        d.on_rotate(60, 2.0)
+        self.assertEqual(EVENTS, ["KEY:ctrl+shift+Right"])
+
+    def test_rings_saved_with_the_merged_tools_load_their_new_names_once(self):
+        with open(self.cfg, "w") as f:
+            json.dump({"active_tools": ["Volume", "Word Nav", "Select", "H Scroll", "Scroll"]}, f)
+        self.assertEqual([t["name"] for t in m.load_tools()], ["Volume", "Text", "Scroll"])
 
     def test_every_new_tool_compiles(self):
         built = {t["name"]: t for t in m.build_tools(m.TOOL_LIBRARY)}
@@ -4541,8 +5243,184 @@ class NewControls(Base):
         )
 
 
+class FlowFixes(Base):
+    """v1 fixes found by walking the user flows (docs: the interaction map)."""
+
+    def test_settings_tool_opens_the_window_when_picked(self):
+        d = m.Dial()
+        d._arm(tool_index("Settings"), 0.0)
+        self.assertIn("EXEC:omarchy-shell -q", EVENTS)
+
+    def test_settings_tool_drives_the_window_while_it_is_open(self):
+        d = m.Dial()
+        d.tool = tool_index("Settings")
+        d.on_rotate(200, 0.0)
+        self.assertIn("KEY:Tab", EVENTS)
+        self.assertEqual(self.gesture(1, tool_index("Settings")), ["KEY:Return"])
+
+    def test_settings_tool_never_types_into_another_app(self):
+        m.settings_window_focused = lambda: False
+        focus = 'HYPR:hl.dsp.focus({ window = "title:^re:dial settings$" })'
+        self.assertEqual(self.gesture(1, tool_index("Settings")), ["EXEC:omarchy-shell -q", focus])
+        EVENTS.clear()
+        d = m.Dial()
+        d.tool = tool_index("Settings")
+        d.on_rotate(200, 0.0)
+        self.assertNotIn("KEY:Tab", EVENTS)
+        self.assertIn("EXEC:omarchy-shell -q", EVENTS)
+
+    def test_settings_keys_need_the_settings_window_focused(self):
+        focused = PRISTINE["settings_window_focused"]
+        for win, want in (
+            ({"class": "org.quickshell", "title": "re:dial settings"}, True),
+            ({"class": "firefox", "title": "re:dial settings"}, False),  # a web page with the name
+            ({"class": "org.quickshell", "title": "Omarchy shell – dev gallery"}, False),
+            (None, False),
+        ):
+            m.hypr_json = lambda what, _w=win: _w
+            self.assertEqual(focused(), want, win)
+
+    def test_cycling_windows_says_where_you_landed(self):
+        m.backend = lambda: types.SimpleNamespace(op=lambda *a, **k: None)
+        self.addCleanup(lambda: setattr(m, "backend", PRISTINE["backend"]))
+        shown = []
+        m.show_level = shown.append
+        m.make_action({"do": "wm", "op": "cycle", "forward": True})(1)
+        m.make_action({"do": "wm", "op": "workspace", "to": "+1"})(1)
+        self.assertEqual(shown, ["window"])
+
+    def test_a_turn_note_can_carry_text_without_a_level(self):
+        sent = []
+        m.overlay_note = lambda kind, doc: sent.append(doc) or True
+        m.turn_note("Windows", None, "foot  notes")
+        self.assertEqual(sent[0]["valueText"], "foot  notes")
+        self.assertNotIn("value", sent[0])
+
+    def test_scroll_pauses_over_claude_code_in_a_plain_terminal(self):
+        m.focused_class = lambda: "foot"
+        m.focused_runs_suppressed_program = PRISTINE["focused_runs_suppressed_program"]
+        m.backend = lambda: m.HyprlandBackend()
+        m.hypr_json = lambda what: {"pid": 4242}
+        m._descendant_names = lambda pid: {"bash", "claude"} if pid == 4242 else set()
+        m.cant_note = lambda *a: None
+        m._tree_cache.update(at=0.0, pid=None, hit=None)
+        self.assertEqual(m.scroll_mode(), "suppress")
+        m._descendant_names = lambda pid: {"bash", "nvim"}
+        m._tree_cache.update(at=0.0, pid=None, hit=None)
+        self.assertEqual(m.scroll_mode(), "wheel")
+
+    def test_undo_sends_nothing_in_a_terminal_and_says_why(self):
+        cants = []
+        m.cant_note = lambda *a: cants.append(a)
+        m.focused_is_terminal = lambda: True
+        m._term_warned["at"] = -1e9
+        d = m.Dial()
+        d.tool = tool_index("Undo")
+        d.on_rotate(-400, 0.0)
+        self.assertFalse([e for e in EVENTS if e.startswith("KEY:")])
+        self.assertEqual(len(cants), 1)
+        m.focused_is_terminal = lambda: False
+        d.on_rotate(-400, 1.0)
+        self.assertIn("KEY:ctrl+z", EVENTS)
+
+    def test_the_microphone_can_be_muted_from_a_click(self):
+        self.assertIn("mic_mute", {a[0] for a in m.CLICK_ACTIONS})
+
+    def test_descendants_are_read_from_proc(self):
+        names = PRISTINE["_descendant_names"](os.getppid())
+        with open("/proc/self/comm") as f:  # "coverage" under CI, "python3" locally
+            self.assertIn(f.read().strip(), names)
+
+
+class SettingsSchema(unittest.TestCase):
+    """plugin/redial/schema.json lists every setting, so the Every setting page shows them all."""
+
+    ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+
+    def setUp(self):
+        with open(os.path.join(self.ROOT, "plugin/redial/schema.json")) as f:
+            self.rows = {i["key"]: i for g in json.load(f)["groups"] for i in g["items"]}
+        with open(os.path.join(self.ROOT, "bin/redial-hypr")) as f:
+            self.src = f.read()
+
+    def test_every_documented_key_has_a_row(self):
+        with open(os.path.join(self.ROOT, "plugin/redial/config.example.json")) as f:
+            doc = json.load(f)
+
+        def leaves(d, prefix=""):
+            for k, v in d.items():
+                if k.startswith("_"):
+                    continue
+                path = prefix + k
+                if isinstance(v, dict) and path not in self.rows:
+                    yield from leaves(v, path + ".")
+                else:
+                    yield path
+
+        missing = [k for k in leaves(doc) if k not in self.rows]
+        self.assertEqual(missing, [])
+
+    def test_every_key_the_daemon_reads_has_a_row(self):
+        read = set(re.findall(r'live_(?:num|bool)\("([a-z_]+)"', self.src))
+        read |= set(re.findall(r'live_config\(\)\.get\("([a-z_]+)"', self.src))
+        self.assertTrue({"sensitivity", "osd", "tool_return_s"} <= read)
+        self.assertEqual(sorted(read - set(self.rows)), [])
+
+    def test_ranges_match_the_daemon_clamps(self):
+        for key, lo, hi in re.findall(
+            r'live_num\("([a-z_]+)", [^,]+, ([0-9.]+), ([0-9.]+)\)', self.src
+        ):
+            row = self.rows[key]
+            self.assertEqual((row["min"], row["max"]), (float(lo), float(hi)), key)
+
+    def test_rows_are_well_formed(self):
+        kinds = {"bool", "number", "choice", "text", "json", "click", "language"}
+        for key, row in self.rows.items():
+            self.assertIn(row["type"], kinds, key)
+            self.assertTrue(row["label"], key)
+            if row["type"] == "number":
+                self.assertLessEqual(row["min"], row["default"], key)
+                self.assertLessEqual(row["default"], row["max"], key)
+            if row["type"] == "choice" and row["default"] != "":
+                self.assertIn(row["default"], [o["key"] for o in row["options"]], key)
+            if row["type"] == "click":
+                self.assertIn(row["group"], ("dial", "pentail", "barrel", "eraser"), key)
+
+    def test_style_presets_start_from_the_defaults(self):
+        # An untouched config must read as Normal, Medium and 96% on the Look page's Style block.
+        with open(os.path.join(self.ROOT, "plugin/redial/StylePresets.js")) as f:
+            js = f.read()
+        normal = re.search(r'key: "normal".*?w: \{([^}]*)\}', js).group(1)
+        for k, v in re.findall(r"(\w+): ([0-9.]+)", normal):
+            self.assertEqual(float(v), self.rows["dial." + k]["default"], k)
+        for k, v in re.findall(r'key: "(\w+)", label: "[^"]*", fallback: (true|false)', js):
+            self.assertEqual(v == "true", self.rows["dial." + k]["default"], k)
+        self.assertIn(f"key: {self.rows['plateOpacity']['default']:g},", js)
+        self.assertIn(f"key: {self.rows['dial.barCount']['default']:d},", js)
+
+
 def tool_index_all(name):
     return [t["name"] for t in m.TOOLS].index(name)
+
+
+class LanguageFiles(unittest.TestCase):
+    """The shell can't resolve a sibling QML file used as a property type.
+
+    (Basic looks drew an empty plate.)
+    """
+
+    def test_no_property_typed_as_a_sibling_qml_file(self):
+        root = os.path.join(HERE, "..", "plugin", "redial", "languages")
+        for lang in sorted(os.listdir(root)):
+            folder = os.path.join(root, lang)
+            if not os.path.isdir(folder):
+                continue
+            names = [f[:-4] for f in os.listdir(folder) if f.endswith(".qml")]
+            pattern = re.compile(r"\bproperty\s+({})\b".format("|".join(map(re.escape, names))))
+            for f in names:
+                with open(os.path.join(folder, f + ".qml")) as fh:
+                    hit = pattern.search(fh.read())
+                self.assertIsNone(hit, f"{lang}/{f}.qml types a property as {hit and hit.group(1)}")
 
 
 if __name__ == "__main__":

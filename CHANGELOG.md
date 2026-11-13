@@ -5,15 +5,93 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **A second design language, re:dial basic** (working name): the quiet track. Every look is one thin track with an accent marker on it, the tools' own icons one step inside the track, and one shared card for the words; the looks differ only in the track's shape (Capsule, Pie, Finger wheel, Sundial, Gauge, List, Carousel, Deck, Toast; no Classic). Flat theme tones, no rims or shadows, one bundled face (Barlow Semi Condensed, SIL Open Font License). The plate keeps its size in every state. Spec: `docs/superpowers/specs/2026-11-06-redial-basic-language-design.md`. Tested in `tests/qml/tst_basic_*.qml`.
+- **re:dial classic draws every look**: Capsule, Gauge, Pie, Deck, Carousel and Toast redrawn as drafting plates, plus three new faces: **Sundial** (tools are hours; the sun follows the hand a breath behind), **Repair tag** (a checklist tag; a level punches holes; can't act stamps it) and **Finger wheel** (a rotary dial that is the hand and spins back onto the chosen hole). Tested in `tests/qml/tst_classic_*.qml`.
+- `lookCount` on every language: how many looks it ships, the tag a future language library lists.
+- **Dial | Pen tabs** at the top of the settings window. The Dial keeps its pages (Look, Feel, Every setting, Help); the Pen tab holds the Surface Pen controls, moved off the Feel page and grouped by how you use them: away from screen (tail button), on screen while hovering (barrel button), and on screen in contact (eraser).
+- **Keep the dial awake** (`keep_awake`, Feel page, off by default): while the dial is connected, the daemon sends a haptic report with waveform NONE once a minute. The dial counts it as use, so its own sleep (at most 5 minutes untouched) never comes, and the motor does not move. Tested on the dial 2026-11-06: a feature-report read did not reset the timer (dropped at 5:01); the NONE write kept it awake 11+ minutes untouched, felt as nothing. It stops with the daemon, so the dial sleeps when the computer does. The first send is logged once.
+- **Rotation-stall self-heal**: holding the tool menu 3 s with no turn at all reconnects the dial, firing at the mark while still held with one buzz (`STALL_HOLD_S`, at most once per 30 s). For the firmware stall where presses arrive but turns don't (2026-10-23, 2026-11-06), which the existing self-heal could not see. Logged as `stall: ...` with the time since the last turn and the last haptic write.
+- The tap menu's closing time is a **slider** on the Feel page (3 to 12 s in half seconds) instead of three fixed choices.
+- `pen.eraser_scroll_speed` (0.25 to 4, default 1): scales every app's eraser scroll speed. On the Pen page as Slow, Normal, Fast and Faster.
+
+- **Desktops other than Omarchy.** `install-generic.sh` installs the daemon on KDE Plasma, GNOME/Ubuntu, COSMIC, plain Hyprland, Sway or niri (a systemd user service, the udev rule and the `input` group, each sudo step asked), and `--uninstall` removes it. `docs/PLATFORMS.md` says what works on each.
+- Key actions (Zoom, Undo, Text, Pages and every `key` click) go through a uinput virtual keyboard on desktops without a window backend (GNOME, KDE, COSMIC) or wherever `wtype` is missing, since `wtype` needs a Wayland protocol those desktops don't offer. Hyprland, Sway and niri keep `wtype`. `DIAL_KEYS=uinput|wtype` overrides. Checked live on COSMIC (Pop!_OS 24.04): the compositor picks up the device. Tested in `tests/test_dial.py` (`UinputKeys`).
+
+- **`redial-overlay`**, the tool ring on desktops without Omarchy (COSMIC, KDE Plasma, Sway, plain Hyprland). Three styles, chosen with `overlay_style`: **Menu** (every tool by name, the selected one marked ❯, the default), **Card** (the Omarchy layout's one line: icon, name, one segment per tool) and **Strip** (a status-bar row). It uses the desktop's own colours and monospace font (COSMIC theme files, KDE `kdeglobals`, or the GTK theme) and picks up a theme change on the next hold. The daemon sends it the same calls it sends Omarchy's overlay, over the existing socket. `install-generic.sh` installs it when gtk-layer-shell is present. GNOME has no layer-shell, so the ring shows as notifications there. Tested in `tests/test_overlay.py` and `tests/test_dial.py` (`OverlaySocket`).
+- **`redial-settings`**, a small settings window for desktops without Omarchy: which tools are on the ring, and the ring's style. It keeps every other key in `config.json`, re-reads the file before saving, and won't write over a config it can't read. `install-generic.sh` adds it to the app launcher as "re:dial settings", and the Settings tool opens it. Tested in `tests/test_settings.py`.
+- **Waybar module** for desktops without Omarchy: `redial-bar` (status, battery and click summary; left-click opens settings, right-click restarts the daemon), with the block to paste in `config/waybar.snippet.jsonc`.
+- The default ring leaves out the tools that can't act on this desktop: on GNOME, KDE and COSMIC, the window tools (no window backend yet) and Settings when no settings window is installed. `tools.json` says which tools work here (`works_here`), and the settings window greys the rest.
+- Without Omarchy, holding the dial names each tool you pass in a notification, so the ring is never invisible.
+
+### Changed
+- **A language offers only the looks it ships.** Settings lists the language's own looks (plus Omarchy's OSD layout); a look the config names but the language lacks draws the language's default look instead of borrowing another language's.
+- **Every look draws turning, hints and can't act itself**, including Deck, Carousel and Toast, so those no longer go to Omarchy's OSD; only the `omarchy` layout keeps the OSD.
+- Deck, Carousel and Toast are language looks now, not inline layouts. `capsuleFillet`, `capsuleSpan` and `deck.cardWidth`/`cardHeight`/`gap` are gone (an old config's values are ignored); each look sizes its own plate.
+- The self-installer's size guard is 800 KB (the bundled faces add about 200 KB).
+
+### Fixed
+- Dictation no longer reports success when it failed. The "voxtype toggled" notice used to appear even when voxtype was not running (for example, its GPU driver failed to load after a kernel update). `run()` now returns whether the command worked, and a failed toggle shows "Dictation unavailable". Tested in `tests/test_dial.py` (`DictationNotice`).
+- The haptics were silently off on machines where another package's udev rule claims every hidraw device (Vial's `99-vial.rules` does): the dial's rule now uses `:=`, so it can't be overridden.
+- Notifications through `notify-send` (any desktop without Omarchy) now replace each other instead of stacking.
+- Eraser scroll started late. A drag now locks its axis after about 2 mm instead of 5 mm, and the travel before the lock is replayed, so the page moves from the first millimetre. A touch that never locks an axis is still a tap.
+- The first eraser scroll after the daemon started was slow: the virtual pointer is now created at startup, not on first use.
+
+## [0.9.0] - 2026-10-23
+
+### Added
+- **re:dial classic**, the standard design language, and the layer structure behind it: a language is a folder in `plugin/redial/languages/` (`Language.qml` plus one file per look), selected with `language`; unknown or broken languages fall back to `classic`. The contract for adding a language or a look is in `plugin/redial/languages/README.md`.
+- `color_scheme`: `light` (the new default, ink on vellum), `dark`, or `theme` (match the desktop theme, read from Omarchy's `colors.toml`). It fills four colour roles (ground, line, accent, alert) in `ColourScheme.js`; a theme colour that does not reach 3:1 on the background falls back to a readable one. `colors.accent` still overrides the accent. Tested in `tests/qml/tst_colourscheme.qml`.
+- `reference_lines` (default `true`): one switch for the construction lines, crosshair and registration marks.
+- A title block on the Classic plate showing the tool's place on the ring (`SHEET 3/8`).
+- The overlay draws three states itself in re:dial classic, instead of handing them to Omarchy's OSD: **turning** a tool with the ring closed (the scale lit to the level with a dimension arc and figures; at most ~10 updates a second), **hints** from the introduction (a revision cloud with the gesture to make and, on the guided tour, the step), and **can't act** (section hatching and a status: a tool with nothing to act on, or the dial dropping within 5 s of use). They travel as `turn`/`hint`/`cant` lines on the existing socket; when the overlay is not listening, or the chosen look does not draw them yet, they go to Omarchy's OSD exactly as before. Tested in `tests/test_dial.py` (`OverlayNotes`) and `tests/qml/tst_notes.qml`.
+
+- **Settings** tool: picked from the ring it opens the settings window, then turning walks its controls and a click presses one, so the dial can set itself up. Its keys go only to that window (closed, a turn or click opens it again). It is a tool, so a shared machine can leave it off the ring.
+- **Every setting** page in the settings window: every key re:dial reads (`plugin/redial/schema.json`), grouped and searchable, with its key, default, range and a Reset; lists and objects open `config.json` in your editor. Tests fail when a key the daemon reads, or one in `config.example.json`, has no row, or when a range disagrees with the daemon's clamp.
+- Colour (Light, Dark, Match desktop), Reference lines and Design language on the Look page.
+- **Style** on the Look page: swatches for the accent, ink and ground colours (Auto, the theme's roles and its 16 slots, stored as theme references so a theme switch re-colours the dial), Backing strength, Line weight (Fine, Normal, Bold), Scale density (Low, Medium, High) and the six drawing elements. Controls the chosen appearance does not draw are greyed. These were a fly-out in one bar; now everyone sets the dial in the same place.
+- `tool_return_s`: return-to-Volume time for one tool. Scroll, Pages and Settings stay armed at least 60 s, never less than `auto_return_s`.
+- Windows names the window you land on, and Media shows the playing position and title, on the overlay (or the OSD).
+
+### Changed
+- The colour scheme now colours every face and layout (except `omarchy`) and the settings window, not only Classic; `colors.*` left at `"theme"` follow it.
+- The settings window is drawn in re:dial classic: square corners, hairline outlines, uppercase section labels, an underlined current page and a sheet title block.
+- The default ring (no `active_tools`) is Volume, Windows, Workspaces, Scroll, Undo, Zoom, Media, Settings, plus Brightness only where there is a backlight. Arrow Keys and Window Size moved to the library. Rings saved from the settings window are unchanged.
+- The settings window is a normal window: it opens floating and centred at 960x720 (install.sh adds one Hyprland rule for it, and uninstall.sh removes it), and can be moved, resized and Alt-Tabbed to. Its layout follows its width: narrow, one column as before; wide, the ring sits beside the Look controls and Every setting shows its groups two across. The ring and settings are separate windows again, so the daemon closing its ring never touches settings. The Settings tool sends keys only while the settings window has focus.
+- Tool ring changes in the settings window apply at once, like every other setting; the Save button is gone. Before, closing the window without Save quietly dropped them.
+- Click actions (dial, pen tail, eraser, barrel; Feel page and Every setting) show their place ("4 OF 32") and open a list of every action grouped by where it helps (typing and dictation, pointer, editing, web and windows, sound and media, open); Left and Right still step through.
+- The settings window shows when there is more to scroll: a scroll bar, and the content fades into the edge with "MORE BELOW".
+- Help has four setups: browse the web, point and click, dictate, run the computer.
+- **Clicks for one tool** (`tool_clicks`): any tool can have its own single, double and triple click; each falls back to the tool's own default, then to the clicks for every tool. "Tool's own click" can sit on any of the three. Set on the Feel page. Tested in `tests/test_dial.py` (`PointerTools`).
+- **Text** replaces Word Nav and Select: turning moves a word at a time, a click flips to selecting, a double click copies. **Scroll** takes over H Scroll: a click flips it sideways. Rings saved with the old names load the new tools. The library is 18 tools.
+- **Pointer clicks**: click is a left click, double click flips left-right / up-down, triple click is a right click (was: click flipped the axis and nothing pressed the button).
+
+- The Classic look is redrawn in re:dial classic (`languages/classic/Classic.qml`, replacing `FaceClassic.qml`): the lit sector turns with the hand as a pre-drawn layer instead of repainting all 180 bars on every detent, the leader eases between tools, the chosen glyph grows by transform, labels and callout keys are a step darker, and its colours come from the colour scheme. Construction lines are now on by default.
+- Opening and closing: the overlay fades in over 120 ms and out over 100 ms with stronger curves. `reduce_motion` still removes all sliding and scaling but keeps that short fade.
+- Every look's position comes from one helper, `Placement.js` (it was pasted five times; audit finding 6). Tested in `tests/qml/tst_placement.qml`.
+
+### Fixed
+- A dial that wakes with clicks working but turning dead now has a way out: the **Reconnect dial** click action (`reconnect_dial`, in the picker under The dial) drops its Bluetooth link, and the next press reconnects it. Seen once (2026-10-23): Bluetooth and the input device both looked fine, the dial just sent almost no turns; the self-heal, which covers a dial with no input device at all, could not see it. The log now records how many turns arrived before the first press after each reconnect, so it leaves evidence.
+- "cannot open ... Permission denied" is no longer logged on every reconnect: the daemon retries for about a second while udev sets the new device's permissions, and only a failure that outlasts that is logged.
+- `colors.accent`, `colors.line` and `colors.background` now recolour every look, Classic included; they were only read by some faces, and Classic took only a six-digit accent.
+- With the settings window open, the overlay no longer stops showing levels and notes.
+- Media scrubbed one player and play/pause hit another: the player was chosen by app name (`-p firefox` is whichever Firefox player comes first, so YouTube in one tab and Jellyfin in another were mixed up) and the click went to playerctl's default player. Turning, clicking and the readout now share one player, chosen by MPRIS instance; nothing playing says so on screen instead of guessing.
+- Scroll over Claude Code in an ordinary terminal (foot > bash > claude) no longer walks its prompt history: the guard now checks the focused window's processes, not only the `org.omarchy.agent` class.
+- Classic's leader no longer crosses the dial: for tools on the left (such as Focus and Tabs) it follows the scale round to the right and leaves between two labels, and when the callout has to sit higher or lower than the leader's natural line (tools at the bottom) it runs round the scale to meet it. Its first line now sits on the leader.
+
+## [0.8.5] - 2026-10-14
+
+### Added
+- Colours can be a theme slot, `color0` to `color15`: that colour of whichever Omarchy theme is active, so the dial re-colours when you switch themes. Works for themes that name their colours (`red`, `bright_blue`) and themes that number them, because it reads Omarchy's generated `alacritty.toml`. The parser is `plugin/redial/ThemeSlots.js`, tested in `tests/qml/tst_themeslots.qml`.
+- Self-heal for a dial that Bluetooth reports connected but that never became an input device (BlueZ handed the kernel an empty HID map). After 12 s the daemon drops the link so the dial reconnects on its next touch, backing off 30 s, 2 min, then 10 min. Logged as `self-heal:`.
+- A test that an old-name Rise widget is renamed on upgrade.
+- `docs/BETA-GUIDE.md`: what testers need, hardware basics, what to try, and how to report.
+
 ### Fixed
 - Upgrading from the Surface Dial beta left the Rise bar widget calling the removed `surface-dial-bar`. `install.sh` now refreshes an already-installed widget.
 
 ### Changed
 - `.coverage` is no longer tracked. The roadmap and BETA.md now describe the rename and the in-place upgrade.
-
-### Added
-- A test that an old-name Rise widget is renamed on upgrade.
-- `docs/BETA-GUIDE.md`: what testers need, hardware basics, what to try, and how to report.
 
 ## [0.8.4] - 2026-10-11 (renamed to re:dial)
 

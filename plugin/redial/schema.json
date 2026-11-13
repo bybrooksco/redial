@@ -1,0 +1,97 @@
+{
+  "_comment": "Every setting re:dial reads, for the settings window's Every setting page. key is the dotted path in config.json; removing a key restores the default. tests/test_dial.py checks this list against the daemon and config.example.json, so a new setting without a row here fails the tests.",
+  "groups": [
+    {
+      "title": "Look",
+      "items": [
+        { "key": "language", "type": "language", "default": "classic", "label": "Design language", "help": "How the overlay is drawn and moves. re:dial classic is the standard; community languages appear here once installed in plugin/redial/languages/." },
+        { "key": "color_scheme", "type": "choice", "default": "light", "label": "Colour", "help": "Light is ink on vellum. Match desktop takes the Omarchy theme's colours.", "options": [ { "key": "light", "label": "Light" }, { "key": "dark", "label": "Dark" }, { "key": "theme", "label": "Match desktop" } ] },
+        { "key": "reference_lines", "type": "bool", "default": true, "label": "Reference lines", "help": "Construction lines, crosshair and registration marks behind the drawing." },
+        { "key": "layout", "type": "choice", "default": "dial", "label": "Layout", "help": "The overlay's shape.", "options": [ { "key": "dial", "label": "Dial" }, { "key": "deck", "label": "Deck" }, { "key": "carousel", "label": "Carousel" }, { "key": "toast", "label": "Toast" }, { "key": "omarchy", "label": "Omarchy" } ] },
+        { "key": "overlay_style", "type": "choice", "default": "menu", "label": "Overlay style (without Omarchy)", "help": "How redial-overlay draws the tool ring on KDE, COSMIC and other desktops without Omarchy. Omarchy uses Layout instead.", "options": [ { "key": "menu", "label": "Menu" }, { "key": "card", "label": "Card" }, { "key": "strip", "label": "Strip" } ] },
+        { "key": "face", "type": "choice", "default": "classic", "label": "Dial face", "help": "Which face the Dial layout draws. Only Classic draws turning, hints and can't-act itself so far; the others use the desktop's OSD.", "options": [ { "key": "classic", "label": "Classic" }, { "key": "capsule", "label": "Capsule" }, { "key": "pie", "label": "Pie" }, { "key": "gauge", "label": "Gauge" }, { "key": "sundial", "label": "Sundial" }, { "key": "tag", "label": "Repair tag" }, { "key": "wheel", "label": "Finger wheel" } ] },
+        { "key": "anchor", "type": "choice", "default": "bottom", "label": "Position", "help": "Where the overlay sits on the screen.", "options": [ { "key": "top-left", "label": "Top left" }, { "key": "top", "label": "Top" }, { "key": "top-right", "label": "Top right" }, { "key": "left", "label": "Left" }, { "key": "center", "label": "Centre" }, { "key": "right", "label": "Right" }, { "key": "bottom-left", "label": "Bottom left" }, { "key": "bottom", "label": "Bottom" }, { "key": "bottom-right", "label": "Bottom right" } ] },
+        { "key": "size", "type": "choice", "default": "large", "label": "Size", "options": [ { "key": "large", "label": "Large" }, { "key": "medium", "label": "Medium" }, { "key": "small", "label": "Small" } ] },
+        { "key": "plate", "type": "choice", "default": "", "label": "Backing", "help": "Unset follows the face: Classic a rectangle, Gauge none, the others a disc.", "options": [ { "key": "none", "label": "None" }, { "key": "disc", "label": "Disc" }, { "key": "rect", "label": "Rectangle" } ] },
+        { "key": "plateOpacity", "type": "number", "default": 0.96, "min": 0, "max": 1, "step": 0.02, "label": "Backing strength", "help": "Hairlines need contrast over busy windows." },
+        { "key": "reduce_motion", "type": "bool", "default": false, "label": "Reduce motion", "help": "No sliding or scaling; the overlay still fades." },
+        { "key": "colors.accent", "type": "text", "default": "theme", "label": "Accent colour", "help": "theme follows the colour scheme. A hex such as #c4452a or a theme slot color0 to color15 overrides it." },
+        { "key": "colors.line", "type": "text", "default": "theme", "label": "Ink colour", "help": "theme follows the colour scheme; a hex or theme slot overrides it." },
+        { "key": "colors.background", "type": "text", "default": "theme", "label": "Ground colour", "help": "theme follows the colour scheme; a hex or theme slot overrides it." }
+      ]
+    },
+    {
+      "title": "Dial drawing",
+      "items": [
+        { "key": "dial.labels", "type": "bool", "default": true, "label": "Tool names" },
+        { "key": "dial.glyphs", "type": "bool", "default": true, "label": "Tool icons" },
+        { "key": "dial.callout", "type": "bool", "default": true, "label": "Callout note", "help": "The note a leader line points to: the tool, its click and its value." },
+        { "key": "dial.constructionLines", "type": "bool", "default": true, "label": "Construction lines", "help": "Needs Reference lines on." },
+        { "key": "dial.crosshair", "type": "bool", "default": false, "label": "Crosshair", "help": "Needs Reference lines on." },
+        { "key": "dial.registrationMarks", "type": "bool", "default": true, "label": "Registration marks", "help": "Needs Reference lines on." },
+        { "key": "dial.barCount", "type": "number", "default": 180, "min": 24, "max": 720, "step": 12, "label": "Scale ticks" },
+        { "key": "dial.majorEvery", "type": "number", "default": 15, "min": 2, "max": 90, "step": 1, "label": "Major tick every" },
+        { "key": "dial.sectorFill", "type": "number", "default": 0.86, "min": 0.1, "max": 1, "step": 0.02, "label": "Lit sector width" },
+        { "key": "dial.barWidthMinor", "type": "number", "default": 1, "min": 0.5, "max": 12, "step": 0.5, "unit": "px", "label": "Minor tick weight" },
+        { "key": "dial.barWidthMajor", "type": "number", "default": 2, "min": 0.5, "max": 12, "step": 0.5, "unit": "px", "label": "Major tick weight" },
+        { "key": "dial.barWidthActive", "type": "number", "default": 2.5, "min": 0.5, "max": 16, "step": 0.5, "unit": "px", "label": "Lit tick weight" },
+        { "key": "dial.needleWidth", "type": "number", "default": 2, "min": 0.5, "max": 12, "step": 0.5, "unit": "px", "label": "Needle weight" },
+        { "key": "dial.ringWidth", "type": "number", "default": 1, "min": 0.5, "max": 8, "step": 0.5, "unit": "px", "label": "Ring weight" }
+      ]
+    },
+    {
+      "title": "Feel",
+      "items": [
+        { "key": "sensitivity", "type": "number", "default": 1, "min": 0.5, "max": 2, "step": 0.1, "label": "Sensitivity", "help": "Higher means less turning per step." },
+        { "key": "auto_return_s", "type": "number", "default": 6, "min": 3, "max": 300, "step": 1, "unit": "s", "label": "Return to Volume after", "help": "Scroll, Pages and Settings stay at least 60 s: you stop to read." },
+        { "key": "tool_return_s", "type": "json", "default": {}, "label": "Return time per tool", "help": "Seconds for one tool, beating Return to Volume after: {\"Scroll\": 120, \"Media\": 30}." },
+        { "key": "deadzone", "type": "number", "default": 0, "min": 0, "max": 100, "step": 5, "label": "Ignore small turns", "help": "Counts to turn after a pause before anything happens. Filters bumps and tremor." },
+        { "key": "double_click_ms", "type": "number", "default": 250, "min": 150, "max": 600, "step": 10, "unit": "ms", "label": "Double-click speed" },
+        { "key": "hold_ms", "type": "number", "default": 400, "min": 200, "max": 1500, "step": 50, "unit": "ms", "label": "Hold to open the tool menu" },
+        { "key": "menu_latch", "type": "bool", "default": false, "label": "Tap menu", "help": "Let go once it opens, then turn and click to choose." },
+        { "key": "menu_timeout_ms", "type": "number", "default": 8000, "min": 3000, "max": 12000, "step": 500, "unit": "ms", "label": "Tap menu closes after" },
+        { "key": "keep_awake", "type": "bool", "default": false, "label": "Keep the dial awake", "help": "The dial sleeps after at most 5 minutes untouched. On keeps it awake while this computer is on and the dial is connected, with a silent haptic once a minute. Stops when the computer sleeps or shuts down. Uses more battery." },
+        { "key": "return_buzz", "type": "bool", "default": true, "label": "Buzz on return to Volume" },
+        { "key": "osd", "type": "bool", "default": true, "label": "Show what turning does", "help": "Levels, window names and track position on screen." },
+        { "key": "guide", "type": "bool", "default": true, "label": "Hints while you learn" },
+        { "key": "onboarding_mode", "type": "choice", "default": "adaptive", "label": "How hints teach", "options": [ { "key": "adaptive", "label": "When ready" }, { "key": "discover", "label": "Quietly" }, { "key": "guided", "label": "A short tour" } ] },
+        { "key": "announce_tool", "type": "bool", "default": false, "label": "Speak the tool name", "help": "Needs spd-say or espeak-ng." },
+        { "key": "intro_seen", "type": "bool", "default": false, "label": "Welcome dismissed", "help": "Off shows the welcome card again." },
+        { "key": "watchdogMs", "type": "number", "default": 15000, "min": 2000, "max": 120000, "step": 1000, "unit": "ms", "label": "Overlay safety close", "help": "The overlay closes itself after this long if the daemon goes quiet." }
+      ]
+    },
+    {
+      "title": "Clicks",
+      "items": [
+        { "key": "clicks.single", "type": "click", "group": "dial", "default": "tool", "label": "Single click" },
+        { "key": "clicks.double", "type": "click", "group": "dial", "default": "dictation", "label": "Double click" },
+        { "key": "clicks.triple", "type": "click", "group": "dial", "default": "enter", "label": "Triple click" },
+        { "key": "tool_clicks", "type": "json", "default": {}, "label": "Clicks for one tool", "help": "A tool's own single, double or triple click, beating its default and the clicks above: {\"Pointer\": {\"triple\": \"copy\"}}. \"tool\" is the tool's own click. Set on the Feel page." },
+        { "key": "assistant", "type": "json", "default": { "label": "My assistant", "cmd": [] }, "label": "Quick assistant", "help": "The command the Quick assistant click runs: {\"label\": \"...\", \"cmd\": [\"...\"]}." },
+        { "key": "launchers", "type": "json", "default": [], "label": "Your launchers", "help": "Up to 12 click actions of your own: [{\"name\": \"Notes\", \"cmd\": [\"obsidian\"]}]. Restart the dial service after editing." }
+      ]
+    },
+    {
+      "title": "Pen",
+      "items": [
+        { "key": "pen.enabled", "type": "bool", "default": true, "label": "Surface Pen support" },
+        { "key": "pen.tail_clicks.single", "type": "click", "group": "pentail", "default": "space", "label": "Tail: single click" },
+        { "key": "pen.tail_clicks.double", "type": "click", "group": "pentail", "default": "enter", "label": "Tail: double click" },
+        { "key": "pen.tail_clicks.hold", "type": "click", "group": "pentail", "default": "dictation", "label": "Tail: press and hold" },
+        { "key": "pen.barrel.enabled", "type": "bool", "default": true, "label": "Barrel button" },
+        { "key": "pen.barrel.action", "type": "click", "group": "barrel", "default": "right_click", "label": "Barrel button does" },
+        { "key": "pen.eraser.tap", "type": "click", "group": "eraser", "default": "escape", "label": "Eraser: quick tap" },
+        { "key": "pen.eraser.hold", "type": "click", "group": "eraser", "default": "delete_word", "label": "Eraser: press and hold" },
+        { "key": "pen.eraser_tap_min_ms", "type": "number", "default": 100, "min": 0, "max": 500, "step": 10, "unit": "ms", "label": "Eraser: ignore touches under" },
+        { "key": "pen.eraser_scroll_speed", "type": "number", "default": 1, "min": 0.25, "max": 4, "step": 0.25, "unit": "x", "label": "Eraser: scroll speed" }
+      ]
+    },
+    {
+      "title": "Tools",
+      "items": [
+        { "key": "active_tools", "type": "json", "default": [], "label": "Tools on the ring", "help": "Names in ring order. The Look page edits this; empty means the default ring." },
+        { "key": "tools", "type": "json", "default": [], "label": "Custom tools", "help": "Full tool definitions for tools the library can't express. Wins over Tools on the ring. See config.example.json." }
+      ]
+    }
+  ]
+}

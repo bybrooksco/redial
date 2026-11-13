@@ -1,0 +1,391 @@
+#!/usr/bin/env python3
+"""redial-overlay -- the tool ring on desktops without Omarchy (COSMIC, KDE Plasma, Sway, ...).
+
+The daemon (redial-hypr) sends it the same lines it sends Omarchy's overlay, over
+$XDG_RUNTIME_DIR/redial.sock:  open {json} | highlight N | pos F | close  (others are ignored).
+It draws one of three styles (config "overlay_style": card, menu or strip) in the desktop's own
+colours and monospace font, re-read on every open so a theme change shows on the next hold.
+
+Needs GTK 3 and gtk-layer-shell (Ubuntu/Pop: gir1.2-gtklayershell-0.1). GNOME has no layer-shell,
+so there it exits at once and the daemon keeps using notifications. See docs/PLATFORMS.md.
+"""
+
+import configparser
+import json
+import os
+import re
+import socket
+import sys
+
+STYLES = ("card", "menu", "strip")
+DEFAULT_STYLE = "menu"
+CONFIG = os.path.expanduser("~/.config/redial/config.json")
+SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR", ""), "redial.sock")
+
+# Freedesktop icon names for the Card style. Omarchy's tools use Nerd Font glyphs, which most
+# desktops don't have installed, so the Card asks the icon theme instead.
+ICONS = {
+    "Volume": "audio-volume-high-symbolic",
+    "Scroll": "input-mouse-symbolic",
+    "Pointer": "input-mouse-symbolic",
+    "Zoom": "zoom-in-symbolic",
+    "Undo": "edit-undo-symbolic",
+    "Media": "media-playback-start-symbolic",
+    "Text": "insert-text-symbolic",
+    "Arrow Keys": "input-keyboard-symbolic",
+    "Pages": "x-office-document-symbolic",
+    "Tabs": "tab-new-symbolic",
+    "Brightness": "display-brightness-symbolic",
+    "Settings": "emblem-system-symbolic",
+}
+
+
+# ---------------------------------------------------------------- theme (no GTK needed)
+
+
+def _hex(r, g, b):
+    return "#" + "".join(f"{max(0, min(255, round(float(c) * 255))):02x}" for c in (r, g, b))
+
+
+def _ron_colour(text, field):
+    """A top-level `field: (red: .., green: .., blue: ..)` from a COSMIC theme file, as #rrggbb."""
+    m = re.search(
+        rf"^    {field}: \(\s*red: ([\d.]+),\s*green: ([\d.]+),\s*blue: ([\d.]+)", text, re.M
+    )
+    return _hex(*m.groups()) if m else None
+
+
+def _ron_base(text):
+    """The first `base: (red ..)` in a COSMIC theme file (accent's own colour)."""
+    m = re.search(r"base: \(\s*red: ([\d.]+),\s*green: ([\d.]+),\s*blue: ([\d.]+)", text)
+    return _hex(*m.groups()) if m else None
+
+
+def cosmic_theme(home):
+    """COSMIC's colours, from ~/.config/cosmic; None when COSMIC has no theme files."""
+    root = os.path.join(home, ".config/cosmic")
+    try:
+        with open(os.path.join(root, "com.system76.CosmicTheme.Mode/v1/is_dark")) as f:
+            dark = f.read().strip() != "false"
+    except OSError:
+        dark = True
+    d = os.path.join(root, f"com.system76.CosmicTheme.{'Dark' if dark else 'Light'}/v1")
+
+    def read(name):
+        try:
+            with open(os.path.join(d, name)) as f:
+                return f.read()
+        except OSError:
+            return ""
+
+    bg, primary, accent = read("background"), read("primary"), read("accent")
+    t = {
+        "bg": _ron_colour(bg, "base"),
+        "fg": _ron_colour(bg, "on"),
+        "surface": _ron_colour(primary, "base"),
+        "accent": _ron_base(accent),
+    }
+    if not all(t.values()):
+        return None
+    m = re.search(r"radius_s: \(([\d.]+)", read("corner_radii"))
+    t["radius"] = round(float(m.group(1))) if m else 2
+    t["font"] = "monospace"
+    return t
+
+
+def kde_theme(home):
+    """KDE Plasma's colours and fixed-width font, from ~/.config/kdeglobals; None if absent."""
+    cp = configparser.ConfigParser(interpolation=None, strict=False)
+    if not cp.read(os.path.join(home, ".config/kdeglobals")):
+        return None
+
+    def rgb(section, key):
+        v = cp.get(section, key, fallback="")
+        parts = v.split(",")
+        if len(parts) < 3 or not all(p.strip().isdigit() for p in parts[:3]):
+            return None
+        return "#" + "".join(f"{int(p):02x}" for p in parts[:3])
+
+    t = {
+        "bg": rgb("Colors:Window", "BackgroundNormal"),
+        "fg": rgb("Colors:Window", "ForegroundNormal"),
+        "surface": rgb("Colors:View", "BackgroundAlternate")
+        or rgb("Colors:Button", "BackgroundNormal"),
+        "accent": rgb("General", "AccentColor") or rgb("Colors:Selection", "BackgroundNormal"),
+    }
+    if not all(t.values()):
+        return None
+    t["radius"] = 4
+    t["font"] = cp.get("General", "fixed", fallback="monospace").split(",")[0] or "monospace"
+    return t
+
+
+FALLBACK = {"bg": "#1e1e1e", "fg": "#e8e8e8", "surface": "#2d2d2d", "accent": "#3584e4"}
+
+
+def theme(home=None, desktop=None):
+    """The desktop's colours: COSMIC or KDE files when on those desktops, else None (GTK's)."""
+    home = home or os.path.expanduser("~")
+    desktop = (
+        desktop if desktop is not None else os.environ.get("XDG_CURRENT_DESKTOP", "")
+    ).upper()
+    if "COSMIC" in desktop:
+        return cosmic_theme(home)
+    if "KDE" in desktop:
+        return kde_theme(home)
+    return None
+
+
+def style_from(doc):
+    s = doc.get("overlay_style") if isinstance(doc, dict) else None
+    return s if s in STYLES else DEFAULT_STYLE
+
+
+def css(t):
+    """The stylesheet for one theme. Colours are #rrggbb strings from theme() or GTK."""
+    return f"""
+window {{ background: transparent; }}
+.ring {{ background: {t["bg"]}; color: {t["fg"]}; border: 2px solid {t["accent"]};
+        border-radius: {t["radius"]}px; font-family: "{t["font"]}"; font-size: 15px; }}
+.ring.card {{ padding: 12px 16px; font-weight: bold; }}
+.dim {{ color: alpha({t["fg"]}, 0.6); }}
+.seg {{ min-width: 12px; min-height: 6px; background: alpha({t["fg"]}, 0.3); }}
+.seg.on {{ background: {t["accent"]}; }}
+.head, .foot {{ padding: 4px 14px; font-size: 12px; }}
+.head {{ border-bottom: 1px solid {t["surface"]}; }}
+.foot {{ border-top: 1px solid {t["surface"]}; }}
+.row {{ padding: 3px 14px; }}
+.row.on {{ background: {t["surface"]}; font-weight: bold;
+          box-shadow: inset 3px 0 0 {t["accent"]}; }}
+.caret {{ color: {t["accent"]}; min-width: 18px; }}
+.cell {{ padding: 7px 12px; border-right: 1px solid {t["surface"]}; }}
+.cell.on {{ background: {t["accent"]}; color: {t["bg"]}; font-weight: bold; }}
+"""
+
+
+def parse_line(line):
+    """('open', dict) | ('highlight', int) | ('close', None) | None for anything else."""
+    cmd, _, arg = line.strip().partition(" ")
+    try:
+        if cmd == "open":
+            doc = json.loads(arg)
+            if isinstance(doc, dict) and isinstance(doc.get("tools"), list):
+                return "open", doc
+        elif cmd == "highlight":
+            return "highlight", int(arg)
+        elif cmd == "pos":
+            return "highlight", round(float(arg))
+        elif cmd == "close":
+            return "close", None
+    except ValueError:
+        pass
+    return None
+
+
+# ---------------------------------------------------------------- window (GTK)
+
+
+def main():
+    import gi
+
+    gi.require_version("Gtk", "3.0")
+    try:
+        gi.require_version("GtkLayerShell", "0.1")
+    except ValueError:
+        sys.exit("redial-overlay: gtk-layer-shell is missing (Ubuntu: gir1.2-gtklayershell-0.1)")
+    import cairo
+    from gi.repository import GLib, Gtk, GtkLayerShell
+
+    if not GtkLayerShell.is_supported():
+        print("redial-overlay: this desktop has no layer-shell (GNOME?); nothing to do")
+        return
+
+    if not os.environ.get("XDG_RUNTIME_DIR"):
+        sys.exit("redial-overlay: no XDG_RUNTIME_DIR")
+    probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        probe.connect(SOCK)
+        sys.exit("redial-overlay: another overlay already listens on " + SOCK)
+    except OSError:
+        pass  # nobody there: a stale file at most
+    finally:
+        probe.close()
+    try:
+        os.unlink(SOCK)
+    except FileNotFoundError:
+        pass
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(SOCK)
+    os.chmod(SOCK, 0o600)
+    server.listen(4)
+
+    win = Gtk.Window()
+    GtkLayerShell.init_for_window(win)
+    GtkLayerShell.set_layer(win, GtkLayerShell.Layer.OVERLAY)
+    GtkLayerShell.set_namespace(win, "redial")
+    visual = win.get_screen().get_rgba_visual()
+    if visual:
+        win.set_visual(visual)
+    win.set_app_paintable(True)
+    provider = Gtk.CssProvider()
+    Gtk.StyleContext.add_provider_for_screen(
+        win.get_screen(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+    )
+    icons = Gtk.IconTheme.get_default()
+    state = {"doc": None, "index": 0, "style": DEFAULT_STYLE}
+
+    def gtk_theme():
+        ctx = win.get_style_context()
+
+        def look(name, default):
+            ok, c = ctx.lookup_color(name)
+            return _hex(c.red, c.green, c.blue) if ok else default
+
+        return {
+            "bg": look("theme_bg_color", FALLBACK["bg"]),
+            "fg": look("theme_fg_color", FALLBACK["fg"]),
+            "surface": look("theme_base_color", FALLBACK["surface"]),
+            "accent": look("theme_selected_bg_color", FALLBACK["accent"]),
+            "radius": 4,
+            "font": "monospace",
+        }
+
+    def place(anchor):
+        edges = {
+            "top": GtkLayerShell.Edge.TOP,
+            "bottom": GtkLayerShell.Edge.BOTTOM,
+            "left": GtkLayerShell.Edge.LEFT,
+            "right": GtkLayerShell.Edge.RIGHT,
+        }
+        want = set((anchor or "bottom").split("-")) & set(edges)
+        for name, edge in edges.items():
+            GtkLayerShell.set_anchor(win, edge, name in want)
+            GtkLayerShell.set_margin(win, edge, 60 if name in want else 0)
+
+    def label(text, *classes, xalign=0.0):
+        lb = Gtk.Label(label=text, xalign=xalign)
+        for c in classes:
+            lb.get_style_context().add_class(c)
+        return lb
+
+    def box(orient, *classes):
+        b = Gtk.Box(orientation=orient)
+        for c in classes:
+            b.get_style_context().add_class(c)
+        return b
+
+    def build():
+        doc = state["doc"]
+        tools = doc["tools"]
+        n = len(tools)
+        i = state["index"] % n
+        tool = tools[i]
+        hint = f"click: {tool['hint']}" if tool.get("hint") else ""
+        H, V = Gtk.Orientation.HORIZONTAL, Gtk.Orientation.VERTICAL
+        if state["style"] == "card":
+            root = box(H, "ring", "card")
+            root.set_spacing(14)
+            name = tool.get("name", "")
+            if icons.has_icon(ICONS.get(name, "")):
+                img = Gtk.Image.new_from_icon_name(ICONS[name], Gtk.IconSize.DND)
+                root.pack_start(img, False, False, 0)
+            nm = label(name)
+            nm.set_width_chars(max(len(t.get("name", "")) for t in tools))
+            root.pack_start(nm, False, False, 0)
+            segs = box(H)
+            segs.set_spacing(3)
+            segs.set_valign(Gtk.Align.CENTER)
+            for k in range(n):
+                segs.pack_start(box(H, "seg", *(["on"] if k == i else [])), False, False, 0)
+            root.pack_start(segs, False, False, 0)
+            root.pack_start(label(tool.get("valueText") or f"{i + 1}/{n}"), False, False, 0)
+            if hint:
+                root.pack_start(label(hint, "dim"), False, False, 0)
+        elif state["style"] == "strip":
+            root = box(V)
+            row = box(H, "ring")
+            for k, t in enumerate(tools):
+                row.pack_start(
+                    label(t.get("name", ""), "cell", *(["on"] if k == i else [])), False, False, 0
+                )
+            root.pack_start(row, False, False, 0)
+            cap = " · ".join(x for x in (hint, f"{i + 1}/{n}") if x)
+            root.pack_start(label(cap, "dim", "foot", xalign=0.5), False, False, 0)
+        else:
+            root = box(V, "ring")
+            head = box(H, "head", "dim")
+            head.pack_start(label("re:dial"), True, True, 0)
+            head.pack_start(label(f"{i + 1}/{n}", xalign=1.0), False, False, 0)
+            root.pack_start(head, False, False, 0)
+            for k, t in enumerate(tools):
+                on = k == i
+                r = box(H, "row", *(["on"] if on else ["dim"]))
+                r.pack_start(label("❯" if on else "", "caret"), False, False, 0)
+                r.pack_start(label(t.get("name", "")), True, True, 0)
+                if t.get("valueText"):
+                    r.pack_start(label(t["valueText"], xalign=1.0), False, False, 0)
+                root.pack_start(r, False, False, 0)
+            foot = "release to pick" + (f" · {hint}" if hint else "")
+            root.pack_start(label(foot, "dim", "foot"), False, False, 0)
+        old = win.get_child()
+        if old:
+            win.remove(old)
+        win.add(root)
+        win.show_all()
+        win.input_shape_combine_region(cairo.Region())  # clicks pass through to the desktop
+
+    def handle(msg):
+        kind, arg = msg
+        if kind == "open":
+            try:
+                with open(CONFIG) as f:
+                    cfg = json.load(f)
+            except (OSError, ValueError):
+                cfg = {}
+            state.update(doc=arg, index=int(arg.get("index", 0)), style=style_from(cfg))
+            if not arg["tools"]:
+                return
+            provider.load_from_data(css(theme() or gtk_theme()).encode())
+            place(arg.get("anchor"))
+            build()
+        elif kind == "highlight" and state["doc"] and state["doc"]["tools"]:
+            if arg % len(state["doc"]["tools"]) != state["index"] % len(state["doc"]["tools"]):
+                state["index"] = arg
+                build()
+        elif kind == "close":
+            state["doc"] = None
+            win.hide()
+
+    def on_client(conn, _cond, buf):
+        try:
+            data = conn.recv(65536)
+        except BlockingIOError:
+            return True
+        except OSError:
+            data = b""
+        if not data:
+            conn.close()
+            return False
+        buf[0] += data
+        *lines, buf[0] = buf[0].split(b"\n")
+        for ln in lines:
+            msg = parse_line(ln.decode(errors="replace"))
+            if msg:
+                handle(msg)
+        return True
+
+    def on_accept(_src, _cond):
+        conn, _ = server.accept()
+        conn.setblocking(False)
+        GLib.io_add_watch(conn, GLib.IO_IN | GLib.IO_HUP, on_client, [b""])
+        return True
+
+    GLib.io_add_watch(server, GLib.IO_IN, on_accept)
+    try:
+        Gtk.main()
+    finally:
+        os.unlink(SOCK)
+
+
+if __name__ == "__main__":
+    main()

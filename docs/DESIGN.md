@@ -19,6 +19,7 @@ decision live here. Dates are when a decision was made or measured.
 - [Overlay window](#overlay-window)
 - [Config bindings](#config-bindings)
 - [Faces and layouts](#faces-and-layouts)
+- [Design layers](#design-layers)
 - [Settings window](#settings-window)
 
 ## Interaction model
@@ -92,6 +93,10 @@ killing it to release.
 This is a real stuck-key risk if the daemon dies uncleanly while a tool holds
 one. Both a normal-exit path (`atexit`) and SIGTERM release it. SIGKILL can
 still leak the `wtype` child; `pkill wtype` recovers that by hand.
+
+On the uinput path (GNOME, KDE, COSMIC, or no `wtype`) the modifier is just held down
+on the virtual keyboard. The kernel destroys that device when the daemon dies, which
+releases the key, so SIGKILL can't leave it stuck.
 
 ## Scroll routing
 
@@ -193,6 +198,10 @@ and cannot misfire while the pen is still down.
   (`arrow_horizontal`). cw/ccw hold the vertical default; horizontal overrides
   them at dispatch time rather than replacing them, so a bug in the override
   can't lose the tool entirely. No magnitude, same as Word Nav.
+- **Text** (2026-10-23) is Word Nav and Select merged: the same click-flips shape, move by word
+  as the base and select by word as `alt`, with Copy as its own double click (`clicks`). **Scroll**
+  took over H Scroll the same way (the continuous path reads `arrow_horizontal`). `TOOL_RENAMED`
+  maps the old names in saved rings; `tools.json` publishes it as `replaces` for the settings window.
 - **Window Size** (2026-09-20) resizes the focused window. Same click-flips-the-
   axis shape as Arrow Keys, but the alternate axis is data (`alt`). Clockwise
   always grows and counter-clockwise always shrinks; `resize_active()` works out
@@ -214,10 +223,10 @@ third press); sensitivity scales three things (tool steps, the menu step, contin
 fails if that one wiring is reverted. Tools that hold a modifier stay capped at 10 s (see Interaction model).
 
 The settings window has no scrolling (its height is its contents), and the new rows would have made it taller than
-before. So it is two pages, **Look** (position, size, appearance, the tool ring and its Save) and **Feel** (the five
+before. So it is two pages, **Look** (position, size, appearance, the tool ring) and **Feel** (the five
 rows, clicks, pen); each page is shorter than the old single page. Pages are shown by a `visible:` condition on the
 existing sections, not by moving code, so the drag ring is untouched. `omarchy-shell dialtools page look|feel`
-switches page without a mouse. Save appears only on Look, since tool changes are the only staged ones.
+switches page without a mouse.
 
 ## Click gestures
 
@@ -326,25 +335,21 @@ Left for the maintainer, because they are taste or need a decision:
 
 ## Overlay window
 
-`DialMenu.qml` owns one shared `PanelWindow` with a `mode` of `live` or
-`settings` (merged 2026-09-26; before that they were two windows). `live` is the
-tool-rail/radial overlay, driven by the daemon while the dial turns, and must be
-fully click-through: the dial is the input device, so it can never eat a click
-meant for the window underneath. `settings` is `ToolPicker`'s content, with real
-mouse and keyboard input (IPC target `dialtools`, bar widget,
-Omarchy menu entry). `mode` picks the content and the mask/focus policy.
+`DialMenu.qml` owns two windows (split again 2026-10-23; one shared window with a `mode`
+from 2026-09-26). The overlay is a `PanelWindow` on the Overlay layer for the tool ring and
+notes, driven by the daemon while the dial turns, and fully click-through: the dial is the input
+device, so it can never eat a click meant for the window underneath. Settings (`ToolPicker`) is
+a normal `FloatingWindow` titled "re:dial settings" (IPC target `dialtools`, bar widget, Omarchy
+menu entry), so it can be moved, resized and Alt-Tabbed to like any app's settings. install.sh
+appends one Hyprland rule to `~/.config/hypr/hyprland.lua` that floats it centred at 960x720;
+without it the window tiles, and the layout adapts either way (see Settings window).
 
-The inactivity watchdog is scoped to the "popped up because you're using the
-dial" case. A manual peek at the Live tab from Settings should sit there until
-you leave it, like Settings itself.
+Because a normal window can lose focus, the Settings tool sends Tab and Enter only while
+"re:dial settings" is the focused window (`settings_window_focused()`); otherwise it opens and
+focuses the window and sends nothing.
 
-The Live tab has no in-window way back to Settings, because it is click-through
-by design. Returning goes through the same hotkey or bar widget as opening it.
-That is a deliberate trade.
-
-A one-time check still needs a human: open Settings, flip to Live, click an app
-under where the overlay sits, and confirm the click lands there. If it ever
-fails, the scoped fallback is two `PanelWindow`s sharing the same `mode` state.
+The inactivity watchdog is scoped to the "popped up because you're using the dial" case. A
+manual peek with Live from Settings stays until Live is pressed again or settings closes.
 
 ## Config bindings
 
@@ -360,7 +365,58 @@ wrote afterward. `cfg`'s binding is the single source of truth.
 `ToolPicker` follows the same rule: it never assigns `root.anchor` directly,
 because that is a binding off `configDoc`.
 
+## Design layers
+
+The overlay is drawn in six layers, and each can be swapped without touching the
+others (the diagram is in the project vault; the contract is in
+`plugin/redial/languages/README.md`):
+
+| Layer | Decides | Changed by |
+|---|---|---|
+| Your settings | reference lines, size, position, reduced motion, tools | you |
+| Colour scheme | the values of four roles: ground, line, accent, alert | anyone |
+| Look | one layout (Classic, Capsule, ...) | designers, community |
+| Design language | how things are drawn and how they move | designers, community |
+| Host | what the desktop offers (Omarchy today; a standalone host is planned) | re:dial |
+| Engine | dial input, tools, states (`redial-hypr`) | re:dial |
+
+- **Languages and colour schemes are separate axes.** A language only names the
+  roles; `ColourScheme.js` only supplies values for them. So a new language gets
+  Light, Dark and theme matching without extra work. Light is the default for
+  everyone; theme matching reads Omarchy's `colors.toml` directly (not the shell's
+  `Color` singleton) and checks contrast: a theme red that does not reach 3:1 on the
+  ground falls back to the next warm slot, then to the ink.
+- **A language is a folder** (`languages/<name>/Language.qml` plus one file per
+  look), and **it offers only the looks it ships**. Every face and layout (deck,
+  carousel, toast) is a language look loaded through one `Loader`; `LookResolve.js`
+  picks the file. A look the language lacks draws its `defaultLook` (no borrowing
+  from another language, so what you pick is what that language drew); a look that
+  fails to load draws the default, a failed default draws classic's Classic, and a
+  missing or broken language falls back to `classic`, so the overlay is never blank.
+  `lookCount` is the tag a language library will list.
+- **Two languages ship.** re:dial classic (ten looks: drafting plates, hairlines,
+  leaders to a callout) and re:dial basic (nine looks, working name: soft filled
+  plates with their own type, three bundled OFL faces cut to Latin static weights).
+  A look declares its `plateSize` and draws its own plate and its own states
+  (turning, hint, can't act); only the `omarchy` layout still hands states to the
+  desktop's OSD.
+- **Looks import nothing from the Omarchy shell.** The host passes the spacing unit,
+  font and type sizes in, which is what lets a standalone host run them later.
+- **re:dial classic** keeps Classic's plate and makes it cheaper: the lit sector is a
+  pre-drawn layer turned by transform with the hand, and the leader repaints a small
+  canvas as it eases; the 180-bar scale no longer repaints on every detent.
+- **Motion rules:** strong ease-out for arrivals, ease-in-out for things moving on
+  screen, closing (100 ms) quicker than opening (120 ms). `reduce_motion` drops
+  movement but keeps the short open/close fade, which moves nothing.
+- **Placement** for every look goes through `Placement.js` (it was pasted five times;
+  the Omarchy look passes its own bottom margin, the OSD slot).
+
 ## Faces and layouts
+
+The notes below describe the looks as they were before Phase 3 (2026-11), when Deck,
+Carousel and Toast were drawn inline in `DialMenu.qml`. They are now language looks
+(`languages/<name>/{Deck,Carousel,Toast}.qml`) ported from the 2026-10-22 mockups;
+the reasoning (constant-width row, fixed columns) carried over.
 
 - **Carousel** is a lower-detail restyle of the row-of-cards idea. It is not
   routed through the face `Loader`, because it isn't circular and the dial face
@@ -410,9 +466,13 @@ because that is a binding off `configDoc`.
 
 ## Settings window
 
-- Position, size, appearance, clicks and pen apply immediately. Tool changes are
-  staged (`dirty`) and written when you press Save; the daemon then reloads them
-  while the dial is idle, so there is no restart either way. `anchor` is just where
+- Layout follows the window's width, not the screen's: under `Style.space(760)` it is one
+  column (the ring below the Look controls); wider, the ring sits beside them at up to 420 high
+  and Every setting shows its groups two across. Content stops at 1280 wide, centred, so a
+  maximised window on a large screen keeps readable lines.
+- Every change applies immediately, the tool ring included (written on each add, remove or
+  drop; until 2026-10-23 it waited for Save, and closing the window without it lost the change).
+  The daemon reloads the ring while the dial is idle, so there is no restart. `anchor` is just where
   Quickshell draws the overlay, not state the daemon holds.
 - `tools.json`, `clicks.json` and `pen_clicks.json` are written by the daemon at
   startup, so the window never hardcodes a tool or action list. A tool added to

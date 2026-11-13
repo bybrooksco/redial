@@ -1,0 +1,11 @@
+// re:dial for Waybar (Sway, plain Hyprland, niri, or Waybar on KDE/COSMIC).
+// Add "custom/redial" to one of modules-left / modules-center / modules-right in
+// ~/.config/waybar/config.jsonc, and this block beside the other modules.
+// Needs jq for the click summary in the tooltip.
+"custom/redial": {
+    "exec": "~/.local/bin/redial-bar",
+    "return-type": "json",
+    "interval": 10,
+    "on-click": "~/.local/bin/redial-settings",
+    "on-click-right": "~/.local/bin/redial-bar restart"
+}

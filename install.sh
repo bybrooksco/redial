@@ -55,6 +55,7 @@ For your user only, no sudo:
   * the daemon and helper scripts      -> ~/.local/bin
   * the redial plugin             -> ~/.config/omarchy/plugins (already there if you used 'omarchy plugin add')
   * start the daemon at login          -> one line in ~/.config/hypr/autostart.lua
+  * settings opens as a floating window -> one rule in ~/.config/hypr/hyprland.lua
   * a "re:dial" menu entry        -> Omarchy menu > Setup
 If the Surface Dial beta (before the rename to re:dial) is installed, it is moved to the new
 name: settings and learning progress are kept, the old files are backed up, nothing is lost.
@@ -186,6 +187,15 @@ if grep -q 'launch_on_start("redial-hypr")' "$AUTOSTART" 2>/dev/null; then
 else
     backup_copy="$BACKUP$AUTOSTART"; mkdir -p "$(dirname "$backup_copy")"; cp -a "$AUTOSTART" "$backup_copy" 2>/dev/null
     cat "$R/config/autostart.snippet.lua" >> "$AUTOSTART" && ok "autostart added"
+fi
+HYPR_MAIN="$HOME/.config/hypr/hyprland.lua"
+if grep -q '"^re:dial settings$"' "$HYPR_MAIN" 2>/dev/null; then
+    skip "settings window rule already present"
+elif [[ -f "$HYPR_MAIN" ]]; then
+    backup_copy="$BACKUP$HYPR_MAIN"; mkdir -p "$(dirname "$backup_copy")"; cp -a "$HYPR_MAIN" "$backup_copy"
+    cat "$R/config/windowrule.snippet.lua" >> "$HYPR_MAIN" && ok "settings window rule added (floats it)"
+else
+    skip "no $HYPR_MAIN -- settings opens as a tiled window"
 fi
 MENU_EXT="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 if grep -q '"setup.redial"' "$MENU_EXT" 2>/dev/null; then

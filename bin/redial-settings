@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""redial-settings -- a small settings window for desktops without Omarchy.
+
+Picks which tools are on the ring and the ring's style (redial-overlay's Menu, Card or Strip).
+Everything else stays in ~/.config/redial/config.json. The daemon reloads the file by itself,
+so changes apply on the next turn. Omarchy has its own, fuller settings window instead.
+
+The tool list comes from tools.json, which the daemon writes beside the config at startup, so a
+tool added to the daemon shows up here with no change to this file.
+"""
+
+import json
+import os
+import sys
+
+CONFIG_DIR = os.environ.get("DIAL_CONFIG_DIR") or os.path.expanduser("~/.config/redial")
+CONFIG = os.path.join(CONFIG_DIR, "config.json")
+TOOLS = os.path.join(CONFIG_DIR, "tools.json")
+STYLES = (("menu", "Menu", "every tool by name"), ("card", "Card", "one line"),
+          ("strip", "Strip", "a status-bar row"))  # fmt: skip
+
+
+def read_config(path=CONFIG):
+    """(doc, None), or (None, why) when a file exists that this window must not overwrite."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+    except FileNotFoundError:
+        return {}, None
+    except (OSError, ValueError) as exc:
+        return None, f"{path} can't be read ({exc}). Fix it by hand; nothing was changed."
+    if not isinstance(doc, dict):
+        return None, f"{path} isn't a JSON object. Fix it by hand; nothing was changed."
+    return doc, None
+
+
+def ordered(tools, active):
+    """The library, with the ring's tools first in ring order; then the rest in library order."""
+    by_name = {t["name"]: t for t in tools}
+    first = [by_name[n] for n in active if n in by_name]
+    return first + [t for t in tools if t not in first]
+
+
+def ring_now(doc, tools):
+    """The names on the ring: active_tools if set, else the daemon's defaults."""
+    active = doc.get("active_tools")
+    if isinstance(active, list) and active:
+        return [n for n in active if isinstance(n, str)]
+    return [t["name"] for t in tools if t.get("default")]
+
+
+def merged(doc, ring, style):
+    """The config with the ring and style changed and every other key kept as it was."""
+    out = dict(doc)
+    out["active_tools"] = list(ring)
+    out["overlay_style"] = style
+    return out
+
+
+def write_config(doc, path=CONFIG):
+    """Write atomically and private to the user, like the daemon's own writes."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = f"{path}.{os.getpid()}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(doc, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
+def main():
+    import gi
+
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+
+    def build(app):
+        win = app.get_active_window()
+        if win:
+            win.present()
+            return
+        win = Gtk.ApplicationWindow(application=app, title="re:dial settings")
+        win.set_default_size(420, 560)
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin=18)
+        win.add(outer)
+
+        def heading(text):
+            lb = Gtk.Label(xalign=0)
+            lb.set_markup(f"<b>{text}</b>")
+            outer.pack_start(lb, False, False, 0)
+
+        doc, why = read_config()
+        try:
+            with open(TOOLS, encoding="utf-8") as f:
+                tools = json.load(f)
+        except (OSError, ValueError):
+            tools = None
+        if why or not tools:
+            msg = why or "No tool list yet. Start the dial daemon once (it writes tools.json)."
+            outer.pack_start(Gtk.Label(label=msg, wrap=True, xalign=0), False, False, 0)
+            win.show_all()
+            return
+
+        heading("Tools on the ring")
+        hint = Gtk.Label(xalign=0, wrap=True)
+        hint.set_markup("<small>Checked tools are on the ring, top to bottom. "
+                        "Greyed tools don't work on this desktop yet.</small>")  # fmt: skip
+        outer.pack_start(hint, False, False, 0)
+        ring = ring_now(doc, tools)
+        checks = []
+        listbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        for t in ordered(tools, ring):
+            cb = Gtk.CheckButton(label=t["name"])
+            cb.set_active(t["name"] in ring)
+            cb.set_tooltip_text(t.get("description") or None)
+            if not t.get("works_here", True):
+                cb.set_sensitive(t["name"] in ring)  # can still be unticked, not newly added
+                cb.set_label(f"{t['name']}  (not on this desktop)")
+            listbox.pack_start(cb, False, False, 0)
+            checks.append((t["name"], cb))
+        scroll = Gtk.ScrolledWindow(vexpand=True)
+        scroll.add(listbox)
+        outer.pack_start(scroll, True, True, 0)
+
+        heading("Ring style")
+        style_now = doc.get("overlay_style", "menu")
+        group = None
+        radios = []
+        for key, label, what in STYLES:
+            rb = Gtk.RadioButton.new_with_label_from_widget(group, f"{label}: {what}")
+            group = group or rb
+            rb.set_active(key == style_now)
+            outer.pack_start(rb, False, False, 0)
+            radios.append((key, rb))
+
+        status = Gtk.Label(xalign=0)
+        save = Gtk.Button(label="Save")
+
+        def on_save(_b):
+            picked = [n for n, cb in checks if cb.get_active()]
+            if not picked:
+                status.set_text("Pick at least one tool.")
+                return
+            fresh, err = read_config()  # re-read: the file may have changed while this was open
+            if err:
+                status.set_text(err)
+                return
+            style = next(k for k, rb in radios if rb.get_active())
+            try:
+                write_config(merged(fresh, picked, style))
+            except OSError as exc:
+                status.set_text(f"Couldn't save: {exc}")
+                return
+            status.set_text("Saved. The dial picks it up on the next turn.")
+
+        save.connect("clicked", on_save)
+        row = Gtk.Box(spacing=12)
+        row.pack_start(status, True, True, 0)
+        row.pack_end(save, False, False, 0)
+        outer.pack_end(row, False, False, 0)
+        win.show_all()
+
+    app = Gtk.Application(application_id="tools.redial.Settings")
+    app.connect("activate", build)
+    sys.exit(app.run(sys.argv[:1]))
+
+
+if __name__ == "__main__":
+    main()

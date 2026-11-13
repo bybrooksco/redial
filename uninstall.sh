@@ -46,6 +46,7 @@ stash() {
 BINS=(redial-hypr redial-setup redial-restart redial-bar redial-rise-widget)
 PLUGIN="$HOME/.config/omarchy/plugins/redial"
 AUTOSTART="$HOME/.config/hypr/autostart.lua"
+HYPR_MAIN="$HOME/.config/hypr/hyprland.lua"
 MENU_EXT="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 UNIT="$HOME/.config/systemd/user/redial.service"
 UDEV="${DIAL_UDEV_RULE:-/etc/udev/rules.d/70-redial.rules}"  # the override is for tests
@@ -58,6 +59,7 @@ This will, for your user only (no sudo):
   * remove ${BINS[*]// /, } from ~/.local/bin
   * remove the plugin folder ~/.config/omarchy/plugins/redial
   * remove the start-at-login lines from ~/.config/hypr/autostart.lua
+  * remove the settings window rule from ~/.config/hypr/hyprland.lua
   * remove Setup > re:dial from the Omarchy menu
 Everything removed is moved to $BACKUP first.
 Your settings (~/.config/redial) are $( ((PURGE)) && echo "moved to the backup too (--purge)" || echo "kept; pass --purge to remove them as well" ).
@@ -110,27 +112,31 @@ fi
 
 echo
 echo "-- 4. Start at login + menu entry --"
-if grep -q 'launch_on_start("redial-hypr")' "$AUTOSTART" 2>/dev/null; then
-    mkdir -p "$BACKUP$(dirname "$AUTOSTART")" && cp -a "$AUTOSTART" "$BACKUP$AUTOSTART"
-    tmp="$(mktemp)"
-    # Drop only what install.sh added: a blank line, its comment line, and the launch line.
-    awk '
-        $0 == "" { if (held) print ""; held = 1; next }
-        {
-            if (held) {
-                held = 0
-                if (index($0, "-- re:dial daemon. Source:") == 1) next
-                print ""
+# Drop only what install.sh appended to a file: a blank line, its comment line, and its rule line.
+drop_snippet() {  # file comment-prefix rule-marker what
+    if grep -qF "$3" "$1" 2>/dev/null; then
+        mkdir -p "$BACKUP$(dirname "$1")" && cp -a "$1" "$BACKUP$1"
+        tmp="$(mktemp)"
+        awk -v c="$2" -v m="$3" '
+            $0 == "" { if (held) print ""; held = 1; next }
+            {
+                if (held) {
+                    held = 0
+                    if (index($0, c) == 1) next
+                    print ""
+                }
+                if (index($0, m)) next
+                print
             }
-            if (index($0, "launch_on_start(\"redial-hypr\")")) next
-            print
-        }
-        END { if (held) print "" }
-    ' "$AUTOSTART" > "$tmp" && cat "$tmp" > "$AUTOSTART" && ok "autostart lines removed"
-    rm -f "$tmp"
-else
-    skip "no autostart entry"
-fi
+            END { if (held) print "" }
+        ' "$1" > "$tmp" && cat "$tmp" > "$1" && ok "$4 removed"
+        rm -f "$tmp"
+    else
+        skip "no $4"
+    fi
+}
+drop_snippet "$AUTOSTART" "-- re:dial daemon. Source:" 'launch_on_start("redial-hypr")' "autostart lines"
+drop_snippet "$HYPR_MAIN" "-- re:dial settings:" '"^re:dial settings$"' "settings window rule"
 if grep -q '"setup.redial"' "$MENU_EXT" 2>/dev/null; then
     mkdir -p "$BACKUP$(dirname "$MENU_EXT")" && cp -a "$MENU_EXT" "$BACKUP$MENU_EXT"
     if python3 "$R/scripts/add-menu-entry.py" --remove "$MENU_EXT"; then

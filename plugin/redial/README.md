@@ -3,62 +3,16 @@
 An on-screen tool menu for the Microsoft Surface Dial, as an Omarchy shell
 plugin. Driven over IPC and a socket by the `redial-hypr` daemon.
 
-Four layouts, same data and same IPC — pick one from the settings window's
-**Appearance** section (applies immediately, no restart), or set `layout`
-(and `face`, for `dial`) by hand in `config.json`:
+Every look is drawn by the chosen **design language** (`language`: `classic` or `basic`; see
+`languages/README.md`). A language offers only the looks it ships, and nothing is borrowed from
+another language. Pick a look from the settings window's **Appearance** section (applies
+immediately, no restart), or set `layout` (and `face`, for `dial`) by hand in `config.json`:
 
-- **`dial`** — a radial instrument face, in one of four styles chosen by `face`:
-
-  - **`classic`** (default) — the original instrument in a rectangular window.
-    Horizontal labels on the circumference, concentric rings, sector spokes, a
-    graduated bar scale, and an elbowed leader out to a callout column beside
-    the dial. That column is why this face is landscape.
-  - **`capsule`** — tools as radial pills on a round backing (below).
-  - **`pie`** — full-bleed pie wedges, game-menu style (Overwatch/GTA-style
-    weapon wheel). No rings, no scale, no callout — the wedge you're pointing
-    at *is* the selection. Icon on every wedge; the hub carries the selected
-    tool's name, value and click hint, the only text on the face.
-  - **`gauge`** — tools laid across a 180° dome with a needle, like a car
-    speedometer. The middle ground between Classic's density and Pie/Carousel/
-    Toast's full minimalism: still reads as a precision instrument, without
-    the rings/hairlines/callout column.
-
-  The backing follows the face unless `plate` is set explicitly (`classic` →
-  `rect`, `gauge` → `none` since it draws its own dome band, `capsule`/`pie`
-  → `disc`).
-
-  Note on `capsule` at small tool counts: the pills are laid out radially, so
-  with five tools they sit far apart on a large circumference. `capsuleSpan`
-  widens them to close the gaps, but the capsule keeps a fixed radial length,
-  so pushing it far squares the shape off rather than lengthening the pill.
-
-  Tools are **capsules arranged radially**
-  around the rim: outline when idle, filled and enlarged when selected, with the
-  label set on the capsule and the click action as a secondary line beside it. A
-  thin leader runs from the centre to the selection. Round, with no rectangular
-  frame.
-
-  The interior rings each carry a different reading rather than decoration:
-
-  | Ring | Carries |
-  |---|---|
-  | fine dash scale | rotation, the honest 0.1° readout; the selected sector takes the accent |
-  | value arc | the active tool's value — drawn **only** when the tool has one, so its presence is itself information |
-  | slot ticks | one per tool, marking the angular divisions |
-- **`deck`** — a horizontal card rail along a screen edge, every tool the
-  same size.
-- **`carousel`** — a friendlier restyle of the same row-of-cards idea:
-  fewer visual details, and the selected card is larger than the rest. One
-  animated position drives every card's size, and the sizes are weighted so
-  they always sum to the same total, so the row never changes width mid-turn.
-  The icon is scaled rather than resized and the name fades in beneath it, so
-  nothing jumps.
-- **`toast`** — the smallest footprint: one pill naming the armed tool (icon,
-  name, click hint) plus a dot-pagination strip below it, the same idea as a
-  phone's "3 of 6" onboarding screens. No needle, no ring, no per-tool
-  layout math — the tradeoff is that it gives up the free "how far to the
-  next tool" feedback every other layout/face shows just by being circular
-  or ordered.
+- **`dial`** — a round instrument, in the face chosen by `face`: `classic` (default; the
+  instrument with a callout column beside it), `capsule`, `pie`, `gauge`, `sundial`, `tag`
+  (repair tag) or `wheel` (finger wheel).
+- **`deck`**, **`carousel`**, **`toast`** — the layouts that aren't round: a fan of sheets, a
+  slide rule, a single title block.
 - **`omarchy`** — one card in the same visual language as Omarchy's own volume
   OSD: the shell's `popups` border and text colours, the accent bar, the same
   bottom-centre slot. Icon, tool name, then a value bar (Volume, Brightness) or
@@ -106,22 +60,50 @@ See `config.example.json` for the full document with defaults. The file is
 watched, so edits apply live — no restart. A malformed file logs a warning and
 falls back to defaults rather than taking the overlay down.
 
+### Design layers
+
+The overlay is drawn in layers, and each can be swapped without touching the others
+(`docs/DESIGN.md#design-layers`, `languages/README.md`):
+
+- `language`: the design language, how things are drawn and how they move. `classic`
+  (**re:dial classic**, a drafting plate) is the standard. Others live in
+  `languages/<name>/`; an unknown one falls back to `classic`. Today the language draws the
+  `classic` face; the other faces are drawn by their built-in files until they are redrawn.
+- `color_scheme`: `light` (ink on vellum, the default for everyone), `dark`, or `theme` (match
+  the desktop's theme: Omarchy's `colors.toml`, dark where there is none). It fills the four
+  colour roles a language uses: ground, line, accent, alert. `colors.accent`, when set to a hex
+  colour or a theme slot, still overrides the accent.
+- `reference_lines`: `true` (default) or `false`. Off hides the drawing's background reference
+  lines: construction lines, crosshair and registration marks. The rings and the scale stay,
+  because they carry information.
+
+The colour scheme recolours everything: every face and layout (except `omarchy`, which is the
+shell's own OSD style) and the settings window. The `colors.*` keys below override one role each
+when they name a colour; left at `"theme"` they follow the scheme.
+
+**Style**, on the Look page, sets those colours from swatches (Auto, the theme's roles and its 16
+slots, stored as references such as `"color9"`), plus `plateOpacity`, a Line weight preset (the five
+`dial.*Width` keys at once), a Scale density preset (`dial.barCount`) and the six `dial.*` drawing
+switches. Controls the chosen appearance does not draw are greyed. The presets live in
+`StylePresets.js`; the Every setting page still sets each value on its own.
+
+**Every setting** is a page of the settings window: each key re:dial reads, with its key, its default
+and a Reset, grouped and searchable, from `schema.json`. Lists and objects (`active_tools`,
+`launchers`, `assistant`, `tool_return_s`, `tools`) are shown there and edited in `config.json`, which
+the page opens in your editor. A new setting without a row in `schema.json` fails the tests.
+
 Colours accept `"theme"` (follow the Omarchy palette), a role name
-(`accent`, `foreground`, `background`, `urgent`, `muted`), or a literal hex.
+(`accent`, `foreground`, `background`, `urgent`, `muted`), a theme slot
+(`color0` to `color15`, the active theme's terminal colours, so the dial
+re-colours when you switch themes), or a literal hex (fixed, ignores themes).
 All colour resolution goes through one function in `Settings.qml`, which is the
 only place coupled to Omarchy's palette.
 
 ## Shape and placement
 
-`capsuleFillet` (0–1) is the corner fillet on the tool capsules, expressed as a
-fraction of the largest radius the shape allows: `1` gives a stadium — a circle
-if the capsule is square — and `0` a hard box. One continuous number rather than
-a set of named shapes.
-
-`plate` chooses the backing: `disc` (default), `none`, or `rect` (the older
-rectangular plate with corner registration marks). `none` is the most minimal
-but was measured to leave hairlines and labels unreadable over a terminal, so
-the default is `disc`; switching is one config value, not a redesign.
+`plate` is the backing behind a look that does not draw its own plate (only Classic):
+`rect` (default, with corner registration marks), `disc` or `none`. Every other look draws its
+own plate, marks and title block.
 
 `anchor` places the overlay — `bottom` by default. Both layouts honour it.
 
@@ -132,55 +114,55 @@ to Position) -- it applies immediately, no restart. The deck layout is not scale
 Bottom matters for reach: on a large panel operated one-handed, the bottom edge
 is the reachable one, and a centred overlay collides with the bar.
 
-## Faces
+## Looks
 
-`FaceClassic.qml`, `FaceCapsule.qml`, `FacePie.qml` and `FaceGauge.qml` are
-peers behind a `Loader` (`DialMenu.qml`'s `faceFiles` map), sharing one
-contract (`cfg`, `tools`, `index`, `position`, `live`) and everything outside
-the face: settings, socket, IPC, plate, anchor, daemon. `carousel`, `toast` and `omarchy` are **not** faces — they're not circular, so the `dial` contract
-(`angleOf()`, a square Canvas) would fight them rather than fit them; they're
-two more top-level `layout` values instead, hardcoded directly in
-`DialMenu.qml` next to `deck`, which was never a face either.
-
-Faces are separate components rather than branches in one file because they
-differ in geometry, in what the interior rings (if any) mean, and in where
-the callout lives — gating that together would be a parallel implementation
-tangled into a single scope. `FacePie.qml`/`FaceGauge.qml` reuse
-`FaceCapsule.qml`'s/`FaceClassic.qml`'s exact `angleOf()`/needle-
-interpolation math rather than re-deriving it — `FaceGauge.qml` is the one
-exception, since its 180°-dome topology genuinely isn't the same problem as
-a full circle. Adding a fifth face means adding a file, a `faceFiles` entry
-and a `face` value; if the shared drawing keeps growing, hoist the common
-helpers rather than copying them again.
+Each look is one file in its language's folder (`languages/<name>/`), listed in that language's
+`Language.qml` `looks` map and loaded by `DialMenu.qml`'s face `Loader` through `LookResolve.js`.
+A look gets one contract (`languages/README.md`) and everything outside it stays shared:
+settings, socket, IPC, anchor, daemon. A look that fails to load draws its language's default
+look; a failed default draws re:dial classic's Classic, so the overlay is never blank. The
+`omarchy` layout is not a language look: it is the shell's own OSD box.
 
 ## Tools
 
 The tool set is data, not code, and lives in the daemon's `TOOL_LIBRARY`
-(`~/.local/bin/redial-hypr`) — eleven tools as shipped:
+(`~/.local/bin/redial-hypr`). The default ring (no `active_tools`) is the everyday set: Volume,
+Windows, Workspaces, Scroll, Undo, Zoom, Media, Settings, and Brightness where there is a backlight.
 
 | Tool | Rotate | Click |
 |---|---|---|
 | Volume | volume up/down (speed scales the step) | mute |
 | Windows | cycle windows | maximize |
 | Workspaces | previous/next workspace | last workspace |
-| Scroll | real wheel events (suppressed where they'd corrupt input) | — |
+| Scroll | real wheel events (suppressed where they'd corrupt input); sideways once flipped (clockwise is right) | flip up-down / sideways |
 | Undo | redo / undo | — |
 | Zoom | Ctrl+scroll | reset zoom |
-| Media | **scrub** the playing media, 5 s per click, doubling with rotation speed | play/pause |
-| Word Nav | word left/right | — |
-| Arrow Keys | Up/Down, or Left/Right once toggled | flip axis |
-| Window Size | grow/shrink the focused window 40 px per click | flip width/height |
-| Brightness | screen backlight, 2 % per click (speed scales it), floor 1 % | — |
+| Media | **scrub** the playing media, 5 s per click, doubling with rotation speed; shows position and title | play/pause, on the same player |
+| Settings | Tab / Shift+Tab through the settings window, which it opens when picked | press the focused control |
+| Brightness | screen backlight, 2 % per click (speed scales it), floor 1 % (default only with a backlight) | — |
+| *Text* | move a word left/right; select a word at a time once flipped | flip move/select; **double: copy** |
+| *Arrow Keys* | Up/Down, or Left/Right once toggled | flip axis |
+| *Window Size* | grow/shrink the focused window 40 px per click | flip width/height |
 | *Focus* | Tab / Shift+Tab: move through any form, dialog or toolbar | Enter |
 | *Tabs* | next / previous tab (Ctrl+Tab, Ctrl+Shift+Tab) | — |
-| *Select* | extend the selection a word at a time (Ctrl+Shift+Left/Right) | — |
 | *Pages* | Page Down / Page Up | — |
 | *Tile Focus* | move focus to the left/right tile, or up/down once toggled | flip axis |
 | *Move Window* | carry the focused window to the next/previous workspace, or around the positions of this workspace once toggled | flip workspaces/tiles |
-| *H Scroll* | scroll sideways (clockwise is right); speed scales it | — |
-| *Pointer* | move the mouse pointer; slow turns are fine steps, fast spins cross the screen | flip left-right / up-down |
+| *Pointer* | move the mouse pointer; slow turns are fine steps, fast spins cross the screen | **left click; double: flip left-right / up-down; triple: right click** |
 
-The italic tools are **not in the default set**, so the ring is the size it always was; add them in
+**Windows** shows the name of the window you land on. **Media** works on one player for turning and
+clicking: a playing one (among several, the one re:dial last worked on), else the one it last paused,
+told apart by MPRIS instance, so two browser tabs (YouTube and Jellyfin, say) or a browser and VLC are
+never mixed up. **Settings** lets the dial set itself up; its keys go only to the settings window (closed,
+a turn or click opens it instead), and leaving it off the ring keeps settings out of reach on a shared
+machine. Scroll, Pages and Settings stay armed at least 60 s (`tool_return_s` sets any tool's
+own time), because a pause to read should not hand the next turn to Volume.
+
+Word Nav and Select became **Text**, and H Scroll became Scroll's sideways flip (2026-10-23); rings saved
+with the old names load the new tools. Bold clicks are the tool's own double or triple (see Clicks for one
+tool on the Feel page, `tool_clicks`).
+
+The italic tools are **not in the default set**; add them in
 the settings window (**Look** page, the chips under the ring) or list them in `active_tools`. They exist so
 a whole session can be driven from the dial: *Focus* alone lets you operate any dialog with no keyboard.
 *Move Window* starts by carrying the window to another workspace (the same relative form as the Workspaces
@@ -190,8 +172,8 @@ A fresh arm always starts on workspaces.
 
 Window Size and Brightness are per-machine in practice: list them in `active_tools`
 where they make sense (Brightness needs a backlight; with none it logs once and does
-nothing). Changing which tools are active applies live: press **Save** in the picker (or edit
-`active_tools`) and the daemon reloads the
+nothing). Changing which tools are active applies live: each add, remove or move in the picker is
+saved at once (or edit `active_tools`), and the daemon reloads the
 list the next time the dial is idle (never mid-gesture, because the state machine holds a
 tool index) and re-arms the default tool. The log says what it loaded.
 
@@ -243,7 +225,7 @@ Two fields apply to the whole tool rather than one rotation direction:
 | Field | Does |
 |---|---|
 | `continuous: true` | ignores `cw`/`ccw` entirely; every rotation event drives the virtual pointer directly instead of stepping on fixed detents |
-| `hold_mod: "ctrl"` | holds that modifier for as long as the tool stays armed (a parked `wtype` process — see `press_mod`/`release_mod`), so a `continuous` tool's wheel events arrive as e.g. Ctrl+scroll |
+| `hold_mod: "ctrl"` | holds that modifier for as long as the tool stays armed (a parked `wtype` process, or a key held on the uinput keyboard — see `press_mod`/`release_mod`), so a `continuous` tool's wheel events arrive as e.g. Ctrl+scroll |
 | `gain` | hi-res wheel units per dial count for a `continuous` tool; defaults to `SCROLL_GAIN` |
 | `invert: true` | flips which rotation direction is positive wheel motion, so `cw` can mean "increase" consistently even though the default (`Scroll`) has `cw` = wheel-down |
 
@@ -253,10 +235,12 @@ Two fields apply to the whole tool rather than one rotation direction:
 |---|---|---|
 | `exec` | `cmd` (argv array) | runs a command |
 | `hypr` | `lua` | Hyprland Lua dispatcher |
-| `key` | `keys`, `repeat` | sends a key combo via `wtype`; `repeat` honours magnitude |
+| `key` | `keys`, `repeat` | sends a key combo via `wtype`, or the uinput keyboard where `wtype` can't type (see `docs/PLATFORMS.md`); `repeat` honours magnitude |
 | `volume` | `direction` | built-in; magnitude is the percent step |
 | `dictation` | — | toggles `voxtype` |
-| `seek` | `direction` (`forward`/`back`), `step` (seconds) | scrubs the playing MPRIS player via `playerctl position`; the step doubles per rotation-speed step, so the tool needs `magnitude` |
+| `seek` | `direction` (`forward`/`back`), `step` (seconds) | scrubs the Media player (see above) via `playerctl position`; the step doubles per rotation-speed step, so the tool needs `magnitude` |
+| `media` | `op` (`play-pause`/`next`/`previous`) | the same player `seek` scrubs |
+| `settings` | `op` (`open`/`next`/`prev`/`press`) | the settings window; keys only while it is open |
 | `resize` | `axis` (`x`/`y`), `direction` (`grow`/`shrink`), `step` (px) | resizes the focused window; points the delta at the edge that has a neighbour, so grow always grows |
 | `brightness` | `direction` (`up`/`down`), `step` (percent), `device` | backlight percent × magnitude, clamped 1–100; names the device explicitly |
 | `wheel` | — | marks a `continuous` tool; the virtual pointer drives it |
@@ -288,10 +272,11 @@ and every number is clamped to a safe range (text or true/false means the defaul
 | `double_click_ms` | How long a second (or third) press can take and still count as a double (or triple) click. | `250` | 150 to 600 |
 | `hold_ms` | How long to hold the button to open the tool menu. | `400` | 200 to 1500 |
 | `announce_tool` | Speak the tool name aloud when it is armed or highlighted in the menu. Needs `spd-say` (speech-dispatcher) or `espeak-ng`. | `false` | true / false |
-| `reduce_motion` | Turn off sliding, scaling and fading on the dial display; everything changes instantly. | `false` | true / false |
+| `reduce_motion` | Turn off sliding and scaling on the dial display; everything moves instantly. The overlay still fades in and out briefly, which moves nothing. | `false` | true / false |
 | `deadzone` | Ignore small turns: after a pause the dial must turn this many counts before anything happens, so a bump or a tremor does nothing. A deliberate turn loses only that lead-in (the counts are released together, not dropped). `0` is off. | `0` | 0 to 100 |
 | `menu_latch` | Tap menu: hold until the menu opens, let go, then turn and click to choose. Turning while still holding works as before. For anyone who cannot hold and turn at once. | `false` | true / false |
-| `menu_timeout_ms` | How long an untouched tap menu waits before closing without changing anything. | `8000` | 3000 to 12000 |
+| `menu_timeout_ms` | How long an untouched tap menu waits before closing without changing anything. A slider on the Feel page. | `8000` | 3000 to 12000 |
+| `keep_awake` | The dial sleeps on its own after at most 5 minutes untouched. On keeps it awake, for an always-there feel: once a minute the daemon sends a haptic report with waveform NONE, which the dial counts as use without moving the motor. Stops by itself when this computer sleeps or shuts down, since the daemon stops. Uses more battery. | `false` | true / false |
 
 Notes:
 
@@ -312,6 +297,9 @@ Those are the defaults. Options: `tool` (single only — the armed tool's own cl
 `next_track`, `prev_track`, `maximize`, `launcher` (opens the Omarchy menu), `screenshot`, `copy`,
 `paste`, `cut`, `select_all`, `redo`, `tab_next`, `tab_prev`, `fullscreen`, `float`, `mouse_left`, `mouse_right`,
 `mouse_middle`, `terminal`, `browser`, `files`, `assistant`, any `launch_<name>` you define, and `none`.
+`reconnect_dial` drops the dial's Bluetooth link so it reconnects on the next press: for the rare
+stall where clicks work but turning does nothing. You rarely need it: holding the dial for 3 s
+without turning does the same (see Known issues).
 **`copy` and `paste` are terminal-aware:** in a terminal Ctrl+C means "interrupt" and would kill the
 running program, so they send Ctrl+Insert and Shift+Insert there (the same as Omarchy's own
 universal copy and paste); `select_all` and `redo` do nothing in a terminal. A terminal is any window
@@ -411,9 +399,33 @@ scale is drawn once and only redrawn when the selection changes.
 The socket is optional. If nothing is listening the daemon logs it and the
 needle steps per detent instead.
 
+## States: turning, hints, can't act
+
+A second connection to the same socket carries what happens outside the ring, one JSON object per
+line after its kind:
+
+    turn {"name":"Volume","icon":"…","hint":"mute","value":42,"valueText":"42%"}\n
+    hint {"prompt":"Now press it","gesture":"press","step":2,"steps":6}\n
+    cant {"reason":"asleep","title":"Dial went to sleep","line":"Press it to wake it"}\n
+
+`turn` comes when a tool is turned with the ring closed (`value`/`valueText` only for a tool with a
+level, at most ~10 a second); `hint` is a line from the introduction (`gesture` is `turn`, `press`,
+`hold` or empty; `step`/`steps` only on the guided tour); `cant` says why the dial did nothing
+(`reason`: `asleep` when the dial drops within 5 s of use, `waiting`, or `tool`, a tool with nothing
+to act on). Each shows for its own time (1.2 s, 3.5 s, 2.5 s; `Notes.js`) and never covers the
+settings window.
+
+The daemon sends these only while the chosen look draws them (today: `face: classic`, layout
+`dial`). Otherwise, or when the overlay is not listening, they go to Omarchy's own OSD as before,
+so the dial is never quieter for it.
+
 ## Known issues
 
-### Scroll corrupts the input line in Claude Code (open, 2026-08-29)
+### Scroll corrupts the input line in Claude Code (guarded 2026-10-22)
+
+Now guarded in any terminal: Scroll sends nothing while the focused window's process tree runs
+`claude` (`SCROLL_SUPPRESS_PROGRAMS`), as well as over the `org.omarchy.agent` class, and the overlay
+says "Scroll is paused here". The transcript still cannot be scrolled with the dial there. History:
 
 Selecting **Scroll** and turning the dial over a Claude Code terminal walks its
 prompt history and destroys whatever is typed.
@@ -442,6 +454,19 @@ Until then: do not select Scroll over an agent terminal.
 until something downstream converts it back to keys. Any terminal on the
 alternate screen is a candidate, so a per-class guard is the durable answer
 rather than a fix aimed at one application.
+
+### Turning stops while clicks still work (self-heal 2026-11-06)
+
+Sometimes the dial's firmware stops sending turns while presses still arrive (seen 2026-10-23 after a
+wake, and 2026-11-06 mid-use). A raw capture showed the dial sending nothing at all while it was
+turned, so nothing on the computer can see it: a stalled dial and an untouched one are equally quiet.
+
+**Fix: hold the dial for 3 seconds without turning.** At the 3-second mark it buzzes once: let go.
+A held menu with not one turn count since the press is read as the stall: the menu closes, the armed
+tool stays, the link is dropped, and the dial reconnects on the next press with turning back. A
+healthy dial almost always sends a few tiny counts while held, and any count cancels it, so normal
+menu use (even a slow, thinking hold) is safe. At most once every 30 s. Each one is logged as `stall: ...` with
+the time since the last turn and the last haptic write, so a pattern can be found later.
 
 ## Prior art
 
