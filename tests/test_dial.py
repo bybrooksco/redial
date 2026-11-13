@@ -5328,7 +5328,8 @@ class FlowFixes(Base):
 
     def test_descendants_are_read_from_proc(self):
         names = PRISTINE["_descendant_names"](os.getppid())
-        self.assertIn(os.path.basename(sys.executable)[:15], names)
+        with open("/proc/self/comm") as f:  # "coverage" under CI, "python3" locally
+            self.assertIn(f.read().strip(), names)
 
 
 class SettingsSchema(unittest.TestCase):
