@@ -1567,7 +1567,10 @@ class Haptics:
             return False
 
     def _poke(self):
-        """Keep-awake: a haptic report with waveform NONE. The dial counts it as use; the motor stays still."""
+        """Keep-awake: a haptic report with waveform NONE.
+
+        The dial counts it as use; the motor stays still.
+        """
         if self._fire(0, 0, HAPTIC_NONE) and not self.poke_ok:
             log("keep-awake: first silent haptic sent")
             self.poke_ok = True
@@ -2679,7 +2682,10 @@ def dictation_toggle():
     if run(["voxtype", "record", "toggle"]):
         notify("\U0001f399  Dictation", "voxtype toggled")
     else:
-        notify("\U0001f399  Dictation unavailable", "voxtype isn't running: journalctl --user -u voxtype")
+        notify(
+            "\U0001f399  Dictation unavailable",
+            "voxtype isn't running: journalctl --user -u voxtype",
+        )
 
 
 # --------------------------------------------------------------------------
@@ -4431,7 +4437,9 @@ class Dial:
             return
         ACTIONS.submit(fn, 1)
         if name == "dictation":
-            HAPTIC.fire(PAT_DICTATION, rate_limit=False)  # dictation_toggle notifies once voxtype answers
+            HAPTIC.fire(
+                PAT_DICTATION, rate_limit=False
+            )  # dictation_toggle notifies once voxtype answers
         else:
             HAPTIC.fire(PAT_SELECT, rate_limit=False)
             notify(_CLICK_BY_NAME[name][1], f"{kind} click")
@@ -4483,10 +4491,15 @@ class Dial:
         if now - self.stall_kick_at < STALL_KICK_GAP_S:
             return
         self.stall_kick_at = now
-        turn = "none since start" if self.raw_rot_at is None else f"{now - self.raw_rot_at:.0f}s ago"
+        turn = (
+            "none since start" if self.raw_rot_at is None else f"{now - self.raw_rot_at:.0f}s ago"
+        )
         w = getattr(HAPTIC, "last_write", None)
         haptic = "never" if w is None else f"{time.monotonic() - w:.0f}s ago"
-        log(f"stall: menu held {held:.1f}s with no turns; last turn {turn}, last haptic write {haptic}")
+        log(
+            f"stall: menu held {held:.1f}s with no turns; "
+            f"last turn {turn}, last haptic write {haptic}"
+        )
         notify("Reconnecting the dial", "No turns arrived while you held it. Press once it's back.")
         kick_dial_async("stall self-heal")
 
@@ -4893,7 +4906,9 @@ def main():
         _status["attached"] = False
         # Dropped while in use: say so, or the next turn just does nothing. A dial that sleeps
         # on its own while idle says nothing; nobody is looking.
-        dropped_by_us = time.monotonic() - dial.stall_kick_at < DROP_IN_USE_S  # stall reconnect said so
+        dropped_by_us = (
+            time.monotonic() - dial.stall_kick_at < DROP_IN_USE_S
+        )  # stall reconnect said so
         if attached_at < dial.last_action > time.monotonic() - DROP_IN_USE_S and not dropped_by_us:
             cant_note("asleep", "Dial went to sleep", "Press it to wake it")
         dial.detach()

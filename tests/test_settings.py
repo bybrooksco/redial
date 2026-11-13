@@ -65,7 +65,10 @@ class Config(unittest.TestCase):
     def test_old_capsule_keys_are_ignored(self):
         # Keys from the retired built-in faces and inline deck: the config still loads, and saving
         # it leaves them alone (nothing reads them any more; they are the user's to delete).
-        old = {"dial": {"capsuleFillet": 0.5, "capsuleSpan": 0.2}, "deck": {"cardWidth": 150, "gap": 14}}
+        old = {
+            "dial": {"capsuleFillet": 0.5, "capsuleSpan": 0.2},
+            "deck": {"cardWidth": 150, "gap": 14},
+        }
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "config.json")
             s.write_config(old, path)

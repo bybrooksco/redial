@@ -453,8 +453,13 @@ class DictationNotice(unittest.TestCase):
     def notice(self, rc, out):
         shown = []
         m.notify = lambda title, body="": shown.append(title)
-        fake = lambda cmd, **kw: types.SimpleNamespace(stdout=out, stderr="", returncode=rc)
-        with unittest.mock.patch.object(m.subprocess, "run", fake):  # the real module; must not leak
+
+        def fake(cmd, **kw):
+            return types.SimpleNamespace(stdout=out, stderr="", returncode=rc)
+
+        with unittest.mock.patch.object(
+            m.subprocess, "run", fake
+        ):  # the real module; must not leak
             m.dictation_toggle()
         return shown
 
@@ -463,7 +468,8 @@ class DictationNotice(unittest.TestCase):
 
     def test_dead_voxtype_says_unavailable(self):
         self.assertEqual(
-            self.notice(1, "Error: Voxtype daemon is not running"), ["\U0001f399  Dictation unavailable"]
+            self.notice(1, "Error: Voxtype daemon is not running"),
+            ["\U0001f399  Dictation unavailable"],
         )
 
 
@@ -2575,7 +2581,6 @@ class StatusLoop(Base):
             m.status_loop(interval=0)
         self.assertEqual(writes, [80, 79])
 
-
     def test_keep_awake_pokes_once_a_minute_only_when_on_and_attached(self):
         fx = Fixture(self)
         fx.set(m, "dial_bluetooth", lambda: (True, 80))
@@ -2607,7 +2612,8 @@ class StatusLoop(Base):
         h = m.Haptics.__new__(m.Haptics)  # no worker thread
         calls, items = [], [None, (3, 120)]
         h.q = types.SimpleNamespace(
-            put_nowait=items.append, get=lambda: items.pop(0) if items else (_ for _ in ()).throw(StopLoop)
+            put_nowait=items.append,
+            get=lambda: items.pop(0) if items else (_ for _ in ()).throw(StopLoop),
         )
         items.clear()
         h._open = lambda: True
@@ -2631,7 +2637,9 @@ class StatusLoop(Base):
         h._poke()
         self.assertEqual(wrote, [bytes([0x01, 0, m.HAPTIC_NONE, 0, 0])] * 2)
         self.assertEqual(m.HAPTIC_NONE, 1)  # ordinal 1 is NONE; 3 would click the motor
-        self.assertEqual([x for x in logs if "keep-awake" in x], ["keep-awake: first silent haptic sent"])
+        self.assertEqual(
+            [x for x in logs if "keep-awake" in x], ["keep-awake: first silent haptic sent"]
+        )
         self.assertIsNotNone(h.last_write)
 
 
@@ -4489,7 +4497,7 @@ class OverlayNotes(Base):
 
     def test_a_look_that_does_not_draw_states_leaves_them_to_omarchy(self):
         with open(self.cfg, "w") as f:
-            json.dump({"layout": "omarchy"}, f)   # the shell's OSD box draws no states
+            json.dump({"layout": "omarchy"}, f)  # the shell's OSD box draws no states
         m.guide_say("Now press it")
         self.assertEqual(self.notes.sent, [])
         self.assertEqual(OSDS, [{"message": "Now press it", "duration": 3500}])
@@ -4670,9 +4678,11 @@ class OverlaySocket(unittest.TestCase):
 
     def gate(self, layout, face):
         doc = {"layout": layout, "face": face}
-        with unittest.mock.patch.object(m, "omarchy_shell", lambda: True), \
-             unittest.mock.patch.object(m, "live_config", lambda: doc), \
-             unittest.mock.patch.dict(os.environ, {"DIAL_MENU_LAYOUT": ""}):
+        with (
+            unittest.mock.patch.object(m, "omarchy_shell", lambda: True),
+            unittest.mock.patch.object(m, "live_config", lambda: doc),
+            unittest.mock.patch.dict(os.environ, {"DIAL_MENU_LAYOUT": ""}),
+        ):
             return m.overlay_draws_states()
 
     def test_states_go_to_the_overlay_for_every_language_layout(self):
@@ -4945,7 +4955,8 @@ class SelfInstaller(unittest.TestCase):
 
     def test_it_is_one_file_a_few_hundred_kilobytes_with_a_checksum(self):
         size = os.path.getsize(self.installer)
-        # small enough to attach to an email; ~200 KB of it is basic's three OFL faces (Latin subsets)
+        # small enough to attach to an email;
+        # ~200 KB of it is basic's three OFL faces (Latin subsets)
         self.assertLess(size, 800_000)
         self.assertGreater(size, 20_000)
         r = subprocess.run(
@@ -5391,9 +5402,11 @@ def tool_index_all(name):
     return [t["name"] for t in m.TOOLS].index(name)
 
 
-
 class LanguageFiles(unittest.TestCase):
-    """The shell can't resolve a sibling QML file used as a property type (basic looks drew an empty plate)."""
+    """The shell can't resolve a sibling QML file used as a property type.
+
+    (Basic looks drew an empty plate.)
+    """
 
     def test_no_property_typed_as_a_sibling_qml_file(self):
         root = os.path.join(HERE, "..", "plugin", "redial", "languages")
@@ -5402,11 +5415,12 @@ class LanguageFiles(unittest.TestCase):
             if not os.path.isdir(folder):
                 continue
             names = [f[:-4] for f in os.listdir(folder) if f.endswith(".qml")]
-            pattern = re.compile(r"\bproperty\s+(%s)\b" % "|".join(map(re.escape, names)))
+            pattern = re.compile(r"\bproperty\s+({})\b".format("|".join(map(re.escape, names))))
             for f in names:
                 with open(os.path.join(folder, f + ".qml")) as fh:
                     hit = pattern.search(fh.read())
-                self.assertIsNone(hit, "%s/%s.qml types a property as %s" % (lang, f, hit and hit.group(1)))
+                self.assertIsNone(hit, f"{lang}/{f}.qml types a property as {hit and hit.group(1)}")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
