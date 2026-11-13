@@ -2246,6 +2246,17 @@ Item {
                 }
               }
 
+              PenDiagram {
+                width: parent.width
+                visible: root.penEnabled
+                penHeight: Style.space(240)
+                lineColor: root.cfg.lineColor
+                textColor: root.cfg.lineColor
+                softColor: root.cfg.soft(0.5)
+                fontFamily: Style.font.family
+                fontSize: Style.font.caption
+              }
+
               Column {
                 width: parent.width
                 spacing: Style.space(2)
