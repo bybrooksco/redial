@@ -6,6 +6,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Barrel hold** (`pen.barrel.hold`, `hold_ms` 250-1500, default 500; Pen page): holding the barrel while the pen hovers runs one action, a power button for creative work. Off by default. The system's own right-click on press is never taken over; with a hold set, a key action on Press fires on release so a hold never fires both.
+- **The Pen page drawing lists what each button does now** and lights a setting as it changes.
 - **A second design language, re:dial basic** (working name): the quiet track. Every look is one thin track with an accent marker on it, the tools' own icons one step inside the track, and one shared card for the words; the looks differ only in the track's shape (Capsule, Pie, Finger wheel, Sundial, Gauge, List, Carousel, Deck, Toast; no Classic). Flat theme tones, no rims or shadows, one bundled face (Barlow Semi Condensed, SIL Open Font License). The plate keeps its size in every state. Spec: `docs/superpowers/specs/2026-11-06-redial-basic-language-design.md`. Tested in `tests/qml/tst_basic_*.qml`.
 - **re:dial classic draws every look**: Capsule, Gauge, Pie, Deck, Carousel and Toast redrawn as drafting plates, plus three new faces: **Sundial** (tools are hours; the sun follows the hand a breath behind), **Repair tag** (a checklist tag; a level punches holes; can't act stamps it) and **Finger wheel** (a rotary dial that is the hand and spins back onto the chosen hole). Tested in `tests/qml/tst_classic_*.qml`.
 - `lookCount` on every language: how many looks it ships, the tag a future language library lists.

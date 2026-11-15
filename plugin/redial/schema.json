@@ -80,6 +80,8 @@
         { "key": "pen.tail_clicks.hold", "type": "click", "group": "pentail", "default": "dictation", "label": "Tail: press and hold" },
         { "key": "pen.barrel.enabled", "type": "bool", "default": true, "label": "Barrel button" },
         { "key": "pen.barrel.action", "type": "click", "group": "barrel", "default": "right_click", "label": "Barrel button does" },
+        { "key": "pen.barrel.hold", "type": "click", "group": "barrelhold", "default": "none", "label": "Holding the barrel does" },
+        { "key": "pen.barrel.hold_ms", "type": "number", "default": 500, "min": 250, "max": 1500, "step": 50, "unit": "ms", "label": "Barrel hold time" },
         { "key": "pen.eraser.tap", "type": "click", "group": "eraser", "default": "escape", "label": "Eraser: quick tap" },
         { "key": "pen.eraser.hold", "type": "click", "group": "eraser", "default": "delete_word", "label": "Eraser: press and hold" },
         { "key": "pen.eraser_tap_min_ms", "type": "number", "default": 100, "min": 0, "max": 500, "step": 10, "unit": "ms", "label": "Eraser: ignore touches under" },

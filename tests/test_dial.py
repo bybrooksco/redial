@@ -1803,6 +1803,71 @@ class Eraser(Base):
         self.ev(m.BTN_STYLUS, 0)
         self.assertEqual(EVENTS, ["KEY:Return"])
 
+    def barrel_hold_setup(self, **barrel):
+        """Pen config + a fake Timer and action worker: returns (timers, ran)."""
+        self.configure(barrel=barrel)
+        timers, ran = [], []
+
+        class FakeTimer:
+            def __init__(self, secs, fn, args=()):
+                self.secs, self.fn, self.args, self.cancelled = secs, fn, args, False
+                self.daemon = False
+                timers.append(self)
+
+            def start(self):
+                pass
+
+            def cancel(self):
+                self.cancelled = True
+
+        fx = Fixture(self)
+        fx.set(m.threading, "Timer", FakeTimer)
+        fx.set(m, "ACTIONS", types.SimpleNamespace(submit=lambda fn, *a: (ran.append(fn), fn(*a))))
+        return timers, ran
+
+    def test_barrel_hold_is_off_by_default_so_press_is_unchanged(self):
+        timers, _ = self.barrel_hold_setup(action="enter")
+        self.ev(m.BTN_STYLUS, 1)
+        self.assertEqual(EVENTS, ["KEY:Return"])  # still fires on press
+        self.ev(m.BTN_STYLUS, 0)
+        self.assertEqual(timers, [])
+
+    def test_barrel_hold_fires_after_the_hold_time_and_skips_the_press_action(self):
+        timers, ran = self.barrel_hold_setup(action="enter", hold="escape", hold_ms=600)
+        self.ev(m.BTN_STYLUS, 1)
+        self.assertEqual(EVENTS, [])  # the press action waits for release
+        self.assertAlmostEqual(timers[0].secs, 0.6)
+        timers[0].fn(*timers[0].args)  # held long enough
+        self.assertEqual(EVENTS, ["KEY:Escape"])
+        self.assertEqual(len(ran), 1)  # ran on the action worker, not the pen thread
+        self.ev(m.BTN_STYLUS, 0)
+        self.assertEqual(EVENTS, ["KEY:Escape"])  # no press action after a hold
+
+    def test_a_short_barrel_press_fires_the_press_action_on_release(self):
+        timers, _ = self.barrel_hold_setup(action="enter", hold="escape")
+        self.ev(m.BTN_STYLUS, 1)
+        self.ev(m.BTN_STYLUS, 0)
+        self.assertTrue(timers[0].cancelled)
+        self.assertEqual(EVENTS, ["KEY:Return"])
+        timers[0].fn(*timers[0].args)  # a stale timer that fires anyway does nothing
+        self.assertEqual(EVENTS, ["KEY:Return"])
+
+    def test_barrel_right_click_still_passes_through_with_a_hold_set(self):
+        timers, _ = self.barrel_hold_setup(action="right_click", hold="escape")
+        self.ev(m.BTN_STYLUS, 1)
+        timers[0].fn(*timers[0].args)
+        self.ev(m.BTN_STYLUS, 0)
+        self.assertEqual([d for _, d in self.ptr.clicks], [True, False])
+        self.assertEqual(EVENTS, ["KEY:Escape"])
+
+    def test_barrel_hold_time_is_clamped_and_bad_hold_falls_back_to_nothing(self):
+        timers, _ = self.barrel_hold_setup(hold="escape", hold_ms=5)
+        self.ev(m.BTN_STYLUS, 1)
+        self.assertAlmostEqual(timers[0].secs, 0.25)
+        self.ev(m.BTN_STYLUS, 0)
+        self.configure(barrel={"hold": "right_click"})  # mouse buttons can't be a hold
+        self.assertEqual(m.pen_barrel_hold(), ("none", 0.5))
+
     def test_disabled_barrel_does_nothing(self):
         time.sleep(0.005)
         with open(self.cfg, "w") as f:
@@ -5384,7 +5449,9 @@ class SettingsSchema(unittest.TestCase):
             if row["type"] == "choice" and row["default"] != "":
                 self.assertIn(row["default"], [o["key"] for o in row["options"]], key)
             if row["type"] == "click":
-                self.assertIn(row["group"], ("dial", "pentail", "barrel", "eraser"), key)
+                self.assertIn(
+                    row["group"], ("dial", "pentail", "barrel", "barrelhold", "eraser"), key
+                )
 
     def test_style_presets_start_from_the_defaults(self):
         # An untouched config must read as Normal, Medium and 96% on the Look page's Style block.

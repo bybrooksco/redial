@@ -2537,24 +2537,45 @@ class EraserState:
                 self._move_x(value)
 
     def _barrel(self, value):
-        """Barrel button -> pen.barrel action. Bound globally, not allowlisted.
+        """Barrel button -> pen.barrel action (+ pen.barrel.hold). Bound globally, not allowlisted.
 
-        A "mouse" action passes press/release through; any other action fires once on press.
+        A "mouse" action passes press/release through; any other action fires once on press, or
+        on release when a hold action is set (so a hold never also fires the press action).
         """
         enabled, name = pen_barrel_config()
         if not enabled:
             return
+        hold, hold_s = pen_barrel_hold()
         spec = _PEN_BARREL_BY_NAME[name][3]
+        if value == 1 and hold != "none":
+            self.barrel_held = False
+            self.barrel_timer = threading.Timer(hold_s, self._barrel_hold, (hold,))
+            self.barrel_timer.daemon = True
+            self.barrel_timer.start()
+        elif value == 0 and getattr(self, "barrel_timer", None):
+            self.barrel_timer.cancel()
+            self.barrel_timer = None
         if isinstance(spec, dict) and spec.get("do") == "mouse":
             btn = mouse_button(spec)
             if btn is not None:
                 POINTER.click(btn, value == 1)
                 log(f"barrel -> {name} {'down' if value else 'up'}")
-        elif value == 1:
+        elif value == (1 if hold == "none" else 0) and not getattr(self, "barrel_held", False):
             fn = pen_barrel_fn(name)
             if fn:
                 log(f"barrel -> {name}")
                 fn(1)
+
+    def _barrel_hold(self, hold):
+        """The hold timer ran out with the barrel still down (a release that raced it has
+        already cleared barrel_timer, so a stale timer does nothing)."""
+        if getattr(self, "barrel_timer", None) is None:
+            return
+        self.barrel_held = True
+        fn = pen_barrel_fn(hold)
+        if fn:
+            log(f"barrel hold -> {hold}")
+            ACTIONS.submit(fn, 1)
 
     def _touch_down(self, now):
         cls = focused_class()
@@ -3904,10 +3925,39 @@ def pen_barrel_config():
     return live_derived(_pen_barrel_cache, build)
 
 
+# Barrel hold (Brooks 2026-11-15, "a power button"): the system's own right-click on press is
+# never touched; holding the barrel while hovering can also run one action. Mouse buttons are
+# left out: a hold can't be a click. Off ("none") by default, so the barrel works as before.
+PEN_BARREL_HOLD_ACTIONS = _PEN_SHARED_ACTIONS
+PEN_BARREL_HOLD_DEFAULT = "none"
+PEN_BARREL_HOLD_MS = (500, 250, 1500)  # default, min, max
+_PEN_BARREL_HOLD_BY_NAME = {a[0]: a for a in PEN_BARREL_HOLD_ACTIONS}
+_pen_barrel_hold_cache = {}
+
+
+def pen_barrel_hold():
+    """(action name, seconds) for holding the barrel button, live-reloaded."""
+
+    def build(doc):
+        raw = _pen_section(doc).get("barrel")
+        raw = raw if isinstance(raw, dict) else {}
+        name = raw.get("hold", PEN_BARREL_HOLD_DEFAULT)
+        if not (isinstance(name, str) and name in _PEN_BARREL_HOLD_BY_NAME):
+            log(f"pen.barrel.hold: {name!r} is not a usable action; using nothing")
+            name = PEN_BARREL_HOLD_DEFAULT
+        ms, lo, hi = PEN_BARREL_HOLD_MS
+        v = raw.get("hold_ms")
+        if isinstance(v, int | float) and not isinstance(v, bool) and math.isfinite(v):
+            ms = min(max(v, lo), hi)
+        return name, ms / 1000
+
+    return live_derived(_pen_barrel_hold_cache, build)
+
+
 def pen_barrel_fn(name):
     """Compiled action for the barrel button's configured action, or None."""
     if name not in _pen_barrel_fns:
-        spec = _PEN_BARREL_BY_NAME[name][3]
+        spec = (_PEN_BARREL_BY_NAME.get(name) or _PEN_BARREL_HOLD_BY_NAME[name])[3]
         _pen_barrel_fns[name] = make_action(spec) if spec else None
     return _pen_barrel_fns[name]
 
@@ -4015,7 +4065,12 @@ def write_tool_manifest():
         # Same for the pen's two configurable buttons.
         "pen_clicks.json": {
             "tail": {"defaults": PEN_TAIL_DEFAULTS, "actions": actions(PEN_TAIL_ACTIONS)},
-            "barrel": {"default": PEN_BARREL_DEFAULT, "actions": actions(PEN_BARREL_ACTIONS)},
+            "barrel": {
+                "default": PEN_BARREL_DEFAULT,
+                "actions": actions(PEN_BARREL_ACTIONS),
+                "hold_default": PEN_BARREL_HOLD_DEFAULT,
+                "hold_actions": actions(PEN_BARREL_HOLD_ACTIONS),
+            },
             "eraser": {"defaults": PEN_ERASER_DEFAULTS, "actions": actions(PEN_ERASER_ACTIONS)},
         },
     }

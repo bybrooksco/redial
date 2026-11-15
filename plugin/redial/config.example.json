@@ -63,9 +63,11 @@
       "hold": "dictation"
     },
     "barrel": {
-      "_comment": "The stylus side button. 'action' names come from pen_clicks.json too (right_click/middle_click/left_click plus the shared generic actions). Defaults shown.",
+      "_comment": "The stylus side button. 'action' names come from pen_clicks.json too (right_click/middle_click/left_click plus the shared generic actions). 'hold' runs one action when the barrel is held for hold_ms (250-1500) while the pen hovers; 'none' (default) leaves the barrel as it was. With a hold set, a key action on 'action' fires on release instead of press. Defaults shown.",
       "enabled": true,
-      "action": "right_click"
+      "action": "right_click",
+      "hold": "none",
+      "hold_ms": 500
     }
   },
   "_active_tools": "Picks and orders a subset of the built-in tool library by name -- the normal way to configure which tools you get, and what the ToolPicker UI (Omarchy menu > Setup > re:dial) writes. Example: [\"Volume\", \"Scroll\", \"Windows\", \"Workspaces\", \"Text\", \"Zoom\", \"Media\"]. With neither active_tools nor tools the ring is Volume, Windows, Workspaces, Scroll, Undo, Zoom, Media, Settings, plus Brightness where there is a backlight. The rest of the library: Text, Arrow Keys, Window Size, Pointer, Focus, Tabs, Pages, Tile Focus, Move Window. Word Nav, Select and H Scroll still load (as Text and Scroll).",

@@ -170,6 +170,7 @@ Item {
   }
   function clickChoices(item) {
     if (item.group === "barrel") return penBarrelActions
+    if (item.group === "barrelhold") return penBarrelHoldActions
     return clickOptions(item.group, item.key.split(".").pop())
   }
   function clickChoice(item) {
@@ -643,6 +644,7 @@ Item {
   property var penTailActions: []    // [{name, label, description}] -- pen tail button
   property var penTailDefaults: ({ "single": "space", "double": "enter", "hold": "menu" })
   property var penBarrelActions: []  // [{name, label, description}] -- pen barrel button
+  property var penBarrelHoldActions: []  // the same, for holding the barrel (no mouse buttons)
   property var penEraserActions: []  // [{name, label, description}] -- back of the pen: tap, hold
   property var penEraserDefaults: ({ "tap": "escape", "hold": "delete_word" })
   property string penBarrelDefault: "right_click"
@@ -679,7 +681,8 @@ Item {
       { x: 31, y: 15, title: "Tail button", where: "away from the screen", lines: lines(tailKinds) },
       { x: 31, y: 15, title: "Eraser", where: "the tail on the screen", lines: lines(eraserKinds) },
       { x: 131, y: 410, title: "Barrel button", where: "while the pen hovers",
-        lines: [ { key: "Press", value: barrelEnabled ? barrelAction().label : "Off" } ] },
+        lines: [ { key: "Press", value: barrelEnabled ? barrelAction().label : "Off" },
+                 { key: "Hold", value: barrelEnabled ? barrelHold().label : "Off" } ] },
       { x: 207, y: 580, title: "Tip", where: "on the screen",
         lines: [ { key: "Touch", value: "Draws in your apps; re:dial never takes it" } ] }
     ]
@@ -792,6 +795,22 @@ Item {
       var barrel = ({})
       if (pen.barrel) for (var b in pen.barrel) barrel[b] = pen.barrel[b]
       barrel.action = name
+      pen.barrel = barrel
+    })
+  }
+  // Holding the barrel: "none" (the default) leaves the barrel exactly as before.
+  function barrelHold() {
+    var chosen = (configDoc && configDoc.pen && configDoc.pen.barrel && configDoc.pen.barrel.hold)
+      ? String(configDoc.pen.barrel.hold) : "none"
+    for (var i = 0; i < penBarrelHoldActions.length; i++) if (penBarrelHoldActions[i].name === chosen) return penBarrelHoldActions[i]
+    for (var j = 0; j < penBarrelHoldActions.length; j++) if (penBarrelHoldActions[j].name === "none") return penBarrelHoldActions[j]
+    return ({ name: "none", label: "Nothing", description: "" })
+  }
+  function setBarrelHold(name) {
+    writePen(function (pen) {
+      var barrel = ({})
+      if (pen.barrel) for (var b in pen.barrel) barrel[b] = pen.barrel[b]
+      barrel.hold = name
       pen.barrel = barrel
     })
   }
@@ -1020,6 +1039,7 @@ Item {
         root.penEraserActions = (o.eraser && Array.isArray(o.eraser.actions)) ? o.eraser.actions : []
         if (o.eraser && o.eraser.defaults) root.penEraserDefaults = o.eraser.defaults
         root.penBarrelActions = (o.barrel && Array.isArray(o.barrel.actions)) ? o.barrel.actions : []
+        root.penBarrelHoldActions = (o.barrel && Array.isArray(o.barrel.hold_actions)) ? o.barrel.hold_actions : []
         if (o.barrel && o.barrel.default) root.penBarrelDefault = o.barrel.default
       } catch (e) { root.penTailActions = []; root.penBarrelActions = [] }
     }
@@ -2353,6 +2373,24 @@ Item {
                   options: root.penBarrelActions
                   current: root.barrelAction()
                   onPicked: name => root.setBarrelAction(name)
+                }
+                ActionPicker {
+                  cfg: root.cfg
+                  title: "Hold"
+                  label: "Pen barrel button, hold"
+                  enabled: root.barrelEnabled
+                  opacity: root.barrelEnabled ? 1 : 0.4
+                  options: root.penBarrelHoldActions
+                  current: root.barrelHold()
+                  onPicked: name => root.setBarrelHold(name)
+                }
+                Text {
+                  width: parent.width
+                  wrapMode: Text.WordWrap
+                  text: "Hold the barrel for half a second while the pen hovers. A quick press still does Press; the system's own right-click is never taken over."
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  color: root.cfg.soft(0.5)
                 }
               }
 
