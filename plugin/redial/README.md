@@ -45,7 +45,8 @@ deliberately, so **editing the QML requires `omarchy-restart-shell`** — a plug
 rescan will not re-instantiate a `keepLoaded` panel. Handy check: the layer-shell
 namespace (`hyprctl layers`) tells you which revision is actually live.
 
-The daemon itself (`~/.local/bin/redial-hypr`) is a separate file, not
+The daemon itself (the `redial` package, started by `~/.local/bin/redial-hypr`) is separate,
+not
 part of this plugin directory; `redial-setup` checks for it but does not
 install it. Licensed MIT — see `LICENSE`.
 

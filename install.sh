@@ -144,7 +144,7 @@ have jq "jq (bar button status line)" \
     "jq not found -- the bar button loses its click summary (everything else works)"
 
 echo
-echo "-- 2. Daemon + setup script -> ~/.local/bin --"
+echo "-- 2. Daemon (~/.local/share/redial/lib) + scripts -> ~/.local/bin --"
 mkdir -p "$HOME/.local/bin"
 for f in redial-hypr redial-setup redial-restart redial-bar redial-rise-widget redial-language; do
     if cmp -s "$R/bin/$f" "$HOME/.local/bin/$f"; then
@@ -155,6 +155,18 @@ for f in redial-hypr redial-setup redial-restart redial-bar redial-rise-widget r
         [[ "$f" == redial-hypr ]] && CHANGED_DAEMON=1
     fi
 done
+# The daemon itself is the `redial` package; ~/.local/bin/redial-hypr only starts it. A new copy
+# goes in beside the old and is swapped in with one mv, so an update never leaves half a package.
+LIB="${XDG_DATA_HOME:-$HOME/.local/share}/redial/lib"
+if diff -rq -x __pycache__ "$R/redial" "$LIB/redial" >/dev/null 2>&1; then
+    skip "daemon package already identical"
+else
+    mkdir -p "$LIB" && rm -rf "$LIB/redial.new"
+    cp -r "$R/redial" "$LIB/redial.new" && find "$LIB/redial.new" -name __pycache__ -prune -exec rm -rf {} +
+    backup "$LIB/redial"
+    mv "$LIB/redial.new" "$LIB/redial" && ok "daemon package installed ($LIB/redial)"
+    CHANGED_DAEMON=1
+fi
 
 echo
 echo "-- 3. redial plugin -> ~/.config/omarchy/plugins --"

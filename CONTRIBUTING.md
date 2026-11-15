@@ -8,15 +8,16 @@ No build step. Clone, then:
 
 ```
 python3 tests/test_dial.py        # no dial or display needed
-coverage run --include=bin/redial-hypr tests/test_dial.py && coverage report --fail-under=75   # CI's floor (currently 81%)
+coverage run --source=redial tests/test_dial.py && coverage report --fail-under=75   # CI's floor
+python3 tests/test_overlay.py && python3 tests/test_settings.py && python3 tests/test_language.py
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml   # keyboard/accessibility of Pressable; headless (note: /usr/bin/qmltestrunner is the Qt 5 one)
-ruff check bin/redial-hypr bin/redial-overlay bin/redial-settings bin/redial-rise-widget scripts/add-menu-entry.py tests
-ruff format --check bin/redial-hypr bin/redial-overlay bin/redial-settings bin/redial-rise-widget scripts/add-menu-entry.py tests
+ruff check redial bin/redial-hypr bin/redial-language bin/redial-overlay bin/redial-settings bin/redial-rise-widget scripts/add-menu-entry.py tests
+ruff format --check redial bin/redial-hypr bin/redial-language bin/redial-overlay bin/redial-settings bin/redial-rise-widget scripts/add-menu-entry.py tests
 shellcheck install.sh install-generic.sh uninstall.sh scripts/make-installer.sh scripts/installer-template.sh bin/redial-setup bin/redial-restart bin/redial-bar scripts/pair-dial.sh
 ```
 
-These are exactly what CI runs. (`ruff check .` alone would skip the daemon: ruff only
-walks `.py` files, and `bin/redial-hypr` has no extension.) Install `ruff` and
+These are exactly what CI runs. (The scripts in `bin/` have no `.py` extension, so `ruff check .`
+alone would skip them.) Install `ruff` and
 `shellcheck` from your package manager or `pip`.
 
 ## Debugging

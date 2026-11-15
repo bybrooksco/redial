@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Regression tests for the re:dial daemon's logic -- no dial, no display needed.
 
-    python3 test_dial.py                      # tests ../bin/redial-hypr (the kit's copy)
-    DIAL_DAEMON=~/.local/bin/redial-hypr python3 test_dial.py   # the live install
+    python3 test_dial.py                      # tests ../redial (this checkout's package)
+    DIAL_LIB=~/.local/share/redial/lib python3 test_dial.py     # the live install
 
 Every side effect (keys, hyprctl, playerctl, brightnessctl, notifications, haptics) is
 replaced with a recorder, and the click gestures are driven through a real temporary
@@ -33,17 +33,16 @@ os.environ["DIAL_CONFIG_DIR"] = tempfile.mkdtemp()
 os.environ["DIAL_LOG_PATH"] = os.path.join(tempfile.mkdtemp(), "daemon.log")  # likewise for its log
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DAEMON = os.environ.get("DIAL_DAEMON") or os.path.join(HERE, "..", "bin", "redial-hypr")
+# The folder that holds the `redial` package: this checkout, or DIAL_LIB for an installed copy.
+LIB = os.path.abspath(os.path.expanduser(os.environ.get("DIAL_LIB") or os.path.join(HERE, "..")))
+DAEMON = os.path.join(HERE, "..", "bin", "redial-hypr")  # the launcher
 
 
 def load_daemon():
-    loader = importlib.machinery.SourceFileLoader(
-        "dialmod", os.path.abspath(os.path.expanduser(DAEMON))
-    )
-    spec = importlib.util.spec_from_loader("dialmod", loader)
-    mod = importlib.util.module_from_spec(spec)
-    loader.exec_module(mod)
-    return mod
+    sys.path.insert(0, LIB)
+    import redial.daemon
+
+    return redial.daemon
 
 
 m = load_daemon()
@@ -3438,6 +3437,15 @@ class UninstallScript(unittest.TestCase):
     def test_install_then_uninstall_leaves_your_files_as_they_were(self):
         self.install()
         self.assertTrue(self.exists(".local/bin/redial-hypr"))
+        self.assertTrue(self.exists(".local/share/redial/lib/redial/daemon.py"))
+        # The installed launcher finds the installed package (not this checkout) and runs.
+        r = subprocess.run(
+            [sys.executable, "-I", os.path.join(self.home, ".local/bin/redial-hypr"), "--version"],
+            env=self.env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(r.stdout.strip(), "redial-hypr " + m.__version__, r.stderr)
         self.assertTrue(self.exists(".config/omarchy/plugins/redial/DialMenu.qml"))
         self.assertIn("redial-hypr", self.read(".config/hypr/autostart.lua"))
         self.assertEqual(self.read(".config/hypr/hyprland.lua").count("^re:dial settings$"), 1)
@@ -3455,6 +3463,7 @@ class UninstallScript(unittest.TestCase):
         ):
             self.assertFalse(self.exists(f".local/bin/{f}"), f)
         self.assertFalse(self.exists(".config/omarchy/plugins/redial"))
+        self.assertFalse(self.exists(".local/share/redial/lib"))
         self.assertEqual(self.read(".config/hypr/autostart.lua"), self.AUTOSTART)
         self.assertEqual(self.read(".config/hypr/hyprland.lua"), self.HYPRLAND)
         self.assertEqual(self.read(".config/omarchy/extensions/omarchy-menu.jsonc"), self.MENU)
@@ -5515,8 +5524,13 @@ class SettingsSchema(unittest.TestCase):
     def setUp(self):
         with open(os.path.join(self.ROOT, "plugin/redial/schema.json")) as f:
             self.rows = {i["key"]: i for g in json.load(f)["groups"] for i in g["items"]}
-        with open(os.path.join(self.ROOT, "bin/redial-hypr")) as f:
-            self.src = f.read()
+        pkg = os.path.join(self.ROOT, "redial")
+        self.src = "".join(  # every module of the daemon package
+            open(os.path.join(d, f)).read()
+            for d, _, files in os.walk(pkg)
+            for f in sorted(files)
+            if f.endswith(".py")
+        )
 
     def test_every_documented_key_has_a_row(self):
         with open(os.path.join(self.ROOT, "plugin/redial/config.example.json")) as f:

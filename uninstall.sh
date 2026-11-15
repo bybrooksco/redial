@@ -57,7 +57,7 @@ cat <<PLAN
 
 This will, for your user only (no sudo):
   * stop the daemon
-  * remove ${BINS[*]// /, } from ~/.local/bin
+  * remove ${BINS[*]// /, } from ~/.local/bin, and the daemon package (~/.local/share/redial/lib)
   * remove the plugin folder ~/.config/omarchy/plugins/redial
   * remove the start-at-login lines from ~/.config/hypr/autostart.lua
   * remove the settings window rule from ~/.config/hypr/hyprland.lua
@@ -99,6 +99,8 @@ fi
 for f in "${BINS[@]}"; do
     if stash "$HOME/.local/bin/$f"; then ok "$f removed"; else skip "$f not installed"; fi
 done
+LIB="${XDG_DATA_HOME:-$HOME/.local/share}/redial/lib"
+if stash "$LIB"; then ok "daemon package removed ($LIB)"; else skip "daemon package not installed"; fi
 
 echo
 echo "-- 3. Plugin --"

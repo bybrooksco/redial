@@ -15,6 +15,7 @@ set -uo pipefail
 
 R="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="$HOME/.local/bin/redial-hypr"
+LIB="${XDG_DATA_HOME:-$HOME/.local/share}/redial/lib"   # the daemon package
 OVERLAY="$HOME/.local/bin/redial-overlay"
 UNIT="$HOME/.config/systemd/user/redial.service"
 OVERLAY_UNIT="$HOME/.config/systemd/user/redial-overlay.service"
@@ -27,6 +28,7 @@ confirm() { read -rp "  $1 [y/N] " ans; [[ "$ans" =~ ^[Yy] ]]; }
 
 if [[ "${1:-}" == "--uninstall" ]]; then
     systemctl --user disable --now redial.service redial-overlay.service 2>/dev/null && ok "daemon stopped"
+    rm -rf "$LIB"
     rm -f "$UNIT" "$OVERLAY_UNIT" "$BIN" "$OVERLAY" "$DESKTOP" "${EXTRAS[@]/#/$HOME/.local/bin/}" \
         && systemctl --user daemon-reload \
         && ok "daemon, overlay and services removed"
@@ -70,6 +72,9 @@ fi
 
 echo "-- 2. Daemon -> ~/.local/bin, started at login by systemd --"
 install -Dm755 "$R/bin/redial-hypr" "$BIN" && ok "redial-hypr installed"
+rm -rf "$LIB/redial.new" && mkdir -p "$LIB" && cp -r "$R/redial" "$LIB/redial.new" \
+    && find "$LIB/redial.new" -name __pycache__ -prune -exec rm -rf {} + \
+    && rm -rf "$LIB/redial" && mv "$LIB/redial.new" "$LIB/redial" && ok "daemon package installed ($LIB/redial)"
 mkdir -p "$(dirname "$UNIT")"
 grep -v '^#' "$R/systemd/redial.service" > "$UNIT" && ok "user service written"
 for f in "${EXTRAS[@]}"; do

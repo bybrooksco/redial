@@ -9,7 +9,7 @@ re:dial draws its overlay in layers (see `docs/DESIGN.md#design-layers`):
 | Look | one layout: Classic, Capsule, Gauge, ... | one QML file inside a language folder |
 | Design language | how things are drawn and how they move | one folder here |
 | Host | what the desktop offers | the Omarchy plugin (a standalone host is planned) |
-| Engine | dial input, tools, states | `bin/redial-hypr` |
+| Engine | dial input, tools, states | `redial/` (the daemon) |
 
 A **design language** is a folder: `languages/<name>/`. Two ship: **re:dial classic** (`classic/`,
 the standard, ten looks) and **re:dial basic** (`basic/`, nine looks; a working name). You can add a
