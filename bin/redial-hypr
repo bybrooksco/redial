@@ -2569,7 +2569,7 @@ class EraserState:
             fn = pen_barrel_fn(name)
             if fn:
                 log(f"barrel -> {name}")
-                fn(1)
+                ACTIONS.submit(fn, 1)  # off the pen's input thread (DESIGN.md: it only reads)
 
     def _barrel_hold(self, hold):
         """The hold timer ran out with the barrel still down (a release that raced it has
@@ -2608,7 +2608,7 @@ class EraserState:
             fn = pen_eraser_fn(name) if name else None
             log(f"eraser {kind} ({held:.2f}s) -> {name or 'ignored'}")
             if fn:
-                fn(1)
+                ACTIONS.submit(fn, 1)
         self.dragging, self.last_y, self.last_x = False, None, None
         self.axis = None
 
@@ -2698,7 +2698,7 @@ def pen_button_watcher():
                         log(f"pen {label} -> unbound")
                     else:
                         log(f"pen {label} -> firing")
-                        fn(1)
+                        ACTIONS.submit(fn, 1)
         except OSError as exc:
             log(f"pen keyboard read ended ({exc})")
         time.sleep(2)

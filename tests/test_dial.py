@@ -1827,6 +1827,20 @@ class Eraser(Base):
         fx.set(m, "ACTIONS", types.SimpleNamespace(submit=lambda fn, *a: (ran.append(fn), fn(*a))))
         return timers, ran
 
+    def test_pen_actions_go_to_the_action_worker_not_the_input_thread(self):
+        """A slow action (hyprctl, voxtype) must not freeze the pen's input, and an error in one
+        must not end the pen's thread: tap and barrel actions are handed to ACTIONS."""
+        queued = []
+        fx = Fixture(self)
+        fx.set(m, "ACTIONS", types.SimpleNamespace(submit=lambda fn, *a: queued.append(fn)))
+        self.down(0.0)
+        self.up(0.1)  # eraser tap: Escape
+        self.configure(barrel={"action": "enter"})
+        self.ev(m.BTN_STYLUS, 1)
+        self.ev(m.BTN_STYLUS, 0)
+        self.assertEqual(len(queued), 2)
+        self.assertEqual(EVENTS, [])  # nothing ran on the input thread
+
     def test_barrel_hold_is_off_by_default_so_press_is_unchanged(self):
         timers, _ = self.barrel_hold_setup(action="enter")
         self.ev(m.BTN_STYLUS, 1)
