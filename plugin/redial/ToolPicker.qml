@@ -669,6 +669,21 @@ Item {
     { group: "eraser", key: "tap", title: "Quick tap" },
     { group: "eraser", key: "hold", title: "Press & hold" }
   ]
+  // What the Pen page's drawing says each part of the pen does right now (PenDiagram.parts).
+  readonly property var penParts: {
+    var short = { single: "Click", double: "Double", hold: "Hold", tap: "Tap" }
+    function lines(kinds) {
+      return kinds.map(function (k) { return { key: short[k.key], value: clickAction(k.group, k.key).label } })
+    }
+    return [
+      { x: 31, y: 15, title: "Tail button", where: "away from the screen", lines: lines(tailKinds) },
+      { x: 31, y: 15, title: "Eraser", where: "the tail on the screen", lines: lines(eraserKinds) },
+      { x: 131, y: 410, title: "Barrel button", where: "while the pen hovers",
+        lines: [ { key: "Press", value: barrelEnabled ? barrelAction().label : "Off" } ] },
+      { x: 207, y: 580, title: "Tip", where: "on the screen",
+        lines: [ { key: "Touch", value: "Draws in your apps; re:dial never takes it" } ] }
+    ]
+  }
   function groupActions(group) {
     return group === "pentail" ? penTailActions : group === "eraser" ? penEraserActions : clickActions
   }
@@ -2253,8 +2268,11 @@ Item {
                 lineColor: root.cfg.lineColor
                 textColor: root.cfg.lineColor
                 softColor: root.cfg.soft(0.5)
+                accentColor: root.cfg.accentText
+                motion: root.cfg.motionBase
                 fontFamily: Style.font.family
                 fontSize: Style.font.caption
+                parts: root.penParts
               }
 
               Column {
