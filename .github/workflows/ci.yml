@@ -14,7 +14,7 @@ jobs:
     # Omarchy is Arch-based, so test against Arch.
     container: archlinux:latest
     steps:
-      - run: pacman -Syu --noconfirm --needed git python python-coverage ruff shellcheck qt6-declarative
+      - run: pacman -Syu --noconfirm --needed git python python-coverage ruff shellcheck qt6-declarative qt6-svg
       - uses: actions/checkout@v4
       - name: Let git read the checkout (the container runs as a different user)
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
