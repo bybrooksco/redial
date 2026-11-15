@@ -1572,11 +1572,9 @@ Item {
               current: root.cfgValue("reference_lines", true)
               onPicked: key => root.setConfigKey("reference_lines", key)
             }
-            ChoiceRow {
+            LanguageLibrary {
               visible: root.page === "look"
               cfg: root.cfg
-              title: "Design language"
-              help: "How the overlay is drawn and moves. Languages others make appear here once they are in plugin/redial/languages/."
               options: root.languageOptions
               current: root.cfgValue("language", "classic")
               onPicked: key => root.setConfigKey("language", key)
