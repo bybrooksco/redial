@@ -22,6 +22,7 @@ OVERLAY_UNIT="$HOME/.config/systemd/user/redial-overlay.service"
 DESKTOP="$HOME/.local/share/applications/redial-settings.desktop"
 EXTRAS=(redial-settings redial-bar redial-restart)
 UDEV=/etc/udev/rules.d/70-redial.rules
+WAKE=/etc/udev/rules.d/71-redial-wake.rules
 ok()   { printf '  [OK]   %s\n' "$1"; }
 warn() { printf '  [WARN] %s\n' "$1"; }
 confirm() { read -rp "  $1 [y/N] " ans; [[ "$ans" =~ ^[Yy] ]]; }
@@ -34,6 +35,9 @@ if [[ "${1:-}" == "--uninstall" ]]; then
         && ok "daemon, overlay and services removed"
     if [[ -e "$UDEV" ]] && confirm "Remove the udev rule $UDEV (sudo)?"; then
         sudo rm "$UDEV" && sudo udevadm control --reload-rules && ok "udev rule removed"
+    fi
+    if [[ -e "$WAKE" ]] && confirm "Remove the wake-from-dial rule $WAKE (sudo)?"; then
+        sudo rm "$WAKE" && sudo udevadm control --reload-rules && ok "wake-from-dial rule removed"
     fi
     echo "Your settings in ~/.config/redial were kept. You are still in the 'input' group."
     exit 0
@@ -110,7 +114,6 @@ elif confirm "Install the udev rule (sudo)?"; then
     sudo install -m 644 "$R/udev/70-redial.rules" "$UDEV" \
         && sudo udevadm control --reload-rules && sudo udevadm trigger && ok "udev rule installed"
 fi
-WAKE=/etc/udev/rules.d/71-redial-wake.rules
 if cmp -s "$R/udev/71-redial-wake.rules" "$WAKE" 2>/dev/null; then
     ok "wake-from-dial rule already installed"
 elif confirm "Let the dial wake this computer from sleep (sudo; any paired Bluetooth keyboard or mouse can then wake it too)?"; then
