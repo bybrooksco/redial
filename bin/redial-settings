@@ -13,7 +13,10 @@ import json
 import os
 import sys
 
-CONFIG_DIR = os.environ.get("DIAL_CONFIG_DIR") or os.path.expanduser("~/.config/redial")
+# The same rule as the daemon (redial-hypr): DIAL_CONFIG_DIR, then XDG_CONFIG_HOME.
+CONFIG_DIR = os.environ.get("DIAL_CONFIG_DIR") or os.path.join(
+    os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "redial"
+)
 CONFIG = os.path.join(CONFIG_DIR, "config.json")
 TOOLS = os.path.join(CONFIG_DIR, "tools.json")
 STYLES = (("menu", "Menu", "every tool by name"), ("card", "Card", "one line"),

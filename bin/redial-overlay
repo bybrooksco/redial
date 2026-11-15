@@ -19,7 +19,12 @@ import sys
 
 STYLES = ("card", "menu", "strip")
 DEFAULT_STYLE = "menu"
-CONFIG = os.path.expanduser("~/.config/redial/config.json")
+# The same rule as the daemon (redial-hypr): DIAL_CONFIG_DIR, then XDG_CONFIG_HOME.
+CONFIG = os.path.join(
+    os.environ.get("DIAL_CONFIG_DIR")
+    or os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "redial"),
+    "config.json",
+)
 SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR", ""), "redial.sock")
 
 # Freedesktop icon names for the Card style. Omarchy's tools use Nerd Font glyphs, which most

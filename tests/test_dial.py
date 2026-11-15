@@ -5590,6 +5590,40 @@ class SingleInstance(unittest.TestCase):
         m.single_instance.fd = None
 
 
+class OneConfigFolder(unittest.TestCase):
+    """The daemon, the GTK overlay, the GTK settings window and the bar read the same folder,
+    XDG_CONFIG_HOME included (they once wrote different files on dotfile setups)."""
+
+    def folder(self, program, var):
+        code = (
+            "import importlib.machinery as M, importlib.util as U, os, sys\n"
+            "sys.dont_write_bytecode = True\n"
+            "L = M.SourceFileLoader('x', sys.argv[1])\n"
+            "mod = U.module_from_spec(U.spec_from_loader('x', L))\n"
+            "L.exec_module(mod); v = getattr(mod, sys.argv[2])\n"
+            "print(os.path.dirname(v) if v.endswith('.json') else v)\n"
+        )
+        env = {k: v for k, v in os.environ.items() if k != "DIAL_CONFIG_DIR"}
+        env["XDG_CONFIG_HOME"] = "/somewhere/cfg"
+        env["DIAL_LOG_PATH"] = os.path.join(tempfile.mkdtemp(), "d.log")
+        r = subprocess.run(
+            [sys.executable, "-c", code, os.path.join(HERE, "..", "bin", program), var],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout.strip()
+
+    def test_every_program_finds_the_same_config_folder(self):
+        want = "/somewhere/cfg/redial"
+        self.assertEqual(self.folder("redial-overlay", "CONFIG"), want)
+        self.assertEqual(self.folder("redial-settings", "CONFIG_DIR"), want)
+        bar = open(os.path.join(HERE, "..", "bin", "redial-bar")).read()
+        self.assertIn('CFG="${DIAL_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/redial}"', bar)
+        self.assertNotIn("$HOME/.config/redial/", bar)
+
+
 class DoctorUdevRule(unittest.TestCase):
     """redial-setup carries its own copy of the udev rule (it runs from ~/.local/bin, away from the
     release folder). That copy once drifted and lost the GROUP:= fix for the Vial haptics bug."""
