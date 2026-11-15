@@ -114,10 +114,9 @@ class MenuUI:
             return None
 
     def _payload(self, index):
-        from .daemon import (  # the tool layer imports this one: look up at call time
-            TOOLS,
-            click_hint,
-        )
+        # The tool layer imports this module, so the ring is looked up at call time.
+        from .gestures import click_hint
+        from .tools import TOOLS
 
         # Re-read per open so config edits land without restarting the daemon.
         doc = load_config()
@@ -144,7 +143,7 @@ class MenuUI:
         self._call("open", payload)
 
     def highlight(self, index):
-        from .daemon import TOOLS
+        from .tools import TOOLS
 
         # Reopening rather than highlighting keeps the live readout current;
         # `open` is idempotent on an already-open deck.
@@ -408,7 +407,8 @@ def overlay_draws_states():
 
 def turn_note(name, value=None, text=None):
     """A tool turning, for the overlay: its name and icon, and its level when it has one."""
-    from .daemon import TOOLS, click_hint
+    from .gestures import click_hint
+    from .tools import TOOLS
 
     spec = next((t for t in TOOLS if t["name"] == name), None)
     doc = {
