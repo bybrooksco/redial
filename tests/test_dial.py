@@ -41,8 +41,9 @@ DAEMON = os.path.join(HERE, "..", "bin", "redial-hypr")  # the launcher
 def load_daemon():
     sys.path.insert(0, LIB)
     import redial.daemon
+    from daemon_view import DaemonView
 
-    return redial.daemon
+    return DaemonView(redial.daemon)
 
 
 m = load_daemon()
@@ -54,8 +55,9 @@ PRISTINE = dict(vars(m))
 
 
 def restore_pristine():
+    now = vars(m)
     for name, value in PRISTINE.items():
-        if vars(m).get(name) is not value:
+        if now.get(name) is not value:
             setattr(m, name, value)
 
 
