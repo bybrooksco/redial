@@ -3389,6 +3389,8 @@ class UninstallScript(unittest.TestCase):
             ("omarchy-restart-shell", ""),
             ("omarchy-pkg-add", ""),
             ("omarchy-shell", 'case "$*" in *ping*) echo ok;; esac'),
+            ("systemctl", "exit 1"),  # never this machine's user services
+            ("udevadm", ""),
         ):
             path = os.path.join(self.stubs, name)
             with open(path, "w") as f:
@@ -4672,12 +4674,21 @@ class OverlayNotes(Base):
 
 class LaunchDoesNotWait(unittest.TestCase):
     def test_a_long_running_program_is_started_and_left_alone(self):
+        started = []
+        real = subprocess.Popen
+
+        def popen(*a, **k):  # remember our own child, so only it is stopped afterwards
+            started.append(real(*a, **k))
+            return started[-1]
+
+        fx = Fixture(self)
+        fx.set(m.subprocess, "Popen", popen)
         t0 = time.monotonic()
         m.launch(["sleep", "30"])
         self.assertLess(time.monotonic() - t0, 1.0)
-        pids = subprocess.run(["pgrep", "-xf", "sleep 30"], capture_output=True, text=True)
-        self.assertTrue(pids.stdout.split(), "the program must still be running")
-        subprocess.run(["pkill", "-xf", "sleep 30"])
+        self.assertEqual(len(started), 1)
+        self.addCleanup(started[0].kill)
+        self.assertIsNone(started[0].poll(), "the program must still be running")
 
     def test_a_missing_program_is_logged_not_raised(self):
         m.launch(["/nonexistent/program"])
@@ -5089,6 +5100,8 @@ class SelfInstaller(unittest.TestCase):
             ("omarchy-restart-shell", ""),
             ("omarchy-pkg-add", ""),
             ("omarchy-shell", 'case "$*" in *ping*) echo ok;; esac'),
+            ("systemctl", "exit 1"),  # never this machine's user services
+            ("udevadm", ""),
         ):
             path = os.path.join(self.stubs, name)
             with open(path, "w") as f:
