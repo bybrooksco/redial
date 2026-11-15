@@ -17,6 +17,7 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import shutil
 import re
 import struct
 import subprocess
@@ -2117,17 +2118,28 @@ class RestartScript(unittest.TestCase):
             f.write(f'#!/bin/sh\necho "{name} $*" >> "{self.log}"\n{body}\n')
         os.chmod(path, 0o755)
 
-    def run_script(self, daemon=True, running=True):
+    def run_script(self, daemon=True, running=True, hypr=True):
         if daemon:
             d = os.path.join(self.home, ".local", "bin", "redial-hypr")
             open(d, "w").write("#!/bin/sh\n")
             os.chmod(d, 0o755)
         self.stub("pgrep", "exit 0" if running else "exit 1")
         self.stub("pkill")
-        self.stub("hyprctl")
+        if hypr:
+            self.stub("hyprctl")
         self.stub("sleep")
-        env = {"HOME": self.home, "PATH": self.stubs + ":/usr/bin:/bin"}
-        r = subprocess.run(["bash", self.SCRIPT], env=env, capture_output=True, text=True)
+        if not os.path.exists(os.path.join(self.stubs, "systemctl")):
+            self.stub("systemctl", "exit 1")  # no user service: never ask the real one
+        # Only the stubs and bash's own tools: a real hyprctl in /usr/bin must not be found.
+        tools = os.path.join(self.stubs, "tools")
+        os.makedirs(tools, exist_ok=True)
+        for t in ("bash", "sh", "seq", "dirname", "cat"):
+            if not os.path.exists(os.path.join(tools, t)) and shutil.which(t):
+                os.symlink(shutil.which(t), os.path.join(tools, t))
+        env = {"HOME": self.home, "PATH": self.stubs + ":" + tools}
+        r = subprocess.run(
+            [shutil.which("bash"), self.SCRIPT], env=env, capture_output=True, text=True
+        )
         calls = open(self.log).read().splitlines() if os.path.exists(self.log) else []
         return r, calls
 
@@ -2149,11 +2161,32 @@ class RestartScript(unittest.TestCase):
         self.assertFalse(any(c.startswith("pkill") for c in calls), calls)
         self.assertTrue(any(c.startswith("hyprctl dispatch") for c in calls), calls)
 
+    def test_a_systemd_service_is_restarted_there(self):
+        self.stub("systemctl", 'case "$*" in *is-enabled*) exit 0;; esac')
+        r, calls = self.run_script()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("systemctl --user restart redial.service", calls)
+        self.assertFalse(any(c.startswith(("pkill", "hyprctl")) for c in calls), calls)
+
+    def test_without_hyprland_it_starts_the_daemon_detached_with_no_tmp_log(self):
+        self.stub("hyprctl")
+        os.remove(os.path.join(self.stubs, "hyprctl"))
+        self.stub("setsid")
+        r, calls = self.run_script(running=False, hypr=False)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        for _ in range(50):  # started in the background
+            calls = open(self.log).read().splitlines()
+            if any(c.startswith("setsid") for c in calls):
+                break
+            time.sleep(0.02)
+        self.assertTrue(any(c.startswith("setsid nohup python3") for c in calls), calls)
+        self.assertNotIn("/tmp", open(self.SCRIPT).read().split("set -u", 1)[1])
+
     def test_without_an_installed_daemon_it_says_so_and_fails(self):
         r, calls = self.run_script(daemon=False)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("install.sh", r.stderr)
-        self.assertEqual(calls, [])
+        self.assertEqual(calls, ["systemctl --user is-enabled redial.service"])
 
 
 def ev_bytes(etype, code, value):
@@ -5532,6 +5565,29 @@ class SettingsSchema(unittest.TestCase):
 
 def tool_index_all(name):
     return [t["name"] for t in m.TOOLS].index(name)
+
+
+class SingleInstance(unittest.TestCase):
+    def test_a_second_daemon_cannot_take_the_lock(self):
+        path = os.path.join(tempfile.mkdtemp(), "redial.lock")
+        script = (
+            "import fcntl, os, sys, time\n"
+            "fd = os.open(sys.argv[1], os.O_RDWR | os.O_CREAT)\n"
+            "fcntl.flock(fd, fcntl.LOCK_EX)\n"
+            "print('held', flush=True)\n"
+            "time.sleep(30)\n"
+        )
+        other = subprocess.Popen(
+            [sys.executable, "-c", script, path], stdout=subprocess.PIPE, text=True
+        )
+        self.addCleanup(other.kill)
+        self.assertEqual(other.stdout.readline().strip(), "held")
+        self.assertFalse(m.single_instance(path))
+        other.kill()
+        other.wait()
+        self.assertTrue(m.single_instance(path))  # the lock died with the process
+        os.close(m.single_instance.fd)
+        m.single_instance.fd = None
 
 
 class DoctorUdevRule(unittest.TestCase):

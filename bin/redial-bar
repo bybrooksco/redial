@@ -13,23 +13,13 @@
 set -uo pipefail
 
 ICON=$''   # Font Awesome "dot-circle-o": reads as a dial/knob
-DAEMON="$HOME/.local/bin/redial-hypr"
-LOG=/tmp/redial-hypr.log
 # Anchored on ^python3 so this script, the bar's `bash -lc` wrapper and a
 # user's `pgrep -f` never match themselves.
 DAEMON_RE='^python3 .*redial-hypr'
 
 case "${1:-status}" in
 restart)
-    # install-generic.sh runs the daemon as a systemd user service; restart it there.
-    if systemctl --user is-enabled redial.service >/dev/null 2>&1; then
-        systemctl --user restart redial.service
-        notify-send -a "re:dial" "Dial daemon restarted" "Tool changes are now applied."
-        exit 0
-    fi
-    pkill -f "$DAEMON_RE"
-    for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -f "$DAEMON_RE" >/dev/null || break; sleep 0.2; done
-    setsid nohup python3 "$DAEMON" >>"$LOG" 2>&1 </dev/null &
+    "$HOME/.local/bin/redial-restart" >/dev/null || exit 1
     notify-send -a "re:dial" "Dial daemon restarted" "Tool changes are now applied."
     exit 0
     ;;

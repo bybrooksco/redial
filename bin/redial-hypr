@@ -440,6 +440,27 @@ class Actions:
 ACTIONS = Actions()
 
 
+def single_instance(path=None):
+    """Hold the daemon's lock for as long as it runs; False when another daemon already holds it.
+
+    Two daemons would both read the dial, so every turn would act twice. The lock dies with the
+    process, so a crash never leaves it stuck."""
+    if getattr(single_instance, "fd", None) is not None and path is None:
+        return True  # this process already holds it
+    if path is None:
+        runtime = os.environ.get("XDG_RUNTIME_DIR")
+        path = os.path.join(runtime, "redial.lock") if runtime else LOG_PATH + ".lock"
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(fd)
+        return False
+    single_instance.fd = fd  # kept open (and locked) until the process ends
+    return True
+
+
 def make_private():
     """Keep the daemon's own files readable by this user only.
 
@@ -4953,6 +4974,9 @@ def pump(fh, dial):
 
 
 def main():
+    if not single_instance():
+        log("another redial-hypr is already running; this one exits")
+        return
     make_private()
     # Surface Pen support is a separate feature that happens to live in the
     # same daemon. It stays on by default so existing setups are unchanged, and

@@ -19,7 +19,7 @@ OVERLAY="$HOME/.local/bin/redial-overlay"
 UNIT="$HOME/.config/systemd/user/redial.service"
 OVERLAY_UNIT="$HOME/.config/systemd/user/redial-overlay.service"
 DESKTOP="$HOME/.local/share/applications/redial-settings.desktop"
-EXTRAS=(redial-settings redial-bar)
+EXTRAS=(redial-settings redial-bar redial-restart)
 UDEV=/etc/udev/rules.d/70-redial.rules
 ok()   { printf '  [OK]   %s\n' "$1"; }
 warn() { printf '  [WARN] %s\n' "$1"; }

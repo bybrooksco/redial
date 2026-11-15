@@ -289,21 +289,10 @@ echo "-- 7b. Load the new version --"
 # and the shell ignores a changed DialMenu.qml until it restarts (its own "reloading" message
 # notwithstanding), so an update would otherwise look installed but still run the old code.
 DAEMON_RE='^python3 .*redial-hypr'
-start_daemon() {
-    # Start it the way Omarchy's autostart does (through Hyprland, with the session's real
-    # environment), not from this shell.
-    if command -v hyprctl >/dev/null; then
-        hyprctl dispatch "hl.dsp.exec_cmd(\"uwsm-app -- $HOME/.local/bin/redial-hypr\")" >/dev/null
-    else
-        "$HOME/.local/bin/redial-bar" restart
-    fi
-}
 if pgrep -f "$DAEMON_RE" >/dev/null; then
     if (( CHANGED_DAEMON )); then
         if confirm "The daemon changed. Restart it now (the dial is unresponsive for a second or two)?"; then
-            pkill -TERM -f "$DAEMON_RE"
-            for _ in $(seq 1 15); do pgrep -f "$DAEMON_RE" >/dev/null || break; sleep 0.2; done
-            start_daemon && ok "daemon restarted on the new version"
+            "$HOME/.local/bin/redial-restart" >/dev/null && ok "daemon restarted on the new version"
         else
             warn "daemon not restarted -- it is still running the old version until you do"
         fi
@@ -311,7 +300,7 @@ if pgrep -f "$DAEMON_RE" >/dev/null; then
         skip "daemon already on this version"
     fi
 elif confirm "The daemon is not running. Start it now (it also starts at login)?"; then
-    start_daemon && ok "daemon started"
+    "$HOME/.local/bin/redial-restart" >/dev/null && ok "daemon started"
 fi
 # No ping check here: right after the plugin files change the shell may be mid-reload and not answer,
 # which is exactly when the restart is needed (an earlier version skipped it silently then).
