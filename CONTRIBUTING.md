@@ -26,6 +26,27 @@ alone would skip them.) Install `ruff` and
 temporary directory so importing the daemon never touches your real config; set it
 yourself if you import the daemon in a script.
 
+## Where things live
+
+The daemon is the `redial/` package; `bin/redial-hypr` only finds it and starts it. Each
+module imports only from the ones listed before it:
+
+| Layer | Modules |
+|---|---|
+| Basics | `paths`, `log`, `config` (tunables and config.json), `system` (action worker, lock, running programs) |
+| Hardware and desktop | `devices` (evdev), `haptics` (hidraw), `uinput`, `wm` (Hyprland, Sway, niri), `keys` |
+| What the user sees | `feedback` (overlay, OSD, notifications, speech), `status` (status.json, self-heal) |
+| What tools do | `controls` (volume, media, brightness), `actions` (the `{"do": ...}` vocabulary), `gestures` (clicks, pen buttons), `tools` (library, ring) |
+| The devices | `guide`, `pen`, `dial` |
+| Entry | `daemon` (main loop), `cli` (`--version`, `--help`, `--reset-guide`) |
+
+Two rules keep it that way. The overlay draws the ring, so `feedback` looks `TOOLS` up at call
+time instead of importing the tool layer. And a value replaced while running (`guide.GUIDE`) is
+always read as `module.NAME`, never imported by name, or the importer keeps the old one.
+
+The tests see the whole package as one module, `m` (`tests/daemon_view.py`): `m.log = fake`
+replaces `log` in every module that uses it.
+
 ## Working on the QML plugin
 
 After editing QML, run `omarchy-restart-shell`. In testing on Omarchy 4.0.4 the

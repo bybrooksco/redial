@@ -19,7 +19,7 @@ This is an independent implementation and shares no code with it.
 
 ## What's here
 
-- `redial/` — the daemon (Python, standard library only): rotation, clicks, haptics,
+- `redial/` — the daemon (Python, standard library only, one module per job; map in CONTRIBUTING.md): rotation, clicks, haptics,
   the tool library, and the Surface Pen's tail button / barrel button /
   eraser drag-scroll. `bin/redial-hypr` starts it.
 - `bin/redial-language` — checks, installs and removes design languages.
