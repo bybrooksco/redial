@@ -43,7 +43,7 @@ stash() {
     mv "$t" "$BACKUP$t"
 }
 
-BINS=(redial-hypr redial-setup redial-restart redial-bar redial-rise-widget)
+BINS=(redial-hypr redial-setup redial-restart redial-bar redial-rise-widget redial-language)
 PLUGIN="$HOME/.config/omarchy/plugins/redial"
 AUTOSTART="$HOME/.config/hypr/autostart.lua"
 HYPR_MAIN="$HOME/.config/hypr/hyprland.lua"

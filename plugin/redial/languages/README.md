@@ -49,6 +49,35 @@ a failed default draws classic's Classic, so a half-finished language never blan
 unknown or broken language falls back to `classic`. `lookCount` is how many looks a language ships;
 a language library lists it as a tag, so people know what they are getting.
 
+## Your languages: install, remove, check
+
+Languages you add live in `${XDG_DATA_HOME:-~/.local/share}/redial/languages/<name>/`, so updates
+leave them alone. Install them with **Install from folder** on the Look page or
+`redial-language install FOLDER`; remove with the card's Remove or `redial-language remove NAME`.
+Only languages the installer's `index.json` lists load: a folder copied in by hand is ignored, and
+a config naming one draws classic. `classic` and `basic` are reserved.
+
+Every language needs a `manifest.json`:
+
+```json
+{ "name": "My language", "author": "You", "licence": "MIT", "version": "1.0.0", "redial": "1",
+  "description": "One line.", "previews": ["previews/capsule-ring.png"] }
+```
+
+`previews` are pictures (`.png`, `.svg`) inside the folder; Settings shows them, never the
+language's code, until you pick it. From a re:dial checkout, `redial-language preview FOLDER`
+renders every look's states into `previews/` with `tests/qml/render_looks.qml`.
+
+**What the checker refuses** (`redial-language check FOLDER` runs it alone): imports other than
+`QtQuick`, `QtQuick.Shapes`, `QtQuick.Effects` and the language's own files; `XMLHttpRequest`,
+`WebSocket`, `Worker`, `Loader`, `Qt.createQmlObject`, `Qt.createComponent`, `Qt.include`,
+`Qt.openUrlExternally`, `eval`, `Function(`, `import(`, `Qt[` and `globalThis`; strings naming a
+link (`https:`, `file:`, ...), `..` or an absolute path; symlinks, hidden or executable files, any
+file that isn't `.qml .js .json .png .svg .ttf .otf .txt .md` or `LICENSE*`; over 20 MB. Comments
+don't count. A language is QML, code that runs in your desktop shell: the checker catches mistakes
+and the obvious tricks, not a determined author. Only languages in the reviewed gallery (planned)
+have been read by a person.
+
 ## A look
 
 A look is an `Item`. The host sets these on it:

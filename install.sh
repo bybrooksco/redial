@@ -146,7 +146,7 @@ have jq "jq (bar button status line)" \
 echo
 echo "-- 2. Daemon + setup script -> ~/.local/bin --"
 mkdir -p "$HOME/.local/bin"
-for f in redial-hypr redial-setup redial-restart redial-bar redial-rise-widget; do
+for f in redial-hypr redial-setup redial-restart redial-bar redial-rise-widget redial-language; do
     if cmp -s "$R/bin/$f" "$HOME/.local/bin/$f"; then
         skip "$f already identical"
     else

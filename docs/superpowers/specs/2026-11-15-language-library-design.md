@@ -114,8 +114,8 @@ the index. `remove` deletes only folders the index lists, under the user folder.
 
 ### Previews
 
-`render_looks.qml` gains an output-folder argument. The built-ins ship their pictures, rendered
-once and committed. The future catalog's CI renders them for submissions.
+`render_looks.qml` gains an output-folder argument. The built-ins ship two pictures each (default look, ring and turn), flattened on the paper ground
+and kept small for the single-file installer. The future catalog's CI renders them for submissions.
 
 ## Tests
 
