@@ -3402,6 +3402,7 @@ class UninstallScript(unittest.TestCase):
             "redial-restart",
             "redial-bar",
             "redial-rise-widget",
+            "redial-language",
         ):
             self.assertFalse(self.exists(f".local/bin/{f}"), f)
         self.assertFalse(self.exists(".config/omarchy/plugins/redial"))
@@ -5501,6 +5502,22 @@ class SettingsSchema(unittest.TestCase):
 
 def tool_index_all(name):
     return [t["name"] for t in m.TOOLS].index(name)
+
+
+class DoctorUdevRule(unittest.TestCase):
+    """redial-setup carries its own copy of the udev rule (it runs from ~/.local/bin, away from the
+    release folder). That copy once drifted and lost the GROUP:= fix for the Vial haptics bug."""
+
+    def rules(self, text):
+        return [ln for ln in text.splitlines() if ln.startswith("KERNEL")]
+
+    def test_the_doctor_installs_the_same_rule_the_release_ships(self):
+        root = os.path.join(HERE, "..")
+        shipped = open(os.path.join(root, "udev", "70-redial.rules")).read()
+        doctor = open(os.path.join(root, "bin", "redial-setup")).read()
+        embedded = doctor.split("<<'EOF'", 1)[1].split("\nEOF\n", 1)[0]
+        self.assertEqual(self.rules(embedded), self.rules(shipped))
+        self.assertIn('GROUP:="input"', doctor.split("<<'EOF'", 1)[0])  # and checks for the fix
 
 
 class LanguageFiles(unittest.TestCase):
