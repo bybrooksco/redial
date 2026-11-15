@@ -164,13 +164,13 @@ def show_level(kind):
     if not osd_enabled() or kind in _level_pending:
         return
     _level_pending.add(kind)
-    ACTIONS.submit(_show_level, kind)
+    ACTIONS.submit(show_level_now, kind)
 
 
-def _show_level(kind):
+def show_level_now(kind):
     wait = MENU_NOTES.turn_wait()
     if wait > 0:  # the overlay takes ~10 readouts a second; this job reads the level when it fires
-        threading.Timer(wait, ACTIONS.submit, (_show_level, kind)).start()
+        threading.Timer(wait, ACTIONS.submit, (show_level_now, kind)).start()
         return
     _level_pending.discard(kind)
     if kind == "volume":

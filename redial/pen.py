@@ -20,7 +20,7 @@ from .devices import (
     open_input,
 )
 from .gestures import (
-    _PEN_BARREL_BY_NAME,
+    PEN_BARREL_BY_NAME,
     pen_barrel_config,
     pen_barrel_fn,
     pen_barrel_hold,
@@ -154,7 +154,7 @@ class EraserState:
         if not enabled:
             return
         hold, hold_s = pen_barrel_hold()
-        spec = _PEN_BARREL_BY_NAME[name][3]
+        spec = PEN_BARREL_BY_NAME[name][3]
         if value == 1 and hold != "none":
             self.barrel_held = False
             self.barrel_timer = threading.Timer(hold_s, self._barrel_hold, (hold,))

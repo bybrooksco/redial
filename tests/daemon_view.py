@@ -7,6 +7,8 @@ it in every redial module that has it.
 """
 
 import ast
+import importlib
+import pkgutil
 import sys
 
 
@@ -28,7 +30,15 @@ def _defined_names(path):
 
 class DaemonView:
     def __init__(self, main):
-        mods = [mod for name, mod in sorted(sys.modules.items()) if name.split(".")[0] == "redial" and mod]
+        pkg = sys.modules[main.__package__]
+        for info in pkgutil.iter_modules(pkg.__path__):
+            if info.name != "__main__":
+                importlib.import_module(f"{pkg.__name__}.{info.name}")
+        mods = [
+            mod
+            for name, mod in sorted(sys.modules.items())
+            if name.split(".")[0] == "redial" and mod
+        ]
         home = {}
         for mod in mods:
             for name in _defined_names(mod.__file__):

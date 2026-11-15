@@ -140,7 +140,7 @@ def install_stubs(cfg_path):
     m.dictation_toggle = lambda: EVENTS.append("DICTATION")
     m.notify = lambda *a, **k: None
     m.osd = lambda **k: OSDS.append(k)
-    m._show_level = lambda kind: SHOWN.append(kind)
+    m.show_level_now = lambda kind: SHOWN.append(kind)
     _level_reset()
     m.run = m.launch = lambda cmd: EVENTS.append("EXEC:" + " ".join(cmd[:2]))
     m.hypr = lambda lua: EVENTS.append("HYPR:" + lua)
@@ -606,7 +606,7 @@ class LiveToolReload(Base):
     def setUp(self):
         super().setUp()
         self.saved = list(m.TOOLS)
-        m._tools_state["mtime"] = None
+        m.TOOLS_STATE["mtime"] = None
         self.addCleanup(lambda: m.TOOLS.__setitem__(slice(None), self.saved))
 
     def write_active(self, names):
@@ -2553,9 +2553,9 @@ class MainLoop(Base):
 
     def test_waiting_for_the_device_sets_nothing_attached(self):
         fx = Fixture(self)
-        m._status["attached"] = False
+        m.STATUS["attached"] = False
         self.run_main(fx, [None])
-        self.assertFalse(m._status["attached"])  # never claimed to be attached
+        self.assertFalse(m.STATUS["attached"])  # never claimed to be attached
 
     def test_an_absent_dial_is_waited_for_on_the_device_list_not_a_timer(self):
         fx = Fixture(self)
@@ -2593,15 +2593,15 @@ class MainLoop(Base):
         real_pump = m.pump
 
         def pump(fh, dial):
-            seen.append(m._status["attached"])
+            seen.append(m.STATUS["attached"])
             real_pump(fh, dial)
 
         fx.set(m, "pump", pump)
         fh = pipe_with()
-        m._status["attached"] = False
+        m.STATUS["attached"] = False
         self.run_main(fx, [(fh, "/dev/event7")])
         self.assertEqual(seen, [True])  # attached while pumping
-        self.assertFalse(m._status["attached"])  # and cleared after
+        self.assertFalse(m.STATUS["attached"])  # and cleared after
 
     def test_a_drop_mid_use_says_asleep_but_not_after_our_own_stall_reconnect(self):
         def notes(kicked):
@@ -2708,7 +2708,7 @@ class StatusLoop(Base):
             fx.set(m, "HAPTIC", types.SimpleNamespace(keep_awake=lambda: sent.append(now[0])))
             fx.set(m, "live_config", lambda: cfg)
             fx.set(m, "screen_locked", lambda: locked)
-            fx.set(m, "_status", {"attached": attached, "last_use": last_use})
+            fx.set(m, "STATUS", {"attached": attached, "last_use": last_use})
             if docs is not None:
                 fx.set(m, "write_status", docs.append)
 
@@ -3744,7 +3744,7 @@ class LevelOverlay(Base):
         self.cmds = []
         m.run = self.cmds.append
         m.shutil = types.SimpleNamespace(which=lambda name: f"/x/{name}")
-        self.real_show_level = PRISTINE["_show_level"]
+        self.real_show_level = PRISTINE["show_level_now"]
 
     def test_osd_builds_the_omarchy_command_for_a_level(self):
         PRISTINE["osd"](icon="volume", progress=40)
@@ -3770,7 +3770,7 @@ class LevelOverlay(Base):
     def test_a_burst_of_steps_queues_one_overlay_that_shows_the_latest_level(self):
         jobs = []
         m.ACTIONS = types.SimpleNamespace(submit=lambda fn, *a: jobs.append((fn, a)))
-        m._show_level = self.real_show_level
+        m.show_level_now = self.real_show_level
         level = {"v": (10, "10%")}
         m.MenuUI = types.SimpleNamespace(_volume=lambda: level["v"])
         for _ in range(5):
@@ -4633,7 +4633,7 @@ class OverlayNotes(Base):
 
     def test_a_volume_step_shows_its_level_on_the_overlay(self):
         m.MenuUI = types.SimpleNamespace(_volume=lambda: (42, "42%"))
-        PRISTINE["_show_level"]("volume")
+        PRISTINE["show_level_now"]("volume")
         self.assertEqual(OSDS, [])
         kind, doc = self.notes.sent[0]
         self.assertEqual(kind, "turn")
@@ -4642,7 +4642,7 @@ class OverlayNotes(Base):
     def test_without_the_overlay_a_level_goes_to_omarchys_display(self):
         self.notes.listening = False
         m.MenuUI = types.SimpleNamespace(_volume=lambda: (42, "42%"))
-        PRISTINE["_show_level"]("volume")
+        PRISTINE["show_level_now"]("volume")
         self.assertEqual(OSDS, [{"icon": "volume", "progress": 42}])
 
     def test_a_turned_tool_without_a_level_is_named(self):

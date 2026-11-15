@@ -15,7 +15,7 @@ from .system import write_json_atomic
 
 STATUS_PATH = os.path.join(os.path.dirname(CONFIG_PATH), "status.json")
 STATUS_BEAT_S = 15  # rewrite at least this often; the settings window treats older as "not running"
-_status = {"attached": False, "last_use": -math.inf}
+STATUS = {"attached": False, "last_use": -math.inf}
 
 
 def parse_bluetooth_info(text):
@@ -154,9 +154,9 @@ def status_loop(interval=5):
         now = time.monotonic()
         idle_s = live_num("keep_awake_minutes", KEEP_AWAKE_MINUTES, 5, 240) * 60
         if not (
-            _status["attached"]
+            STATUS["attached"]
             and live_bool("keep_awake", False)
-            and now - _status["last_use"] <= idle_s
+            and now - STATUS["last_use"] <= idle_s
         ):
             keeping = False
         elif now - last_poke >= KEEP_AWAKE_S:
@@ -165,9 +165,9 @@ def status_loop(interval=5):
                 HAPTIC.keep_awake()
                 last_poke = now
         connected, battery = dial_bluetooth()
-        if stuck.feed(connected, _status["attached"], time.monotonic()):
+        if stuck.feed(connected, STATUS["attached"], time.monotonic()):
             kick_dial()
-        doc = build_status(_status["attached"], connected, battery, keeping_awake=keeping)
+        doc = build_status(STATUS["attached"], connected, battery, keeping_awake=keeping)
         key = {k: v for k, v in doc.items() if k != "updated"}
         if key != last_doc or time.monotonic() - last_at >= STATUS_BEAT_S:
             write_status(doc)

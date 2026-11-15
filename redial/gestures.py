@@ -3,8 +3,8 @@
 import math
 import re
 
-from .actions import _is_string_list, make_action
-from .config import MAX_LAUNCHERS, _pen_section, live_derived, load_config
+from .actions import is_string_list, make_action
+from .config import MAX_LAUNCHERS, pen_section, live_derived, load_config
 from .log import log
 
 # --- click gestures ---
@@ -179,7 +179,7 @@ def custom_launcher_actions(doc):
     out, taken = [], {a[0] for a in CLICK_ACTIONS}
     for i, item in enumerate(raw[:MAX_LAUNCHERS]):
         cmd = item.get("cmd") if isinstance(item, dict) else None
-        if not cmd or not _is_string_list(cmd):
+        if not cmd or not is_string_list(cmd):
             log(f"launchers[{i}] needs a non-empty list of strings for cmd; skipped")
             continue
         title = str(item.get("name") or item.get("label") or "").strip()
@@ -196,7 +196,7 @@ def custom_launcher_actions(doc):
 
 CLICK_ACTIONS[-1:-1] = custom_launcher_actions(load_config())
 CLICK_DEFAULTS = {"single": "tool", "double": "dictation", "triple": "enter"}
-_CLICK_BY_NAME = {a[0]: a for a in CLICK_ACTIONS}
+CLICK_BY_NAME = {a[0]: a for a in CLICK_ACTIONS}
 _click_cache = {}
 _click_fns = {}
 
@@ -210,7 +210,7 @@ def tool_clicks_spec(raw, where):
         return {}
     out = {}
     for k, v in raw.items():
-        if k in CLICK_DEFAULTS and isinstance(v, str) and v in _CLICK_BY_NAME:
+        if k in CLICK_DEFAULTS and isinstance(v, str) and v in CLICK_BY_NAME:
             out[k] = v
         else:
             log(f"{where}.{k}: {v!r} is not a usable action; ignored")
@@ -230,7 +230,7 @@ def click_choice(kind, tool=None):
         choice = dict(CLICK_DEFAULTS)
         for k in CLICK_DEFAULTS:
             v = raw.get(k)
-            if isinstance(v, str) and v in _CLICK_BY_NAME and not (v == "tool" and k != "single"):
+            if isinstance(v, str) and v in CLICK_BY_NAME and not (v == "tool" and k != "single"):
                 choice[k] = v
             elif v is not None:
                 log(f"clicks.{k}: {v!r} is not a usable action; using {CLICK_DEFAULTS[k]!r}")
@@ -249,7 +249,7 @@ def click_choice(kind, tool=None):
 def click_fn(name):
     """Compiled action for a click choice, or None (nothing / tool's own)."""
     if name not in _click_fns:
-        spec = _CLICK_BY_NAME[name][3]
+        spec = CLICK_BY_NAME[name][3]
         _click_fns[name] = make_action(spec) if spec else None
     return _click_fns[name]
 
@@ -257,7 +257,7 @@ def click_fn(name):
 def click_hint(tool):
     """Click label the overlay shows for `tool`, honouring a single-click override."""
     name = click_choice("single", tool)
-    return tool["click_label"] if name == "tool" else _CLICK_BY_NAME[name][1]
+    return tool["click_label"] if name == "tool" else CLICK_BY_NAME[name][1]
 
 
 # --- pen button gestures ---
@@ -281,7 +281,7 @@ PEN_TAIL_ACTIONS = _PEN_SHARED_ACTIONS + [
 PEN_TAIL_DEFAULTS = {"single": "space", "double": "enter", "hold": "dictation"}
 # Hold defaults to Dictation: the old Omarchy-menu default was easy to trigger by accident
 # and includes power entries. See docs/DESIGN.md#pen-buttons.
-_PEN_TAIL_BY_NAME = {a[0]: a for a in PEN_TAIL_ACTIONS}
+PEN_TAIL_BY_NAME = {a[0]: a for a in PEN_TAIL_ACTIONS}
 _pen_tail_cache = {}
 _pen_tail_fns = {}
 
@@ -290,12 +290,12 @@ def pen_tail_choice(slot):
     """Configured action name for the tail button's "single"|"double"|"hold"."""
 
     def build(doc):
-        raw = _pen_section(doc).get("tail_clicks")
+        raw = pen_section(doc).get("tail_clicks")
         raw = raw if isinstance(raw, dict) else {}
         choice = dict(PEN_TAIL_DEFAULTS)
         for k in PEN_TAIL_DEFAULTS:
             v = raw.get(k)
-            if isinstance(v, str) and v in _PEN_TAIL_BY_NAME:
+            if isinstance(v, str) and v in PEN_TAIL_BY_NAME:
                 choice[k] = v
             elif v is not None:
                 log(
@@ -311,7 +311,7 @@ def pen_tail_fn(slot):
     """Compiled action for the tail button's configured slot, or None (unbound)."""
     name = pen_tail_choice(slot)
     if name not in _pen_tail_fns:
-        spec = _PEN_TAIL_BY_NAME[name][3]
+        spec = PEN_TAIL_BY_NAME[name][3]
         _pen_tail_fns[name] = make_action(spec) if spec else None
     return _pen_tail_fns[name]
 
@@ -333,7 +333,7 @@ PEN_ERASER_ACTIONS = [
 # settings can raise, lower or switch it off (0).
 ERASER_TAP_MIN_MS_DEFAULT = 100
 PEN_ERASER_DEFAULTS = {"tap": "escape", "hold": "delete_word"}
-_PEN_ERASER_BY_NAME = {a[0]: a for a in PEN_ERASER_ACTIONS}
+PEN_ERASER_BY_NAME = {a[0]: a for a in PEN_ERASER_ACTIONS}
 _pen_eraser_cache = {}
 _pen_eraser_fns = {}
 
@@ -342,13 +342,13 @@ def pen_eraser_config():
     """(tap action, hold action, minimum tap seconds, scroll speed multiplier), live-reloaded."""
 
     def build(doc):
-        pen = _pen_section(doc)
+        pen = pen_section(doc)
         raw = pen.get("eraser")
         raw = raw if isinstance(raw, dict) else {}
         choice = dict(PEN_ERASER_DEFAULTS)
         for k in PEN_ERASER_DEFAULTS:
             v = raw.get(k)
-            if isinstance(v, str) and v in _PEN_ERASER_BY_NAME:
+            if isinstance(v, str) and v in PEN_ERASER_BY_NAME:
                 choice[k] = v
             elif v is not None:
                 log(f"pen.eraser.{k}: {v!r} is not usable; using {PEN_ERASER_DEFAULTS[k]!r}")
@@ -371,7 +371,7 @@ def pen_eraser_config():
 def pen_eraser_fn(name):
     """Compiled action for an eraser slot, or None (Nothing)."""
     if name not in _pen_eraser_fns:
-        spec = _PEN_ERASER_BY_NAME[name][3]
+        spec = PEN_ERASER_BY_NAME[name][3]
         _pen_eraser_fns[name] = make_action(spec) if spec else None
     return _pen_eraser_fns[name]
 
@@ -385,7 +385,7 @@ PEN_BARREL_ACTIONS = _PEN_SHARED_ACTIONS + [
     ("left_click", "Left click", "Left mouse click.", {"do": "mouse", "button": "left"}),
 ]
 PEN_BARREL_DEFAULT = "right_click"
-_PEN_BARREL_BY_NAME = {a[0]: a for a in PEN_BARREL_ACTIONS}
+PEN_BARREL_BY_NAME = {a[0]: a for a in PEN_BARREL_ACTIONS}
 _pen_barrel_cache = {}
 _pen_barrel_fns = {}
 
@@ -394,11 +394,11 @@ def pen_barrel_config():
     """(enabled, action name) for the stylus barrel button, live-reloaded."""
 
     def build(doc):
-        raw = _pen_section(doc).get("barrel")
+        raw = pen_section(doc).get("barrel")
         raw = raw if isinstance(raw, dict) else {}
         enabled = bool(raw.get("enabled", True))
         action = raw.get("action")
-        if not (isinstance(action, str) and action in _PEN_BARREL_BY_NAME):
+        if not (isinstance(action, str) and action in PEN_BARREL_BY_NAME):
             if action is not None:
                 log(
                     f"pen.barrel.action: {action!r} is not a usable action; "
@@ -416,7 +416,7 @@ def pen_barrel_config():
 PEN_BARREL_HOLD_ACTIONS = _PEN_SHARED_ACTIONS
 PEN_BARREL_HOLD_DEFAULT = "none"
 PEN_BARREL_HOLD_MS = (500, 250, 1500)  # default, min, max
-_PEN_BARREL_HOLD_BY_NAME = {a[0]: a for a in PEN_BARREL_HOLD_ACTIONS}
+PEN_BARREL_HOLD_BY_NAME = {a[0]: a for a in PEN_BARREL_HOLD_ACTIONS}
 _pen_barrel_hold_cache = {}
 
 
@@ -424,10 +424,10 @@ def pen_barrel_hold():
     """(action name, seconds) for holding the barrel button, live-reloaded."""
 
     def build(doc):
-        raw = _pen_section(doc).get("barrel")
+        raw = pen_section(doc).get("barrel")
         raw = raw if isinstance(raw, dict) else {}
         name = raw.get("hold", PEN_BARREL_HOLD_DEFAULT)
-        if not (isinstance(name, str) and name in _PEN_BARREL_HOLD_BY_NAME):
+        if not (isinstance(name, str) and name in PEN_BARREL_HOLD_BY_NAME):
             log(f"pen.barrel.hold: {name!r} is not a usable action; using nothing")
             name = PEN_BARREL_HOLD_DEFAULT
         ms, lo, hi = PEN_BARREL_HOLD_MS
@@ -442,6 +442,6 @@ def pen_barrel_hold():
 def pen_barrel_fn(name):
     """Compiled action for the barrel button's configured action, or None."""
     if name not in _pen_barrel_fns:
-        spec = (_PEN_BARREL_BY_NAME.get(name) or _PEN_BARREL_HOLD_BY_NAME[name])[3]
+        spec = (PEN_BARREL_BY_NAME.get(name) or PEN_BARREL_HOLD_BY_NAME[name])[3]
         _pen_barrel_fns[name] = make_action(spec) if spec else None
     return _pen_barrel_fns[name]

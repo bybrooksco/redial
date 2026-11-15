@@ -577,8 +577,8 @@ def load_tools():
 write_tool_manifest()
 TOOLS = load_tools()
 IDLE_TOOL = 0
-_tools_state = {"mtime": None}
+TOOLS_STATE = {"mtime": None}
 try:
-    _tools_state["mtime"] = os.stat(CONFIG_PATH).st_mtime_ns
+    TOOLS_STATE["mtime"] = os.stat(CONFIG_PATH).st_mtime_ns
 except OSError:
     pass

@@ -85,7 +85,7 @@ def _spec_number(spec, key, default, cast):
         return default
 
 
-def _is_string_list(v):
+def is_string_list(v):
     return isinstance(v, list) and all(isinstance(k, str) for k in v)
 
 
@@ -96,7 +96,7 @@ def _direction_up(spec, default="up", negative="down"):
 
 def _compile_exec(spec):
     cmd = spec.get("cmd")
-    if not _is_string_list(cmd):
+    if not is_string_list(cmd):
         log(f"exec needs a list of strings for cmd: {spec!r}")
         return None
     return lambda mag, _c=list(cmd): launch(_c)
@@ -140,12 +140,12 @@ def _terminal_cant():
 
 def _compile_key(spec):
     keys = spec.get("keys")
-    if not keys or not _is_string_list(keys):
+    if not keys or not is_string_list(keys):
         log(f"key needs a non-empty list of key names: {spec!r}")
         return None
     rep = bool(spec.get("repeat", False))
     tkeys = spec.get("terminal_keys")
-    if tkeys is not None and not _is_string_list(tkeys):
+    if tkeys is not None and not is_string_list(tkeys):
         log(f"key terminal_keys must be a list of key names: {spec!r}")
         tkeys = None
 
@@ -277,7 +277,7 @@ def _compile_assistant(spec):
     def start(mag):
         conf = live_config().get("assistant")
         cmd = conf.get("cmd") if isinstance(conf, dict) else None
-        if not cmd or not _is_string_list(cmd):
+        if not cmd or not is_string_list(cmd):
             notify("Quick assistant", 'Not set up: add an "assistant" command to config.json')
             return
         launch(list(cmd))

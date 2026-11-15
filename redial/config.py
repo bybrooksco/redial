@@ -164,7 +164,7 @@ def live_config():
     return _live["doc"]
 
 
-def _pen_section(doc):
+def pen_section(doc):
     """The config's "pen" section, or {} if it is missing or not an object."""
     pen = doc.get("pen")
     return pen if isinstance(pen, dict) else {}
