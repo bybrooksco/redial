@@ -888,8 +888,27 @@ class MenuStream:
         self.last = 0.0
         self.tried = -1e9
         self.last_turn = -1e9
+        # The main thread, the action worker and the pen threads all write notes; without it one
+        # thread's close() could land between another's None check and its send.
+        self.lock = threading.RLock()
+
+    def _send(self, data):
+        """Send one line: True if all of it went, False if the overlay is behind (dropped whole).
+        A partial write closes the socket, since half a line would glue onto the next one."""
+        try:
+            n = self.sock.send(data)
+        except BlockingIOError:
+            return False
+        if n < len(data):
+            self.close()
+            return False
+        return True
 
     def connect(self, quiet=False):
+        with self.lock:
+            self._connect(quiet)
+
+    def _connect(self, quiet):
         self.close()
         if not self.PATH:
             return
@@ -906,16 +925,15 @@ class MenuStream:
                 log(f"menu stream unavailable ({e}) - needle will step per detent")
 
     def pos(self, value, now):
-        if self.sock is None or now - self.last < self.MIN_INTERVAL:
-            return
-        self.last = now
-        try:
-            self.sock.sendall(f"pos {value:.4f}\n".encode())
-        except BlockingIOError:
-            pass  # panel is behind; dropping a frame is correct
-        except Exception as e:
-            log(f"menu stream write failed: {e}")
-            self.close()
+        with self.lock:
+            if self.sock is None or now - self.last < self.MIN_INTERVAL:
+                return
+            self.last = now
+            try:
+                self._send(f"pos {value:.4f}\n".encode())  # behind: dropping a frame is correct
+            except Exception as e:
+                log(f"menu stream write failed: {e}")
+                self.close()
 
     def note(self, kind, doc):
         """Send one state ("turn", "hint", "cant") as `kind {json}`; True when the overlay took it.
@@ -923,25 +941,25 @@ class MenuStream:
         The note channel stays connected between notes. While nothing listens it retries at most
         every RETRY_S, so a missing overlay costs nothing per detent.
         """
-        now = time.monotonic()
-        if self.sock is None:
-            if now - self.tried < self.RETRY_S:
-                return False
-            self.tried = now
-            self.connect(quiet=True)
+        with self.lock:
+            now = time.monotonic()
             if self.sock is None:
+                if now - self.tried < self.RETRY_S:
+                    return False
+                self.tried = now
+                self.connect(quiet=True)  # the lock is re-entrant
+                if self.sock is None:
+                    return False
+            try:
+                if not self._send(f"{kind} {json.dumps(doc)}\n".encode()):
+                    return False  # the overlay is behind; the OSD shows this one
+            except OSError as e:
+                log(f"overlay note failed: {e}")
+                self.close()
                 return False
-        try:
-            self.sock.sendall(f"{kind} {json.dumps(doc)}\n".encode())
-        except BlockingIOError:
-            return False  # the overlay is behind; the OSD shows this one
-        except OSError as e:
-            log(f"overlay note failed: {e}")
-            self.close()
-            return False
-        if kind == "turn":
-            self.last_turn = now
-        return True
+            if kind == "turn":
+                self.last_turn = now
+            return True
 
     def turn_wait(self):
         """Seconds until the next level readout may go to the overlay (0 when not connected)."""
@@ -950,12 +968,13 @@ class MenuStream:
         return max(0.0, self.last_turn + self.TURN_INTERVAL - time.monotonic())
 
     def close(self):
-        if self.sock is not None:
-            try:
-                self.sock.close()
-            except OSError:
-                pass
-            self.sock = None
+        with self.lock:
+            if self.sock is not None:
+                try:
+                    self.sock.close()
+                except OSError:
+                    pass
+                self.sock = None
 
 
 MENU_UI = MenuUI()

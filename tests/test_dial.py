@@ -4561,6 +4561,22 @@ class OverlayNotes(Base):
             self.assertFalse(stream.note("turn", {"name": "Volume"}))
         self.assertEqual(len(tries), 1)
 
+    def test_half_a_line_closes_the_socket_instead_of_gluing_onto_the_next(self):
+        class Half:
+            closed = False
+
+            def send(self, data):
+                return len(data) // 2
+
+            def close(self):
+                Half.closed = True
+
+        stream = m.MenuStream()
+        stream.sock = Half()
+        self.assertFalse(stream.note("turn", {"name": "Volume"}))
+        self.assertIsNone(stream.sock)
+        self.assertTrue(Half.closed)
+
     def test_level_readouts_are_held_to_about_ten_a_second(self):
         stream, server = self.listen()
         self.assertEqual(stream.turn_wait(), 0.0, "not connected: no wait")
