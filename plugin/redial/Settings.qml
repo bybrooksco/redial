@@ -5,6 +5,7 @@ import qs.Commons
 import "ThemeSlots.js" as ThemeSlots
 import "ColourScheme.js" as Scheme
 import "LookResolve.js" as LookResolve
+import "Languages.js" as Languages
 
 // Configuration for the re:dial overlay.
 //
@@ -158,6 +159,32 @@ Item {
   readonly property string language: {
     var v = String(get("language"))
     return /^[a-z0-9][a-z0-9-]{0,39}$/.test(v) ? v : "classic"
+  }
+  // Your installed languages (Languages.js): the index `redial-language install` keeps.
+  readonly property string userLanguagesDir:
+    (Quickshell.env("XDG_DATA_HOME") || (Quickshell.env("HOME") + "/.local/share")) + "/redial/languages"
+  property var languageIndex: ({})
+  property bool languageIndexLoaded: false
+  function languageDir(name) { return Languages.dir(name, languageIndex, userLanguagesDir) }
+  function reloadLanguages() { languageIndexFile.reload() }
+  FileView {
+    id: languageIndexFile
+    path: cfg.userLanguagesDir + "/index.json"
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      cfg.languageIndexLoaded = true
+      try { cfg.languageIndex = JSON.parse(text()).languages || ({}) } catch (e) { cfg.languageIndex = ({}) }
+    }
+    onLoadFailed: cfg.languageIndex = ({})
+    onFileChanged: reload()
+  }
+  // Like config.json below: the watcher can't see an index created later, so poll until it exists.
+  Timer {
+    running: !cfg.languageIndexLoaded
+    interval: 10000
+    repeat: true
+    onTriggered: languageIndexFile.reload()
   }
   readonly property string colorScheme: {
     var v = String(get("color_scheme"))

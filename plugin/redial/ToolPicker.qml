@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import Qt.labs.folderlistmodel
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -10,6 +9,7 @@ import "ConfigText.js" as ConfigText
 import "ActionGroups.js" as ActionGroups
 import "StylePresets.js" as StylePresets
 import "LookResolve.js" as LookResolve
+import "Languages.js" as Languages
 
 // Pick and reorder which of the daemon's tools are active, and where the overlay sits.
 //
@@ -100,22 +100,8 @@ Item {
   // Which page of the window is showing: "look" (position, size, appearance, tools) or "feel"
   // (sensitivity, timings, clicks), "all" or "help" -- the Dial's pages -- or "pen", the Surface Pen,
   // which has its own tab above the Dial's pages. Feel and Pen apply immediately.
-  // Installed design languages: one folder each under languages/ (see languages/README.md).
-  FolderListModel {
-    id: languageFolders
-    folder: Qt.resolvedUrl("languages")
-    showFiles: false
-    showDirs: true
-  }
-  readonly property var languageOptions: {
-    var out = []
-    for (var i = 0; i < languageFolders.count; i++) {
-      var n = String(languageFolders.get(i, "fileName"))
-      // re:dial's own languages carry the re:dial name ("basic" is a working name)
-      out.push({ key: n, label: (n === "classic" || n === "basic") ? "re:dial " + n : n.charAt(0).toUpperCase() + n.slice(1) })
-    }
-    return out.length ? out : [ { key: "classic", label: "re:dial classic" } ]
-  }
+  // Installed design languages: the built-ins and yours (Languages.js, languages/README.md).
+  readonly property var languageOptions: Languages.options(root.cfg.languageIndex)
   // ---- Every setting: rows from schema.json (one per key re:dial reads), so nothing is file-only.
   property var schemaGroups: []
   property string allFilter: ""
@@ -596,7 +582,7 @@ Item {
   // A language offers only its own looks; nothing is borrowed from another one.
   Loader {
     id: pickedLanguage
-    source: "languages/" + root.cfgValue("language", "classic") + "/Language.qml"
+    source: root.cfg.languageDir(root.cfgValue("language", "classic")) + "/Language.qml"
   }
   readonly property var appearanceOptions: LookResolve.offered(pickedLanguage.item).map(function (k) { return LookResolve.option(k, pickedLanguage.item) })
   readonly property string appearanceChoice: {
