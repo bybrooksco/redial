@@ -5,7 +5,6 @@ import sys
 import threading
 import time
 
-
 # The daemon's own log. Started the Omarchy way its stderr is /dev/null, so this file is the only
 # record of connects, disconnects and errors. One rotation: daemon.log and daemon.log.1.
 LOG_PATH = os.environ.get("DIAL_LOG_PATH") or os.path.join(

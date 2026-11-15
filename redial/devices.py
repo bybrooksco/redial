@@ -8,7 +8,6 @@ import time
 
 from .log import log
 
-
 DEVICE_NAME = "Surface Dial System Multi Axis"
 STYLUS_NAME = "Surface Touch Device Stylus"
 PEN_KBD_NAME = "Surface Pen Keyboard"

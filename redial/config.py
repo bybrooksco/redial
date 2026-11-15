@@ -7,7 +7,6 @@ import os
 from .log import log
 from .paths import CONFIG_PATH
 
-
 # --- timing ---------------------------------------------------------------
 HOLD_S = 0.40  # press longer than this opens the menu
 # Where the dashboard parks. center | top | bottom | left | right |
