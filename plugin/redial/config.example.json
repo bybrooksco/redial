@@ -29,6 +29,7 @@
   "menu_latch": false,
   "menu_timeout_ms": 8000,
   "keep_awake": false,
+  "keep_awake_minutes": 30,
   "watchdogMs": 15000,
   "colors": {
     "_comment": "\"theme\" follows color_scheme (Light, Dark or Match desktop) for every look and the settings window. Also accepts a role name (accent, foreground, background, urgent, muted), a theme slot color0..color15 (follows theme switches), or a literal hex such as \"#78824b\" (fixed).",

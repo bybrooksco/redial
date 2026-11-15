@@ -1511,6 +1511,8 @@ class Status(Base):
         self.assertEqual(doc["pid"], os.getpid())
         self.assertEqual(doc["updated"], 1234.6)
         self.assertEqual(doc["battery"], 80)
+        self.assertFalse(doc["keeping_awake"])
+        self.assertTrue(m.build_status(True, True, 80, keeping_awake=True)["keeping_awake"])
 
     def test_write_is_atomic_and_readable(self):
         old = m.STATUS_PATH
@@ -2587,16 +2589,19 @@ class StatusLoop(Base):
         fx.set(m, "write_status", lambda doc: None)
         fx.set(m, "kick_dial", lambda *a: None)  # never touch the real Bluetooth link
 
-        def pokes(cfg, attached):
+        def pokes(cfg, attached, last_use=0.0, locked=False, until=60, docs=None):
             now, sent = [0.0], []
             fx.set(m.time, "monotonic", lambda: now[0])
             fx.set(m, "HAPTIC", types.SimpleNamespace(keep_awake=lambda: sent.append(now[0])))
             fx.set(m, "live_config", lambda: cfg)
-            fx.set(m, "_status", {"attached": attached})
+            fx.set(m, "screen_locked", lambda: locked)
+            fx.set(m, "_status", {"attached": attached, "last_use": last_use})
+            if docs is not None:
+                fx.set(m, "write_status", docs.append)
 
-            def sleep(secs):  # each pass is 30 s; stop after t=0, 30, 60
+            def sleep(secs):  # each pass is 30 s; stop after t=until
                 now[0] += 30
-                if now[0] > 60:
+                if now[0] > until:
                     raise StopLoop
 
             fx.set(m.time, "sleep", sleep)
@@ -2607,6 +2612,33 @@ class StatusLoop(Base):
         self.assertEqual(pokes({}, True), [])  # off by default
         self.assertEqual(pokes({"keep_awake": True}, False), [])  # asleep: nothing to keep up
         self.assertEqual(pokes({"keep_awake": True}, True), [0.0, 60.0])
+        # Locked screen: nobody is at the desk, let the dial sleep.
+        self.assertEqual(pokes({"keep_awake": True}, True, locked=True), [])
+        # Idle window: default 30 min after the last touch, then the dial may sleep.
+        self.assertEqual(pokes({"keep_awake": True}, True, last_use=-1800.0, until=0), [0.0])
+        self.assertEqual(pokes({"keep_awake": True}, True, last_use=-1801.0, until=0), [])
+        cfg = {"keep_awake": True, "keep_awake_minutes": 5}
+        self.assertEqual(pokes(cfg, True, last_use=-301.0, until=0), [])
+        self.assertEqual(pokes(cfg, True, last_use=-299.0, until=0), [0.0])
+        # status.json says whether pokes are actually being sent (battery study column).
+        docs = []
+        pokes({"keep_awake": True}, True, docs=docs, until=0)
+        self.assertTrue(docs[-1]["keeping_awake"])
+        docs = []
+        pokes({"keep_awake": True}, True, locked=True, docs=docs, until=0)
+        self.assertFalse(docs[-1]["keeping_awake"])
+
+    def test_screen_locked_sees_a_locker_process(self):
+        proc = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, proc)
+        for pid, comm in (("1", "systemd"), ("42", "hyprlock"), ("self", "x")):
+            os.makedirs(os.path.join(proc, pid))
+            with open(os.path.join(proc, pid, "comm"), "w") as f:
+                f.write(comm + "\n")
+        os.makedirs(os.path.join(proc, "77"))  # a process that exited mid-scan: no comm
+        self.assertTrue(m.screen_locked(proc))
+        os.remove(os.path.join(proc, "42", "comm"))
+        self.assertFalse(m.screen_locked(proc))
 
     def test_haptics_worker_turns_the_sentinel_into_a_silent_read(self):
         h = m.Haptics.__new__(m.Haptics)  # no worker thread
@@ -3257,6 +3289,7 @@ class UninstallScript(unittest.TestCase):
             "HOME": self.home,
             "PATH": self.stubs + ":/usr/bin:/bin",
             "USER": "tester",
+            "DIAL_WAKE_RULE": os.path.join(self.home, "no-wake-rule"),  # never this machine's
         }
 
     def put(self, rel, text):

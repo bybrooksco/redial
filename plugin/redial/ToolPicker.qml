@@ -2125,10 +2125,22 @@ Item {
               visible: root.page === "feel"
               cfg: root.cfg
               title: "Keep the dial awake"
-              help: "The dial sleeps after at most 5 minutes untouched, and only a press wakes it. On keeps it awake while this computer is on and the dial is connected, for an always-there feel. It stops when the computer sleeps or shuts down. Uses more battery."
+              help: "The dial sleeps after at most 5 minutes untouched, and only a press wakes it. On keeps it awake while you are using this computer, for an always-there feel: for a while after you last touched it, and never while the screen is locked. Uses more battery."
               options: [ { key: false, label: "Off" }, { key: true, label: "On" } ]
               current: root.cfgValue("keep_awake", false)
               onPicked: key => root.setConfigKey("keep_awake", key)
+            }
+            SliderRow {
+              visible: root.page === "feel" && root.cfgValue("keep_awake", false) === true
+              cfg: root.cfg
+              title: "Stay awake after last use"
+              help: "How long after you last touched the dial it is kept awake. After that it sleeps on its own, and a press wakes it."
+              from: 5
+              to: 240
+              stepSize: 5
+              current: root.cfgValue("keep_awake_minutes", 30)
+              format: v => v + " min"
+              onPicked: value => root.setConfigKey("keep_awake_minutes", value)
             }
 
             // What a single / double / triple click does with any tool (unless the tool has its own,

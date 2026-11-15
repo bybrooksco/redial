@@ -50,6 +50,7 @@ HYPR_MAIN="$HOME/.config/hypr/hyprland.lua"
 MENU_EXT="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 UNIT="$HOME/.config/systemd/user/redial.service"
 UDEV="${DIAL_UDEV_RULE:-/etc/udev/rules.d/70-redial.rules}"  # the override is for tests
+WAKE="${DIAL_WAKE_RULE:-/etc/udev/rules.d/71-redial-wake.rules}"
 
 echo "== re:dial uninstall ($(hostname), $STAMP) =="
 cat <<PLAN
@@ -167,17 +168,17 @@ fi
 
 echo
 echo "-- 7. Permissions (sudo, system-wide) --"
-if [[ -f "$UDEV" ]]; then
-    if (( ASSUME_YES )); then
-        warn "udev rule left in place (-y never uses sudo). To remove it: sudo rm $UDEV && sudo udevadm control --reload-rules"
-    elif confirm "Remove the udev rule $UDEV (sudo)?"; then
-        sudo rm -f "$UDEV" && sudo udevadm control --reload-rules && ok "udev rule removed"
+for rule in "$UDEV" "$WAKE"; do
+    if [[ ! -f "$rule" ]]; then
+        skip "no $(basename "$rule")"
+    elif (( ASSUME_YES )); then
+        warn "udev rule left in place (-y never uses sudo). To remove it: sudo rm $rule && sudo udevadm control --reload-rules"
+    elif confirm "Remove the udev rule $rule (sudo)?"; then
+        sudo rm -f "$rule" && sudo udevadm control --reload-rules && ok "udev rule removed"
     else
         skip "udev rule kept"
     fi
-else
-    skip "no udev rule"
-fi
+done
 echo "         (Your membership of the 'input' group is not changed; other things may need it.)"
 
 echo

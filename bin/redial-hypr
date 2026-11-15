@@ -302,6 +302,11 @@ HAPTIC_MIN_GAP = 0.10  # never fire ticks closer than this, or they smear.
 # A host READ of a feature report does not reset that timer; a haptic write with waveform
 # NONE (ordinal 1) does, and the motor stays still (both tested on the dial 2026-11-06).
 KEEP_AWAKE_S = 60.0
+# ...but only while someone is at the desk: dial used within this many minutes (config
+# "keep_awake_minutes", live) and no lock screen up. Otherwise the firmware's own sleep applies.
+KEEP_AWAKE_MINUTES = 30
+# shortcut: GNOME/KDE lock screens aren't processes we can see; read logind's LockedHint for them.
+SCREEN_LOCKERS = {"hyprlock", "swaylock", "gtklock", "waylock", "i3lock"}
 HAPTIC_NONE = 1
 # Rotation stall: the dial sometimes stops sending turns while presses still arrive (2026-10-23,
 # 2026-11-06; raw hidraw showed nothing sent while turning). A menu held this long with no turn
@@ -4680,7 +4685,7 @@ def use_monotonic_event_clock(fd):
 
 STATUS_PATH = os.path.join(os.path.dirname(CONFIG_PATH), "status.json")
 STATUS_BEAT_S = 15  # rewrite at least this often; the settings window treats older as "not running"
-_status = {"attached": False}
+_status = {"attached": False, "last_use": -math.inf}
 
 
 def parse_bluetooth_info(text):
@@ -4723,7 +4728,7 @@ def dial_bluetooth():
         return None, None
 
 
-def build_status(attached, connected, battery, now=None):
+def build_status(attached, connected, battery, now=None, keeping_awake=False):
     """What the settings window shows about the dial.
 
     `state` is "ready" (reading events), "asleep" (Bluetooth reports it disconnected) or
@@ -4743,6 +4748,7 @@ def build_status(attached, connected, battery, now=None):
         "attached": bool(attached),
         "bluetooth_connected": connected,
         "battery": battery,
+        "keeping_awake": bool(keeping_awake),
     }
 
 
@@ -4796,19 +4802,42 @@ def kick_dial(why="self-heal: Bluetooth connected but no input device"):
         log(f"self-heal: disconnect failed ({exc})")
 
 
+def screen_locked(proc="/proc"):
+    """A known lock screen is running (see SCREEN_LOCKERS)."""
+    for d in os.listdir(proc):
+        if d.isdigit():
+            try:
+                with open(f"{proc}/{d}/comm") as f:
+                    if f.read().strip() in SCREEN_LOCKERS:
+                        return True
+            except OSError:
+                continue  # exited mid-scan
+    return False
+
+
 def status_loop(interval=5):
     """Keep status.json current: on any change, and as a heartbeat otherwise."""
     last_doc, last_at, last_poke = None, 0.0, -math.inf
+    keeping = False
     stuck = StuckWatch()
     while True:
-        if _status["attached"] and live_bool("keep_awake", False):
-            if time.monotonic() - last_poke >= KEEP_AWAKE_S:
+        now = time.monotonic()
+        idle_s = live_num("keep_awake_minutes", KEEP_AWAKE_MINUTES, 5, 240) * 60
+        if not (
+            _status["attached"]
+            and live_bool("keep_awake", False)
+            and now - _status["last_use"] <= idle_s
+        ):
+            keeping = False
+        elif now - last_poke >= KEEP_AWAKE_S:
+            keeping = not screen_locked()  # read /proc once a minute, not every pass
+            if keeping:
                 HAPTIC.keep_awake()
-                last_poke = time.monotonic()
+                last_poke = now
         connected, battery = dial_bluetooth()
         if stuck.feed(connected, _status["attached"], time.monotonic()):
             kick_dial()
-        doc = build_status(_status["attached"], connected, battery)
+        doc = build_status(_status["attached"], connected, battery, keeping_awake=keeping)
         key = {k: v for k, v in doc.items() if k != "updated"}
         if key != last_doc or time.monotonic() - last_at >= STATUS_BEAT_S:
             write_status(doc)
@@ -4835,6 +4864,7 @@ def pump(fh, dial):
                     return
                 sec, usec, etype, code, value = struct.unpack(EV_FORMAT, data)
                 now = time.monotonic()
+                _status["last_use"] = now  # the keep-awake idle window counts from here
                 if kernel_clock:
                     now = event_time(sec, usec, now)
                 if etype == EV_REL and code == REL_DIAL:
@@ -4893,6 +4923,7 @@ def main():
         log(f"attached to {path} (away {time.monotonic() - lost_at:.1f}s)")
         dial.rot_at_attach = dial.rot_events
         _status["attached"] = True
+        _status["last_use"] = time.monotonic()  # a press woke it, so someone is here
         dial.reset_gestures()
         dial._arm(IDLE_TOOL, time.monotonic())
         dial.last_action = time.monotonic()

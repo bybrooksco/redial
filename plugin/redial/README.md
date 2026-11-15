@@ -276,7 +276,8 @@ and every number is clamped to a safe range (text or true/false means the defaul
 | `deadzone` | Ignore small turns: after a pause the dial must turn this many counts before anything happens, so a bump or a tremor does nothing. A deliberate turn loses only that lead-in (the counts are released together, not dropped). `0` is off. | `0` | 0 to 100 |
 | `menu_latch` | Tap menu: hold until the menu opens, let go, then turn and click to choose. Turning while still holding works as before. For anyone who cannot hold and turn at once. | `false` | true / false |
 | `menu_timeout_ms` | How long an untouched tap menu waits before closing without changing anything. A slider on the Feel page. | `8000` | 3000 to 12000 |
-| `keep_awake` | The dial sleeps on its own after at most 5 minutes untouched. On keeps it awake, for an always-there feel: once a minute the daemon sends a haptic report with waveform NONE, which the dial counts as use without moving the motor. Stops by itself when this computer sleeps or shuts down, since the daemon stops. Uses more battery. | `false` | true / false |
+| `keep_awake` | The dial sleeps on its own after at most 5 minutes untouched. On keeps it awake while you are using this computer, for an always-there feel: once a minute the daemon sends a haptic report with waveform NONE, which the dial counts as use without moving the motor. It only does this within `keep_awake_minutes` of your last touch and never while a lock screen (hyprlock, swaylock, gtklock, waylock, i3lock) is up; GNOME and KDE lock screens aren't detected yet. Stops when this computer sleeps or shuts down. Uses more battery. `status.json` shows `keeping_awake` while it is active. | `false` | true / false |
+| `keep_awake_minutes` | With `keep_awake` on: how long after the last touch the dial is kept awake. A slider on the Feel page. | `30` | 5 to 240 |
 
 Notes:
 
