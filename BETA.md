@@ -50,8 +50,9 @@ For your user only, after showing you a plan and asking once:
 - restarts the daemon and the shell if you agree.
 - **If you installed the earlier Surface Dial beta (0.8.3 or before), it is upgraded in place:** your settings and learning progress move to `~/.config/redial`, the old commands, plugin, autostart line and menu entry are replaced, and an old bar widget is renamed. Everything it replaces is backed up first, and the old udev rule is offered for removal (with `sudo`).
 
-It asks separately before using `sudo`, for two things: a udev rule so the dial can be read, and
-adding you to the `input` group. **Read `SECURITY.md` for what those permissions mean**: anything in
+It asks separately before each use of `sudo`: a udev rule so the dial can be read, adding you to the
+`input` group, and (optional) letting the dial wake the computer from sleep, which lets any paired
+Bluetooth device wake it too. **Read `SECURITY.md` for what those permissions mean**: anything in
 the `input` group can read every input device on the machine. Anything it replaces is copied to
 `~/.local/share/redial-backups/` first.
 

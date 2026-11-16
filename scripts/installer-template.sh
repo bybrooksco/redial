@@ -86,9 +86,10 @@ if (( ! UNATTENDED )); then
   Before you continue, in plain words:
 
   * This is a BETA. It has been used on one machine by its author; you are among the first.
-  * It installs for your user only. It will ask before using sudo, for two things: a udev
-    rule so the dial can be read, and adding you to the 'input' group. Anything in that group
-    can read every input device on the computer. SECURITY.md explains this.
+  * It installs for your user only. It asks before each use of sudo: a udev rule so the dial
+    can be read, adding you to the 'input' group, and (optional) letting the dial wake the
+    computer, which lets any paired Bluetooth device wake it too. Anything in the 'input'
+    group can read every input device on the computer. SECURITY.md explains this.
   * It sends nothing anywhere. It keeps a small log you can read.
   * One command removes it again (uninstall.sh, kept in the folder above).
   * BETA.md in that folder says what has not been tested, and how to report problems.
