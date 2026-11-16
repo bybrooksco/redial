@@ -29,8 +29,8 @@ LookBase {
     renderStrategy: Canvas.Cooperative
     onPaint: {
       var ctx = getContext("2d"), L = String(face.line), A = String(face.accent)
-      ctx.reset()
-      ctx.fillStyle = String(face.ground); ctx.fillRect(0, 0, width, height)
+      ctx.reset(); ctx.__w = face.lineScale
+      ctx.fillStyle = face.plateFill; ctx.fillRect(0, 0, width, height)
       if (face.cfg.constructionLines) Drafting.regMarks(ctx, width, height, face.u(4), face.u(8), L)
       if (face.noteKind === "cant")
         Drafting.hatch(ctx, function (c) { c.rect(0, 0, face.cell, height) }, width, height, L, 0.22, face.u(7))
@@ -64,7 +64,7 @@ LookBase {
     renderStrategy: Canvas.Cooperative
     onPaint: {
       var ctx = getContext("2d")
-      ctx.reset()
+      ctx.reset(); ctx.__w = face.lineScale
       if (face.noteKind === "cant") {   // the sign stands on ground, clear of the hatching
         ctx.fillStyle = String(face.ground); ctx.beginPath(); ctx.arc(width / 2, height / 2, width / 2, 0, Math.PI * 2); ctx.fill()
       }

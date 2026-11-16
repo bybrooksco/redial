@@ -59,8 +59,8 @@ LookBase {
     onPaint: {
       var ctx = getContext("2d"), L = String(face.line), A = String(face.accent), k = face.unit
       var tx = face.tx, ty = face.ty, tw = face.tw, th = face.th, ex = face.ex, ey = face.ey, i
-      ctx.reset()
-      ctx.fillStyle = String(face.ground); ctx.fillRect(0, 0, width, height)
+      ctx.reset(); ctx.__w = face.lineScale
+      ctx.fillStyle = face.plateFill; ctx.fillRect(0, 0, width, height)
       if (face.cfg.constructionLines) {
         Drafting.regMarks(ctx, width, height, face.u(10), face.u(14), L)
         Drafting.line(ctx, 0, ey, width, ey, L, 0.1, 1); Drafting.node(ctx, width - face.u(10), ey, face.u(3), L, 0.35)
@@ -70,18 +70,18 @@ LookBase {
       Drafting.line(ctx, tx + tw, ty - face.u(30), tx + tw, ty - face.u(6), L, 0.35, 1)
       var dy = ty - face.u(22), h = face.u(5)
       Drafting.line(ctx, tx + face.u(4), dy, tx + tw - face.u(4), dy, L, 0.5, 1)
-      ctx.strokeStyle = Drafting.ink(L, 0.6); ctx.lineWidth = 1.2; ctx.beginPath()
+      ctx.strokeStyle = Drafting.ink(L, 0.6); ctx.lineWidth = (1.2) * face.lineScale; ctx.beginPath()
       ctx.moveTo(tx + face.u(4) + h, dy - h * 0.8); ctx.lineTo(tx + face.u(4), dy); ctx.lineTo(tx + face.u(4) + h, dy + h * 0.8)
       ctx.moveTo(tx + tw - face.u(4) - h, dy - h * 0.8); ctx.lineTo(tx + tw - face.u(4), dy); ctx.lineTo(tx + tw - face.u(4) - h, dy + h * 0.8); ctx.stroke()
       // The tag: chamfered on the eyelet end, hatched when the dial can't act.
       var c = face.u(26)
       function outline(g) { g.moveTo(tx + c, ty); g.lineTo(tx + tw, ty); g.lineTo(tx + tw, ty + th); g.lineTo(tx + c, ty + th); g.lineTo(tx, ty + th - c); g.lineTo(tx, ty + c); g.closePath() }
       if (face.noteKind === "cant") Drafting.hatch(ctx, outline, width, height, L, 0.12, face.u(7))
-      ctx.beginPath(); outline(ctx); ctx.strokeStyle = Drafting.ink(L, 0.6); ctx.lineWidth = 1.2; ctx.stroke()
+      ctx.beginPath(); outline(ctx); ctx.strokeStyle = Drafting.ink(L, 0.6); ctx.lineWidth = (1.2) * face.lineScale; ctx.stroke()
       // The eyelet, its string, and the stub line between eyelet and fields.
       Drafting.ring(ctx, ex, ey, face.u(16), L, 0.35, 1); Drafting.ring(ctx, ex, ey, face.u(8), L, 0.7, 1)
       Drafting.line(ctx, ex - face.u(22), ey, ex + face.u(22), ey, L, 0.3, 1); Drafting.line(ctx, ex, ey - face.u(22), ex, ey + face.u(22), L, 0.3, 1)
-      ctx.strokeStyle = Drafting.ink(L, 0.5); ctx.lineWidth = 1; ctx.setLineDash([6 * k, 4 * k]); ctx.beginPath()
+      ctx.strokeStyle = Drafting.ink(L, 0.5); ctx.lineWidth = (1) * face.lineScale; ctx.setLineDash([6 * k, 4 * k]); ctx.beginPath()
       ctx.moveTo(ex, ey); ctx.bezierCurveTo(ex - face.u(40), ey + face.u(30), ex - face.u(10), height - face.u(40), ex - face.u(46), height); ctx.stroke(); ctx.setLineDash([])
       Drafting.line(ctx, tx + face.u(62), ty, tx + face.u(62), ty + th, L, 0.3, 1)
       if (face.fields) {
@@ -90,15 +90,15 @@ LookBase {
         for (i = 0; i < 10; i++) {
           ctx.beginPath(); ctx.arc(face.holeX(i), face.holeY, face.u(7), 0, Math.PI * 2)
           if (i < face.litCount) { ctx.fillStyle = Drafting.ink(A, 0.9); ctx.fill() }
-          ctx.strokeStyle = Drafting.ink(L, 0.5); ctx.lineWidth = 1; ctx.stroke()
+          ctx.strokeStyle = Drafting.ink(L, 0.5); ctx.lineWidth = (1) * face.lineScale; ctx.stroke()
         }
       } else {
         for (i = 0; i < face.tools.length; i++) {
           var bx = face.fx + face.col(i) * (face.fw / 2), by = ty + face.u(44) + face.row(i) * face.rowPitch
-          ctx.strokeStyle = Drafting.ink(L, 0.5 * face.ringInk); ctx.lineWidth = 1
+          ctx.strokeStyle = Drafting.ink(L, 0.5 * face.ringInk); ctx.lineWidth = (1) * face.lineScale
           ctx.strokeRect(bx, by - face.u(11), face.u(12), face.u(12))
           if (i === face.chosen && face.noteKind === "") {
-            ctx.strokeStyle = Drafting.ink(A, 1); ctx.lineWidth = 1.6; ctx.beginPath()
+            ctx.strokeStyle = Drafting.ink(A, 1); ctx.lineWidth = (1.6) * face.lineScale; ctx.beginPath()
             ctx.moveTo(bx + face.u(2), by - face.u(5)); ctx.lineTo(bx + face.u(5), by - face.u(1)); ctx.lineTo(bx + face.u(12), by - face.u(10)); ctx.stroke()
           }
         }
@@ -246,10 +246,10 @@ LookBase {
     renderStrategy: Canvas.Cooperative
     onPaint: {
       var ctx = getContext("2d"), A = String(face.accent)
-      ctx.reset()
+      ctx.reset(); ctx.__w = face.lineScale
       var p = face.leadFrom, kn = face.leadKnee, ey = face.leaderEndY, ex = face.leaderEndX
       var bent = Math.abs(ey - kn[1]) > 0.5, kx = bent ? Math.max(p[0], kn[0]) + face.u(18) : kn[0], ky = bent ? ey : kn[1]
-      ctx.strokeStyle = Drafting.ink(A, 0.65); ctx.lineWidth = 1
+      ctx.strokeStyle = Drafting.ink(A, 0.65); ctx.lineWidth = (1) * face.lineScale
       ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(kx, ky); ctx.lineTo(ex, ey); ctx.stroke()
       Drafting.node(ctx, p[0], p[1], face.u(3), A, 1)
       Drafting.node(ctx, ex, ey, face.u(2.2), A, 0.85)

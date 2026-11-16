@@ -1,8 +1,10 @@
 import QtQuick
 import QtTest
 import "../../plugin/redial/StylePresets.js" as Presets
+import "../../plugin/redial/languages/classic" as Classic
+import "../../plugin/redial/languages/basic" as Basic
 
-// The Look page's Style block (ToolPicker asks Presets.weightOf and Presets.drawn).
+// The Look page's Style block (ToolPicker asks Presets.weightOf and Presets.shown).
 TestCase {
   name: "StylePresets"
 
@@ -17,26 +19,52 @@ TestCase {
     compare(Presets.weightOf(bold), "")
   }
 
-  function test_controls_the_look_does_not_draw_are_greyed() {
-    verify(Presets.drawn("labels", "dial", "classic", "rect"))
-    verify(!Presets.drawn("labels", "dial", "capsule", "disc"))
-    verify(Presets.drawn("crosshair", "dial", "capsule", "disc"))
-    verify(!Presets.drawn("registrationMarks", "dial", "capsule", "disc"))
-    verify(!Presets.drawn("weight", "dial", "pie", "disc"))
-    verify(!Presets.drawn("colors", "omarchy", "classic", "rect"))
-    verify(!Presets.drawn("density", "toast", "classic", "rect"))
-    verify(Presets.drawn("backing", "dial", "gauge", "none"))
-    verify(!Presets.drawn("backing", "dial", "classic", "none"))
+  // Only what the chosen look draws is shown (never greyed): the language lists it per look.
+  QtObject { id: lang; property var controls: ({ "classic": ["backing", "weight", "registrationMarks"], "gauge": ["backing", "density"] }) }
+  Classic.Language { id: classicLang }
+  Basic.Language { id: basicLang }
+
+  function test_only_the_controls_a_look_lists_are_shown() {
+    verify(Presets.shown("backing", lang, "gauge", "rect"))
+    verify(Presets.shown("density", lang, "gauge", "rect"))
+    verify(!Presets.shown("weight", lang, "gauge", "rect"))
+    verify(!Presets.shown("backing", lang, "capsule", "rect"), "a look the map leaves out shows none")
+    verify(!Presets.shown("backing", null, "gauge", "rect"), "no language loaded yet: none")
+    verify(!Presets.shown("backing", { looks: {} }, "gauge", "rect"), "a language without controls: none")
   }
 
-  function test_new_faces_use_the_classic_controls() {
-    var faces = ["sundial", "tag", "wheel"]
-    for (var i = 0; i < faces.length; i++) {
-      verify(Presets.drawn("callout", "dial", faces[i], "rect"), faces[i] + " callout")
-      verify(Presets.drawn("density", "dial", faces[i], "rect"), faces[i] + " density")
-      verify(Presets.drawn("weight", "dial", faces[i], "rect"), faces[i] + " weight")
-      verify(Presets.drawn("constructionLines", "dial", faces[i], "rect"), faces[i] + " construction")
+  function test_colours_hide_only_for_the_omarchy_osd() {
+    verify(Presets.shown("colors", lang, "gauge", "rect"))
+    verify(!Presets.shown("colors", lang, "omarchy", "rect"))
+  }
+
+  function test_the_host_drawn_classic_plate_needs_a_plate_to_back_or_mark() {
+    verify(Presets.shown("backing", lang, "classic", "rect"))
+    verify(!Presets.shown("backing", lang, "classic", "none"))
+    verify(Presets.shown("registrationMarks", lang, "classic", "rect"))
+    verify(!Presets.shown("registrationMarks", lang, "classic", "disc"))
+  }
+
+  function test_no_element_switch_does_nothing() {
+    var keys = Presets.ELEMENTS.map(function (e) { return e.key })
+    verify(keys.indexOf("crosshair") < 0, "nothing draws a crosshair")
+    for (var k of keys) verify(Presets.CONTROLS.indexOf(k) >= 0, k)
+  }
+
+  function test_every_shipped_look_lists_known_controls_with_backing_and_weight() {
+    for (var language of [classicLang, basicLang]) {
+      for (var look in language.looks) {
+        var own = language.controls[look]
+        verify(own !== undefined, language.name + " " + look + " lists its controls")
+        verify(own.indexOf("backing") >= 0 && own.indexOf("weight") >= 0, language.name + " " + look)
+        for (var c of own) verify(Presets.CONTROLS.indexOf(c) >= 0, language.name + " " + look + ": " + c)
+      }
     }
+  }
+
+  function test_density_shows_only_where_a_scale_is_drawn() {
+    var scaled = Object.keys(classicLang.controls).filter(function (k) { return classicLang.controls[k].indexOf("density") >= 0 })
+    compare(scaled.sort(), ["classic", "gauge", "wheel"])
   }
 
   function test_swatches_are_theme_references_never_hex() {

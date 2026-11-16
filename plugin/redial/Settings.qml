@@ -39,7 +39,7 @@ Item {
     "language": "classic",
     "_color_scheme": "light | dark | theme - fills the language's four colour roles (ground, line, accent, alert). light is ink on vellum and the default; theme matches the desktop's own theme (Omarchy), dark where there is none. colors.accent, when set, still overrides the accent",
     "color_scheme": "light",
-    "_reference_lines": "true | false - the drawing's background reference lines (construction lines, crosshair, registration marks). Rings and the scale stay: they carry information",
+    "_reference_lines": "true | false - the drawing's background reference lines (construction lines, registration marks). Rings and the scale stay: they carry information",
     "reference_lines": true,
     "_layout": "dial | deck | carousel | toast | omarchy - the overlay's overall shape. dial is the circular instrument (see face, below, for which one); deck and carousel are both horizontal card rows (deck: dense, original; carousel: fewer visual details, center-emphasis sizing); toast is a single small pill plus a dot strip, the smallest footprint of the four.",
     "layout": "dial",
@@ -50,8 +50,8 @@ Item {
     "size": "large",
     "_plate": "none | disc | rect - backing behind the dial face",
     "plate": "disc",
-    "_plateOpacity": "0..1 - backing strength; hairlines need contrast over busy content",
-    "plateOpacity": 0.96,
+    "_plateOpacity": "0..1 - backing strength: how solid every look's plate is (1 = solid); hairlines need contrast over busy content",
+    "plateOpacity": 1,
     "watchdogMs": 15000,
     "colors": {
       "accent": "theme",
@@ -68,7 +68,6 @@ Item {
       "needleWidth": 2,
       "ringWidth": 1,
       "constructionLines": true,
-      "crosshair": false,
       "registrationMarks": true,
       "labels": true,
       "glyphs": true,
@@ -246,13 +245,16 @@ Item {
   readonly property real barWidthActive: num("dial.barWidthActive", 0.5, 16)
   readonly property real needleWidth: num("dial.needleWidth", 0.5, 12)
   readonly property real ringWidth: num("dial.ringWidth", 0.5, 8)
-  // reference_lines is the one switch for all three; the dial.* keys still tune each when it is on
+  // reference_lines is the one switch for both; the dial.* keys still tune each when it is on
   readonly property bool constructionLines: referenceLines && get("dial.constructionLines") === true
-  readonly property bool crosshair: referenceLines && get("dial.crosshair") === true
   readonly property bool registrationMarks: referenceLines && get("dial.registrationMarks") === true
   readonly property bool showLabels: get("dial.labels") === true
   readonly property bool showGlyphs: get("dial.glyphs") === true
   readonly property bool showCallout: get("dial.callout") === true
+  // The look-wide style every language look honours (languages/README.md): line weight as a
+  // multiplier of the Normal preset (needleWidth 2), scale density as a multiplier of 180 marks.
+  readonly property real lineScale: Math.max(0.25, Math.min(3, needleWidth / 2))
+  readonly property real density: barCount / 180
 
   // ------------------------------------------------------------------- load
   function load(raw) {

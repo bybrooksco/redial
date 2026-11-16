@@ -35,7 +35,7 @@ LookBase {
   Rectangle {
     x: look.pillX; y: look.cy - height / 2
     width: look.pillW; height: look.u(56); radius: height / 2
-    color: look.tone.card
+    color: look.backed(look.tone.card)
   }
   Rectangle {
     id: disc
@@ -92,6 +92,7 @@ LookBase {
 
   onWidthChanged: mini.requestPaint()
   onToneChanged: mini.requestPaint()
+  onTrackWChanged: mini.requestPaint()
   onLevelChanged: mini.requestPaint()
   onLevelShownChanged: mini.requestPaint()
 }

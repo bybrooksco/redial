@@ -47,7 +47,7 @@ Item {
     anchors.fill: parent
     visible: card.framed
     radius: card.host.u(12)
-    color: card.host.tone.card
+    color: card.host.backed(card.host.tone.card)
   }
   Sign {
     host: card.host

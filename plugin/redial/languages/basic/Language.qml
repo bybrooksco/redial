@@ -17,6 +17,13 @@ QtObject {
   // Picker labels that differ from the shared ones (LookResolve.LABELS): classic's tag is still a Repair tag.
   readonly property var labels: ({ tag: "List" })
   readonly property int lookCount: Object.keys(looks).length
+  // The Look page's Style controls each look draws (../README.md): the quiet track has no scale,
+  // names or construction, so every look takes backing and line weight (the track's thickness).
+  readonly property var controls: (function () {
+    var c = ({})
+    for (var k in looks) c[k] = ["backing", "weight"]
+    return c
+  })()
 
   readonly property var easeOut: [0.23, 1, 0.32, 1, 1, 1]
   readonly property var easeInOut: [0.77, 0, 0.175, 1, 1, 1]

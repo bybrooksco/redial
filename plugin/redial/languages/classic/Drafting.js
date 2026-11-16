@@ -4,6 +4,9 @@
 // scales read the same everywhere. Each draw function takes a Canvas 2D context first and a colour
 // as "#rrggbb" (from cfg.roles). Angles are degrees, 0 = 3 o'clock, growing clockwise on screen.
 
+// The look's line weight, set on the context by each paint (ctx.__w = face.lineScale); 1 when unset.
+function weightOf(ctx) { return ctx.__w || 1 }
+
 function polar(cx, cy, r, deg) {
   var a = deg * Math.PI / 180
   return [cx + Math.cos(a) * r, cy + Math.sin(a) * r]
@@ -20,14 +23,14 @@ function litCount(value, n) {
 }
 
 function line(ctx, x1, y1, x2, y2, color, alpha, width, dash) {
-  ctx.beginPath(); ctx.strokeStyle = ink(color, alpha); ctx.lineWidth = width || 1
+  ctx.beginPath(); ctx.strokeStyle = ink(color, alpha); ctx.lineWidth = (width || 1) * weightOf(ctx)
   ctx.setLineDash ? ctx.setLineDash(dash || []) : 0
   ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke()
   if (dash && ctx.setLineDash) ctx.setLineDash([])
 }
 
 function ring(ctx, cx, cy, r, color, alpha, width) {
-  ctx.beginPath(); ctx.strokeStyle = ink(color, alpha); ctx.lineWidth = width || 1
+  ctx.beginPath(); ctx.strokeStyle = ink(color, alpha); ctx.lineWidth = (width || 1) * weightOf(ctx)
   ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke()
 }
 
@@ -38,7 +41,7 @@ function node(ctx, x, y, r, color, alpha) {
 // Section hatching (45°) inside whatever path `clip` traces on ctx: a drawing's mark for a cut face.
 function hatch(ctx, clip, w, h, color, alpha, gap) {
   ctx.save(); ctx.beginPath(); clip(ctx); ctx.clip()
-  ctx.strokeStyle = ink(color, alpha); ctx.lineWidth = 1.2
+  ctx.strokeStyle = ink(color, alpha); ctx.lineWidth = (1.2) * weightOf(ctx)
   for (var d = -h; d <= w + h; d += gap) {
     ctx.beginPath(); ctx.moveTo(d, h); ctx.lineTo(d + h, 0); ctx.stroke()
   }
@@ -51,7 +54,7 @@ function cloudRectArcs(w, h, bump) {
 }
 function cloudRect(ctx, x, y, w, h, bump, color) {
   var nx = Math.max(2, Math.round(w / bump)), ny = Math.max(1, Math.round(h / bump))
-  ctx.strokeStyle = ink(color, 0.85); ctx.lineWidth = 1.2
+  ctx.strokeStyle = ink(color, 0.85); ctx.lineWidth = (1.2) * weightOf(ctx)
   function side(x0, y0, x1, y1, n) {
     for (var i = 0; i < n; i++) {   // each scallop its own stroke: Qt's canvas joins arcs with stray lines
       var mx = x0 + (x1 - x0) * (i + 0.5) / n, my = y0 + (y1 - y0) * (i + 0.5) / n
@@ -63,7 +66,7 @@ function cloudRect(ctx, x, y, w, h, bump, color) {
   side(x + w, y + h, x, y + h, nx); side(x, y + h, x, y, ny)
 }
 function cloudCircle(ctx, cx, cy, r, n, color) {
-  ctx.strokeStyle = ink(color, 0.85); ctx.lineWidth = 1.2
+  ctx.strokeStyle = ink(color, 0.85); ctx.lineWidth = (1.2) * weightOf(ctx)
   var half = Math.PI / n, br = r * Math.sin(half) * 1.05
   for (var i = 0; i < n; i++) {
     var a = -Math.PI / 2 + (i + 0.5) * 2 * half
@@ -75,7 +78,7 @@ function cloudCircle(ctx, cx, cy, r, n, color) {
 function dimArc(ctx, cx, cy, r, a0, a1, color, k) {
   var s = a0 * Math.PI / 180, e = a1 * Math.PI / 180
   if (Math.abs(e - s) < 0.08) return
-  ctx.strokeStyle = ink(color, 1); ctx.fillStyle = ink(color, 1); ctx.lineWidth = 1
+  ctx.strokeStyle = ink(color, 1); ctx.fillStyle = ink(color, 1); ctx.lineWidth = (1) * weightOf(ctx)
   ctx.beginPath(); ctx.arc(cx, cy, r, Math.min(s, e), Math.max(s, e)); ctx.stroke()
   function head(at, dir) {
     var px = cx + Math.cos(at) * r, py = cy + Math.sin(at) * r
@@ -107,7 +110,7 @@ function litBars(ctx, cx, cy, a0, a1, n, rBase, rAct, lit, color, width) {
 // Registration marks in the four corners (part of the reference lines).
 function regMarks(ctx, w, h, m, s, color) {
   var corners = [[m, m, 1, 1], [w - m, m, -1, 1], [w - m, h - m, -1, -1], [m, h - m, 1, -1]]
-  ctx.strokeStyle = ink(color, 0.45); ctx.lineWidth = 1
+  ctx.strokeStyle = ink(color, 0.45); ctx.lineWidth = (1) * weightOf(ctx)
   for (var i = 0; i < 4; i++) {
     var c = corners[i]
     ctx.beginPath(); ctx.moveTo(c[0], c[1] + c[3] * s); ctx.lineTo(c[0], c[1]); ctx.lineTo(c[0] + c[2] * s, c[1]); ctx.stroke()
@@ -118,7 +121,7 @@ function regMarks(ctx, w, h, m, s, color) {
 // Returns the cells' text origins so the look can place its labels: [x0, x1, baselineY].
 function titleBlock(ctx, w, h, u, color) {
   var x = w - u * 222, y = h - u * 46, bw = u * 206, bh = u * 30
-  ctx.strokeStyle = ink(color, 0.4); ctx.lineWidth = 1
+  ctx.strokeStyle = ink(color, 0.4); ctx.lineWidth = (1) * weightOf(ctx)
   ctx.strokeRect(x, y, bw, bh)
   ctx.beginPath(); ctx.moveTo(w - u * 140, y); ctx.lineTo(w - u * 140, y + bh); ctx.stroke()
   return [w - u * 212, w - u * 130, h - u * 26]
@@ -128,7 +131,7 @@ function titleBlock(ctx, w, h, u, color) {
 // accent, or can't act (asleep: a crescent; otherwise a struck circle) in the alert colour.
 function sign(ctx, kind, note, size, accent, alert) {
   var c = size / 2, k = size / 40, g = note ? note.gesture : ""
-  ctx.save(); ctx.lineWidth = 2.5 * k; ctx.lineCap = "round"
+  ctx.save(); ctx.lineWidth = (2.5 * k) * weightOf(ctx); ctx.lineCap = "round"
   if (kind === "hint") {
     ctx.strokeStyle = ink(accent, 1); ctx.fillStyle = ink(accent, 1)
     if (g === "turn") {

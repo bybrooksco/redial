@@ -19,7 +19,7 @@ RingFace {
     onPaint: {
       var ctx = getContext("2d")
       ctx.reset()
-      ctx.strokeStyle = String(look.tone.track); ctx.lineWidth = look.u(1.2)
+      ctx.strokeStyle = String(look.tone.track); ctx.lineWidth = look.lw(look.u(1.2))
       for (var i = 0; i < look.n && look.n > 1; i++) {
         var a = (-90 + (i + 0.5) * look.seg) * Math.PI / 180
         ctx.beginPath()
@@ -49,5 +49,6 @@ RingFace {
 
   onNChanged: { spokes.requestPaint(); wedgeArt.requestPaint() }
   onToneChanged: { spokes.requestPaint(); wedgeArt.requestPaint() }
+  onLineScaleChanged: { spokes.requestPaint(); wedgeArt.requestPaint() }
   onWidthChanged: { spokes.requestPaint(); wedgeArt.requestPaint() }
 }

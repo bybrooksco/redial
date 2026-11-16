@@ -487,11 +487,11 @@ Item {
       Rectangle {
         visible: cfg.plate === "rect" && !plate.ownPlate
         anchors.fill: parent
-        // The classic plate takes the colour scheme's ground; a light plate is opaque, because
-        // desktop text showing through vellum reads as dirt. Other faces keep the theme colours.
+        // The classic plate takes the colour scheme's ground at the backing strength (default solid:
+        // desktop text showing through a light plate reads as dirt). Other faces keep the theme colours.
         color: plate.classic
                ? Qt.rgba(root.roleGround.r, root.roleGround.g, root.roleGround.b,
-                         cfg.colorScheme === "light" ? 1 : cfg.plateOpacity)
+                         cfg.plateOpacity)
                : Qt.rgba(cfg.backgroundColor.r, cfg.backgroundColor.g,
                          cfg.backgroundColor.b, cfg.plateOpacity)
         radius: Style.space(4)

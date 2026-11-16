@@ -42,8 +42,8 @@ LookBase {
     renderStrategy: Canvas.Cooperative
     onPaint: {
       var ctx = getContext("2d"), L = String(face.line), A = String(face.accent)
-      ctx.reset()
-      ctx.fillStyle = String(face.ground); ctx.fillRect(0, 0, width, height)
+      ctx.reset(); ctx.__w = face.lineScale
+      ctx.fillStyle = face.plateFill; ctx.fillRect(0, 0, width, height)
       var cx = face.cx, cy = face.cy, r0 = face.u(58), r1 = face.u(160)
       if (face.cfg.constructionLines) {
         Drafting.regMarks(ctx, width, height, face.u(10), face.u(14), L)
@@ -60,7 +60,7 @@ LookBase {
         var end = -90 + Math.max(1, face.level) * 3.6
         Drafting.hatch(ctx, function (c) { Drafting.sectorPath(c, cx, cy, r0, r1, -90, end) }, width, height, A, 0.5, face.u(6))
         Drafting.sectorPath(ctx, cx, cy, r0, r1, -90, end)
-        ctx.strokeStyle = Drafting.ink(A, 1); ctx.lineWidth = 1.2; ctx.stroke()
+        ctx.strokeStyle = Drafting.ink(A, 1); ctx.lineWidth = (1.2) * face.lineScale; ctx.stroke()
         Drafting.dimArc(ctx, cx, cy, face.u(180), -88, end - 2, A, face.u(7))
       }
       if (face.noteKind === "cant")
@@ -82,10 +82,10 @@ LookBase {
       onPaint: {
         var ctx = getContext("2d"), A = String(face.accent), cx = face.cx, cy = face.cy
         var a0 = -90 - face.step / 2, a1 = -90 + face.step / 2, r0 = face.u(58), r1 = face.u(168)
-        ctx.reset()
+        ctx.reset(); ctx.__w = face.lineScale
         Drafting.hatch(ctx, function (c) { Drafting.sectorPath(c, cx, cy, r0, r1, a0, a1) }, width, height, A, 0.5, face.u(6))
         Drafting.sectorPath(ctx, cx, cy, r0, r1, a0, a1)
-        ctx.strokeStyle = Drafting.ink(A, 1); ctx.lineWidth = 1.4; ctx.stroke()
+        ctx.strokeStyle = Drafting.ink(A, 1); ctx.lineWidth = (1.4) * face.lineScale; ctx.stroke()
       }
     }
   }
@@ -142,7 +142,7 @@ LookBase {
       renderStrategy: Canvas.Cooperative
       onPaint: {
         var ctx = getContext("2d")
-        ctx.reset()
+        ctx.reset(); ctx.__w = face.lineScale
         Drafting.sign(ctx, face.noteKind, face.note, width, String(face.accent), String(face.alert))
       }
     }

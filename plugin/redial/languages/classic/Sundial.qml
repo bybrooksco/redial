@@ -86,8 +86,8 @@ LookBase {
     renderStrategy: Canvas.Cooperative
     onPaint: {
       var ctx = getContext("2d"), L = String(face.line), A = String(face.accent), k = face.unit
-      ctx.reset()
-      ctx.fillStyle = String(face.ground); ctx.fillRect(0, 0, width, height)
+      ctx.reset(); ctx.__w = face.lineScale
+      ctx.fillStyle = face.plateFill; ctx.fillRect(0, 0, width, height)
       var cx = face.cx, cy = face.cy, i, a, p, q
       if (face.cfg.constructionLines) Drafting.regMarks(ctx, width, height, face.u(10), face.u(14), L)
       if (!face.half) {
@@ -108,7 +108,7 @@ LookBase {
           Drafting.line(ctx, 0, cy, width, cy, L, 0.13, 1); Drafting.node(ctx, width - face.u(10), cy, face.u(3), L, 0.35)
           Drafting.line(ctx, cx, face.u(10), cx, cy, L, 0.13, 1); Drafting.node(ctx, cx, face.u(10), face.u(2.5), L, 0.3)
         }
-        ctx.beginPath(); ctx.strokeStyle = Drafting.ink(L, 0.3); ctx.lineWidth = 1
+        ctx.beginPath(); ctx.strokeStyle = Drafting.ink(L, 0.3); ctx.lineWidth = (1) * face.lineScale
         ctx.arc(cx, cy, face.u(160), Math.PI, Math.PI * 2); ctx.stroke()
         for (i = 0; i < 11; i++) {
           a = 180 + i * 18
@@ -126,7 +126,7 @@ LookBase {
     function gnomon(ctx, cx, cy, up, halfW, down, L) {
       function tri(c) { c.moveTo(cx, cy - face.u(up)); c.lineTo(cx - face.u(halfW), cy + face.u(down)); c.lineTo(cx + face.u(halfW), cy + face.u(down)); c.closePath() }
       Drafting.hatch(ctx, tri, width, height, L, 0.22, face.u(7))
-      ctx.beginPath(); tri(ctx); ctx.strokeStyle = Drafting.ink(L, 0.6); ctx.lineWidth = 1; ctx.stroke()
+      ctx.beginPath(); tri(ctx); ctx.strokeStyle = Drafting.ink(L, 0.6); ctx.lineWidth = (1) * face.lineScale; ctx.stroke()
     }
   }
 
@@ -173,7 +173,7 @@ LookBase {
     renderStrategy: Canvas.Cooperative
     onPaint: {
       var ctx = getContext("2d"), L = String(face.line), k = face.unit
-      ctx.reset()
+      ctx.reset(); ctx.__w = face.lineScale
       var e
       if (face.half) { e = Drafting.polar(face.cx, face.cy, face.u(70), sun.deg + 180); e[1] = Math.min(e[1], face.cy) }
       else e = Drafting.polar(face.cx, face.cy, face.u(140), sun.deg + 180)
@@ -222,7 +222,7 @@ LookBase {
       renderStrategy: Canvas.Cooperative
       onPaint: {
         var ctx = getContext("2d"), A = String(face.accent), c = width / 2, r = sun.r
-        ctx.reset()
+        ctx.reset(); ctx.__w = face.lineScale
         Drafting.hatch(ctx, function (g) { g.arc(c, c, r, 0, Math.PI * 2) }, width, height, A, 0.5, face.u(5))
         Drafting.ring(ctx, c, c, r, A, 1, 1.4)
         ctx.lineCap = "round"
@@ -248,7 +248,7 @@ LookBase {
       renderStrategy: Canvas.Cooperative
       onPaint: {
         var ctx = getContext("2d"), c = width / 2
-        ctx.reset()
+        ctx.reset(); ctx.__w = face.lineScale
         Drafting.hatch(ctx, function (g) { g.arc(c, c, c - 1, 0, Math.PI * 2) }, width, height, String(face.line), 0.22, face.u(7))
       }
     }
@@ -262,10 +262,10 @@ LookBase {
     renderStrategy: Canvas.Cooperative
     onPaint: {
       var ctx = getContext("2d"), A = String(face.accent)
-      ctx.reset()
+      ctx.reset(); ctx.__w = face.lineScale
       var p = face.leadFrom, kn = face.leadKnee, ey = face.leaderEndY, ex = face.leaderEndX
       var bent = Math.abs(ey - kn[1]) > 0.5, kx = bent ? Math.max(p[0], kn[0]) + face.u(18) : kn[0], ky = bent ? ey : kn[1]
-      ctx.strokeStyle = Drafting.ink(A, 0.65); ctx.lineWidth = 1
+      ctx.strokeStyle = Drafting.ink(A, 0.65); ctx.lineWidth = (1) * face.lineScale
       ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(kx, ky); ctx.lineTo(ex, ey); ctx.stroke()
       Drafting.node(ctx, p[0], p[1], face.u(3), A, 1)
       Drafting.node(ctx, ex, ey, face.u(2.2), A, 0.85)

@@ -54,7 +54,7 @@ LookBase {
   readonly property alias slots: slotRep
   readonly property Item card: cardItem
 
-  Rectangle { z: -1; anchors.fill: parent; radius: look.plateRadius; color: look.tone.ground }
+  Rectangle { z: -1; anchors.fill: parent; radius: look.plateRadius; color: look.backed(look.tone.ground) }
 
   Canvas {
     id: track
@@ -117,6 +117,7 @@ LookBase {
 
   onWidthChanged: { track.requestPaint(); marker.requestPaint() }
   onToneChanged: { track.requestPaint(); marker.requestPaint() }
+  onTrackWChanged: { track.requestPaint(); marker.requestPaint() }
   onLevelChanged: track.requestPaint()
   onLevelShownChanged: track.requestPaint()
   onTrackInkChanged: track.requestPaint()

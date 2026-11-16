@@ -21,6 +21,16 @@ Item {
   property real landY: -1
 
   function u(px) { return px * unit }
+
+  // The look-wide style from Settings (languages/README.md): every look honours backing and line
+  // weight; a look with a graduated scale honours density.
+  // A host without them draws solid, Normal and Medium.
+  readonly property real backing: cfg.plateOpacity !== undefined ? cfg.plateOpacity : 1
+  readonly property real lineScale: cfg.lineScale !== undefined ? cfg.lineScale : 1
+  readonly property real density: cfg.density !== undefined ? cfg.density : 1
+  function lw(px) { return px * lineScale }
+  // The plate's fill: the ground at the backing strength.
+  readonly property color plateFill: Qt.rgba(ground.r, ground.g, ground.b, backing)
   readonly property color line: cfg.roles.line
   readonly property color accent: cfg.roles.accent
   readonly property color alert: cfg.roles.alert

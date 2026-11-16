@@ -612,7 +612,8 @@ Item {
     return v === undefined ? fallback : v
   }
   readonly property string weightChoice: StylePresets.weightOf(configDoc.dial) || "widths set one by one"
-  function drawn(what) { return StylePresets.drawn(what, cfg.layout, cfg.face, cfg.plate) }
+  function drawn(what) { return StylePresets.shown(what, pickedLanguage.item, appearanceChoice, cfg.plate) }
+  readonly property bool anyElement: StylePresets.ELEMENTS.some(function (e) { return root.drawn(e.key) })
   function setDial(values) {
     writeConfig(function (o) {
       var d = ({}), src = o.dial || {}
@@ -1585,7 +1586,7 @@ Item {
               visible: root.page === "look"
               width: parent.width
               wrapMode: Text.WordWrap
-              text: "Style. Swatches follow your theme: switch themes and the dial re-colours. Greyed out: not drawn by this appearance. Finer control is on the Every setting page."
+              text: "Style. Swatches follow your theme: switch themes and the dial re-colours. Only what this look draws is shown. Finer control is on the Every setting page."
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               color: root.cfg.soft(0.6)
@@ -1596,9 +1597,7 @@ Item {
                        { title: "Ground colour", key: "colors.background", role: "background" } ]
               delegate: SwatchRow {
                 required property var modelData
-                visible: root.page === "look"
-                enabled: root.drawn("colors")
-                opacity: enabled ? 1 : 0.4
+                visible: root.page === "look" && root.drawn("colors")
                 cfg: root.cfg
                 title: modelData.title
                 key: modelData.key
@@ -1610,19 +1609,15 @@ Item {
               }
             }
             ChoiceRow {
-              visible: root.page === "look"
-              enabled: root.drawn("backing")
-              opacity: enabled ? 1 : 0.4
+              visible: root.page === "look" && root.drawn("backing")
               cfg: root.cfg
               title: "Backing strength"
               options: StylePresets.BACKING
-              current: root.cfgValue("plateOpacity", 0.96)
+              current: root.cfgValue("plateOpacity", 1)
               onPicked: key => root.setConfigKey("plateOpacity", key)
             }
             ChoiceRow {
-              visible: root.page === "look"
-              enabled: root.drawn("weight")
-              opacity: enabled ? 1 : 0.4
+              visible: root.page === "look" && root.drawn("weight")
               cfg: root.cfg
               title: "Line weight"
               options: StylePresets.WEIGHT
@@ -1633,9 +1628,7 @@ Item {
               }
             }
             ChoiceRow {
-              visible: root.page === "look"
-              enabled: root.drawn("density")
-              opacity: enabled ? 1 : 0.4
+              visible: root.page === "look" && root.drawn("density")
               cfg: root.cfg
               title: "Scale density"
               options: StylePresets.DENSITY
@@ -1643,7 +1636,7 @@ Item {
               onPicked: key => root.setDial({ barCount: key })
             }
             Column {
-              visible: root.page === "look"
+              visible: root.page === "look" && root.anyElement
               width: parent.width
               spacing: Style.space(6)
               Text {
@@ -1664,8 +1657,7 @@ Item {
                     id: elem
                     required property var modelData
                     readonly property bool on: root.dialValue(modelData.key, modelData.fallback) === true
-                    enabled: root.drawn(modelData.key)
-                    opacity: enabled ? 1 : 0.4
+                    visible: root.drawn(modelData.key)
                     label: modelData.label + (on ? ": on" : ": off")
                     checkable: true
                     checked: on
@@ -1690,9 +1682,10 @@ Item {
                 }
               }
               Text {
+                visible: root.drawn("constructionLines") || root.drawn("registrationMarks")
                 width: parent.width
                 wrapMode: Text.WordWrap
-                text: "Construction lines, crosshair and registration marks need Reference lines on."
+                text: "Construction lines and registration marks need Reference lines on."
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 color: root.cfg.soft(0.5)

@@ -6,7 +6,7 @@
       "items": [
         { "key": "language", "type": "language", "default": "classic", "label": "Design language", "help": "How the overlay is drawn and moves. re:dial classic is the standard; community languages appear here once installed in plugin/redial/languages/." },
         { "key": "color_scheme", "type": "choice", "default": "light", "label": "Colour", "help": "Light is ink on vellum. Match desktop takes the Omarchy theme's colours.", "options": [ { "key": "light", "label": "Light" }, { "key": "dark", "label": "Dark" }, { "key": "theme", "label": "Match desktop" } ] },
-        { "key": "reference_lines", "type": "bool", "default": true, "label": "Reference lines", "help": "Construction lines, crosshair and registration marks behind the drawing." },
+        { "key": "reference_lines", "type": "bool", "default": true, "label": "Reference lines", "help": "Construction lines and registration marks behind the drawing." },
         { "key": "layout", "type": "choice", "default": "dial", "label": "Layout", "help": "The overlay's shape.", "options": [ { "key": "dial", "label": "Dial" }, { "key": "deck", "label": "Deck" }, { "key": "carousel", "label": "Carousel" }, { "key": "toast", "label": "Toast" }, { "key": "omarchy", "label": "Omarchy" } ] },
         { "key": "overlay_style", "type": "choice", "default": "menu", "label": "Overlay style (without Omarchy)", "help": "How redial-overlay draws the tool ring on KDE, COSMIC and other desktops without Omarchy. Omarchy uses Layout instead.", "options": [ { "key": "menu", "label": "Menu" }, { "key": "card", "label": "Card" }, { "key": "strip", "label": "Strip" } ] },
         { "key": "face", "type": "choice", "default": "classic", "label": "Dial face", "help": "Which face the Dial layout draws. Only Classic draws turning, hints and can't-act itself so far; the others use the desktop's OSD.", "options": [ { "key": "classic", "label": "Classic" }, { "key": "capsule", "label": "Capsule" }, { "key": "pie", "label": "Pie" }, { "key": "gauge", "label": "Gauge" }, { "key": "sundial", "label": "Sundial" }, { "key": "tag", "label": "Repair tag" }, { "key": "wheel", "label": "Finger wheel" } ] },
@@ -27,7 +27,6 @@
         { "key": "dial.glyphs", "type": "bool", "default": true, "label": "Tool icons" },
         { "key": "dial.callout", "type": "bool", "default": true, "label": "Callout note", "help": "The note a leader line points to: the tool, its click and its value." },
         { "key": "dial.constructionLines", "type": "bool", "default": true, "label": "Construction lines", "help": "Needs Reference lines on." },
-        { "key": "dial.crosshair", "type": "bool", "default": false, "label": "Crosshair", "help": "Needs Reference lines on." },
         { "key": "dial.registrationMarks", "type": "bool", "default": true, "label": "Registration marks", "help": "Needs Reference lines on." },
         { "key": "dial.barCount", "type": "number", "default": 180, "min": 24, "max": 720, "step": 12, "label": "Scale ticks" },
         { "key": "dial.majorEvery", "type": "number", "default": 15, "min": 2, "max": 90, "step": 1, "label": "Major tick every" },

@@ -54,7 +54,7 @@ LookBase {
   readonly property alias icons: iconRep
   readonly property Item card: cardItem
 
-  Rectangle { z: -1; anchors.fill: parent; radius: look.plateRadius; color: look.tone.ground }
+  Rectangle { z: -1; anchors.fill: parent; radius: look.plateRadius; color: look.backed(look.tone.ground) }
 
   Canvas {
     id: track
@@ -140,6 +140,7 @@ LookBase {
   onWidthChanged: repaint()
   onHeightChanged: repaint()
   onToneChanged: repaint()
+  onTrackWChanged: repaint()
   onArcFromChanged: repaint()
   onArcSpanChanged: repaint()
   onLevelChanged: fill.requestPaint()

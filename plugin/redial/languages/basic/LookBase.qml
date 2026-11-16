@@ -22,6 +22,16 @@ Item {
   property real landY: -1
 
   function u(px) { return px * unit }
+
+  // The look-wide style from Settings (languages/README.md): every look honours backing and line
+  // weight; a look with a graduated scale honours density.
+  // A host without them draws solid, Normal and Medium.
+  readonly property real backing: cfg.plateOpacity !== undefined ? cfg.plateOpacity : 1
+  readonly property real lineScale: cfg.lineScale !== undefined ? cfg.lineScale : 1
+  readonly property real density: cfg.density !== undefined ? cfg.density : 1
+  function lw(px) { return px * lineScale }
+  // A plate or card fill at the backing strength.
+  function backed(c) { var v = Tones.rgb(c); return Qt.rgba(v[0] / 255, v[1] / 255, v[2] / 255, backing) }
   readonly property var tone: Tones.tones(cfg.roles)
   // The language's face, or the host's when the bundled one did not load.
   readonly property string face: language && language.faceStandard !== "" ? language.faceStandard : fontFamily
@@ -43,7 +53,7 @@ Item {
   function litOf(n) { return levelShown ? Basic.litCount(note.value, n) : 0 }
 
   // The quiet track (docs/superpowers/specs/2026-11-06-redial-basic-language-design.md).
-  readonly property real trackW: u(8)
+  readonly property real trackW: u(8) * (0.5 + 0.5 * lineScale)
   readonly property real iconGap: u(20)      // an icon's centre sits this far inside the track's centre line
   readonly property real iconPx: u(13)
   readonly property real iconOnPx: u(16)

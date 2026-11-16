@@ -57,15 +57,15 @@ LookBase {
       Rotation { origin.x: sheet.width / 2; origin.y: sheet.height * 1.2; angle: sheet.d * sheet.turn },
       Translate { x: sheet.d * sheet.spread; y: sheet.dy }
     ]
-    Rectangle { anchors.fill: parent; color: face.ground }
+    Rectangle { anchors.fill: parent; color: face.plateFill }
     Canvas {
       id: art
       anchors.fill: parent
       renderStrategy: Canvas.Cooperative
       onPaint: {
         var ctx = getContext("2d"), L = String(face.line), k = face.unit
-        ctx.reset()
-        ctx.strokeStyle = Drafting.ink(L, sheet.ink); ctx.lineWidth = 1
+        ctx.reset(); ctx.__w = face.lineScale
+        ctx.strokeStyle = Drafting.ink(L, sheet.ink); ctx.lineWidth = (1) * face.lineScale
         ctx.strokeRect(7 * k, 7 * k, 158 * k, 210 * k)
         if (sheet.ink > 0.3) {
           ctx.strokeRect(7 * k, 185 * k, 158 * k, 32 * k)
@@ -108,7 +108,7 @@ LookBase {
               renderStrategy: Canvas.Cooperative
               onPaint: {
                 var ctx = getContext("2d"), L = String(face.line), c = width / 2
-                ctx.reset()
+                ctx.reset(); ctx.__w = face.lineScale
                 Drafting.ring(ctx, c, c, face.u(26), L, 0.4, 1)
                 Drafting.line(ctx, 0, c, width, c, L, 0.25, 1); Drafting.line(ctx, c, 0, c, height, L, 0.25, 1)
               }
@@ -185,7 +185,7 @@ LookBase {
       onPaint: {
         var ctx = getContext("2d"), L = String(face.line), A = String(face.accent), m = face.u(7)
         var w = face.u(158), h = face.u(178)
-        ctx.reset()
+        ctx.reset(); ctx.__w = face.lineScale
         if (face.noteKind === "cant") Drafting.hatch(ctx, function (c) { c.rect(m, m, w, h) }, width, height, L, 0.22, face.u(7))
         if (face.noteKind === "hint") Drafting.cloudRect(ctx, m + face.u(6), m + face.u(6), w - face.u(12), h - face.u(12), face.u(18), A)
         if (face.levelShown) {
@@ -210,7 +210,7 @@ LookBase {
         renderStrategy: Canvas.Cooperative
         onPaint: {
           var ctx = getContext("2d")
-          ctx.reset()
+          ctx.reset(); ctx.__w = face.lineScale
           if (face.noteKind === "cant") { ctx.fillStyle = String(face.ground); ctx.beginPath(); ctx.arc(width / 2, height / 2, width / 2, 0, Math.PI * 2); ctx.fill() }
           Drafting.sign(ctx, face.noteKind, face.note, width, String(face.accent), String(face.alert))
         }
