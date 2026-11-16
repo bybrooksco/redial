@@ -118,7 +118,7 @@ if cmp -s "$R/udev/71-redial-wake.rules" "$WAKE" 2>/dev/null; then
     ok "wake-from-dial rule already installed"
 elif confirm "Let the dial wake this computer from sleep (sudo; any paired Bluetooth keyboard or mouse can then wake it too)?"; then
     sudo install -m 644 "$R/udev/71-redial-wake.rules" "$WAKE" \
-        && sudo udevadm control --reload-rules && sudo udevadm trigger -s usb && ok "wake-from-dial rule installed"
+        && sudo udevadm control --reload-rules && sudo udevadm trigger --action=add -s usb --attr-match=bDeviceClass=e0 && ok "wake-from-dial rule installed"
 fi
 NEED_RELOGIN=0
 if id -nG "$USER" | tr ' ' '\n' | grep -qx input; then
