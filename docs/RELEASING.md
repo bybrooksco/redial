@@ -6,16 +6,16 @@ last one, which is deliberately manual.
 1. **Check everything.** Exactly what CI runs (and check the exit codes, not the last line of output):
 
    ```
-   ruff check bin/redial-hypr bin/redial-rise-widget scripts/add-menu-entry.py tests
-   ruff format --check bin/redial-hypr bin/redial-rise-widget scripts/add-menu-entry.py tests
+   ruff check redial bin/redial-hypr bin/redial-language bin/redial-overlay bin/redial-settings bin/redial-rise-widget scripts/add-menu-entry.py tests
+   ruff format --check redial bin/redial-hypr bin/redial-language bin/redial-overlay bin/redial-settings bin/redial-rise-widget scripts/add-menu-entry.py tests
    shellcheck install.sh uninstall.sh scripts/make-installer.sh scripts/installer-template.sh \
               bin/redial-setup bin/redial-restart bin/redial-bar scripts/pair-dial.sh
-   coverage run --include=bin/redial-hypr tests/test_dial.py && coverage report --fail-under=75
+   coverage run --source=redial tests/test_dial.py && coverage report --fail-under=75
    QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml
    omarchy-plugin-validate .
    ```
 
-2. **Set the version** in `bin/redial-hypr` (`__version__`), `manifest.json` and
+2. **Set the version** in `redial/__init__.py` (`__version__`), `manifest.json` and
    `plugin/redial/manifest.json` (a test checks they agree), and add a dated section to
    `CHANGELOG.md`.
 3. **Commit, then tag** (`git tag -a vX.Y.Z -m "..."`). The tag is what gets packaged.

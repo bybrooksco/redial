@@ -1,0 +1,12 @@
+{
+  "name": "re:dial classic",
+  "author": "By Brooks",
+  "licence": "MIT",
+  "version": "1.0.0",
+  "redial": "1",
+  "description": "A drafting plate: hairline rings, a graduated scale and a needle, notes on leaders.",
+  "previews": [
+    "previews/classic-ring.png",
+    "previews/classic-turn.png"
+  ]
+}

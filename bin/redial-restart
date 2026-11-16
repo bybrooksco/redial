@@ -1,13 +1,25 @@
 #!/usr/bin/env bash
-# redial-restart -- restart the re:dial daemon.
+# redial-restart -- (re)start the re:dial daemon. The one place that knows how: the settings
+# window's "Restart dial service" button, `redial-bar restart` and install.sh all run this.
 #
-# Stops a running redial-hypr (if any) and starts it again the way Omarchy does at
-# login, through Hyprland, so it gets the session's real environment. The settings window's
-# "Restart dial service" button runs this. The dial is unresponsive for a second or two.
+#   1. A systemd user service (install-generic.sh)? Restart it there.
+#   2. Otherwise stop the running redial-hypr (if any) and start a new one through Hyprland,
+#      the way Omarchy's autostart does, so it gets the session's real environment.
+#   3. No Hyprland: start it detached. The daemon writes its own log
+#      (~/.local/state/redial/daemon.log), so nothing goes to a shared /tmp file.
+#
+# The dial is unresponsive for a second or two. The daemon holds a lock, so a second copy
+# started by mistake exits at once.
 set -u
 
 RE='^python3 .*redial-hypr'
 DAEMON="$HOME/.local/bin/redial-hypr"
+
+if systemctl --user is-enabled redial.service >/dev/null 2>&1; then
+    systemctl --user restart redial.service
+    echo "redial-restart: redial.service restarted"
+    exit 0
+fi
 
 if [[ ! -x "$DAEMON" ]]; then
     echo "redial-restart: $DAEMON not found; run install.sh first" >&2
@@ -24,10 +36,7 @@ fi
 
 if command -v hyprctl >/dev/null; then
     hyprctl dispatch "hl.dsp.exec_cmd(\"uwsm-app -- $DAEMON\")" >/dev/null
-elif command -v redial-bar >/dev/null; then
-    redial-bar restart
 else
-    echo "redial-restart: neither hyprctl nor redial-bar found" >&2
-    exit 1
+    setsid nohup python3 "$DAEMON" >/dev/null 2>&1 </dev/null &
 fi
 echo "redial-restart: daemon restart requested"

@@ -1,0 +1,367 @@
+#!/usr/bin/env python3
+"""redial-language -- check, install, remove and list re:dial design languages.
+
+A design language is QML: code that runs inside your desktop shell. This tool checks a language
+folder for the risky things it knows (outside imports, the network, loading other code, links and
+paths that leave the folder, files that aren't drawing material) and installs it into your own
+folder, ${XDG_DATA_HOME:-~/.local/share}/redial/languages/<name>/, listed in index.json there.
+re:dial only loads user languages that index lists, so a folder copied in by hand is ignored.
+
+The checker catches mistakes and the obvious tricks. It is not a sandbox: a determined author can
+disguise code. Only languages in the reviewed gallery have been read by a person.
+
+  redial-language check   [--json] FOLDER
+  redial-language install [--json] [--replace] FOLDER
+  redial-language remove  [--json] NAME
+  redial-language list    [--json]
+  redial-language preview FOLDER        (authors, from a re:dial checkout: renders previews/)
+"""
+
+import argparse
+import json
+import os
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+CHECKER_VERSION = 1
+BUILTIN = ("classic", "basic")
+NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+EXTENSIONS = {".qml", ".js", ".json", ".png", ".svg", ".ttf", ".otf", ".txt", ".md"}
+CODE_EXTENSIONS = {".qml", ".js"}
+MAX_BYTES = 20 * 1024 * 1024
+IMPORTS = {"QtQuick", "QtQuick.Shapes", "QtQuick.Effects"}
+MANIFEST_KEYS = ("name", "author", "licence", "version")
+# Things a look never needs: each reaches outside the language or runs code it didn't ship.
+BANNED = [
+    (r"\bXMLHttpRequest\b", "uses the network (XMLHttpRequest)"),
+    (r"\bWebSocket\b", "uses the network (WebSocket)"),
+    (r"\bWorker(Script)?\b", "starts a worker (Worker)"),
+    (r"\bcreateQmlObject\b", "builds code at run time (Qt.createQmlObject)"),
+    (r"\bcreateComponent\b", "loads other code (Qt.createComponent)"),
+    (r"\bopenUrlExternally\b", "opens links (Qt.openUrlExternally)"),
+    (r"\bQt\s*\.\s*include\b", "loads other code (Qt.include)"),
+    (r"\bLoader\b", "loads other code (Loader)"),
+    (r"\beval\s*\(", "runs text as code (eval)"),
+    (r"\bFunction\s*\(", "runs text as code (Function)"),
+    (r"\bimport\s*\(", "loads other code (import())"),
+    (r"\bQt\s*\[", "reaches into Qt by a computed name (Qt[)"),
+    (r"\bglobalThis\b", "reaches the global object (globalThis)"),
+]
+BANNED = [(re.compile(p), why) for p, why in BANNED]
+SCHEME_RE = re.compile(r"\b(https?|file|qrc|data|ftp|wss?|image):", re.I)
+LEAVES_RE = re.compile(r"(^|/)\.\.(/|$)")
+ABSOLUTE_RE = re.compile(r"^/[\w.-]+/")
+
+
+def user_root():
+    base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    return Path(base) / "redial" / "languages"
+
+
+def split_code(text):
+    """Return (code, strings): `code` is `text` with comments blanked (newlines kept, so line
+    numbers hold) and `strings` is [(line, value)] for every string literal."""
+    # shortcut: JS regex literals aren't recognised (a quote inside /.../ can confuse it); none of
+    # the shipped languages use one with a quote. Upgrade to a real tokenizer if one ever does.
+    code, strings = [], []
+    i, n, line = 0, len(text), 1
+    while i < n:
+        c = text[i]
+        if c == "/" and text.startswith("//", i):
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            code.append(" " * (j - i))
+            i = j
+        elif c == "/" and text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            chunk = text[i:j]
+            code.append(re.sub(r"[^\n]", " ", chunk))
+            line += chunk.count("\n")
+            i = j
+        elif c in "\"'`":
+            j, start = i + 1, line
+            while j < n and text[j] != c:
+                if text[j] == "\\":
+                    j += 1
+                elif text[j] == "\n":
+                    line += 1
+                j += 1
+            strings.append((start, text[i + 1 : j]))
+            code.append(text[i : j + 1])
+            i = j + 1
+        else:
+            if c == "\n":
+                line += 1
+            code.append(c)
+            i += 1
+    return "".join(code), strings
+
+
+def check_imports(rel, code, problems):
+    for no, row in enumerate(code.splitlines(), 1):
+        m = re.match(r"\s*\.?import\s+(\S+)", row)
+        if not m or row.lstrip().startswith("import("):
+            continue
+        what = m.group(1)
+        if what[0] in "\"'":
+            target = what.strip("\"'")
+            if SCHEME_RE.search(target) or LEAVES_RE.search(target) or target.startswith("/"):
+                problems.append((rel, no, f"imports {target}, outside the language's folder"))
+        elif what.rstrip(";") not in IMPORTS:
+            allowed = ", ".join(sorted(IMPORTS))
+            why = f"imports {what}; a language may import only {allowed} and its own files"
+            problems.append((rel, no, why))
+
+
+def check_code(rel, text, problems):
+    code, strings = split_code(text)
+    check_imports(rel, code, problems)
+    for no, row in enumerate(code.splitlines(), 1):
+        for pattern, why in BANNED:
+            if pattern.search(row):
+                problems.append((rel, no, why))
+    for no, value in strings:
+        m = SCHEME_RE.search(value)
+        if m:
+            problems.append((rel, no, f'names a link or outside file ("{m.group(0)}")'))
+        elif LEAVES_RE.search(value):
+            problems.append((rel, no, 'names a path that leaves the folder ("..")'))
+        elif ABSOLUTE_RE.match(value):
+            problems.append((rel, no, f'names a file outside the folder ("{value[:40]}")'))
+
+
+def check_files(folder, problems):
+    total = 0
+    for here, dirs, files in os.walk(folder):
+        for name in sorted(dirs + files):
+            p = Path(here) / name
+            rel = str(p.relative_to(folder))
+            if name.startswith("."):
+                problems.append((rel, 0, "hidden files aren't allowed"))
+            if p.is_symlink():
+                problems.append((rel, 0, "links to somewhere else; copy the file in instead"))
+                continue
+            if p.is_dir():
+                continue
+            st = p.stat()
+            total += st.st_size
+            if not stat.S_ISREG(st.st_mode):
+                problems.append((rel, 0, "isn't a plain file"))
+            elif st.st_mode & 0o111:
+                problems.append((rel, 0, "is marked executable"))
+            if p.suffix.lower() not in EXTENSIONS and not name.startswith("LICENSE"):
+                problems.append(
+                    (rel, 0, f"{p.suffix or 'this kind of file'} isn't drawing material")
+                )
+        dirs[:] = [d for d in dirs if not (Path(here) / d).is_symlink()]
+    if total > MAX_BYTES:
+        problems.append((".", 0, f"is {total // 1048576} MB; the limit is 20 MB"))
+
+
+def read_manifest(folder, problems):
+    try:
+        m = json.loads((folder / "manifest.json").read_text())
+        if not isinstance(m, dict):
+            raise ValueError("not an object")
+    except FileNotFoundError:
+        problems.append(("manifest.json", 0, "is missing (name, author, licence, version)"))
+        return {}
+    except (ValueError, UnicodeDecodeError) as e:
+        problems.append(("manifest.json", 0, f"isn't valid JSON ({e})"))
+        return {}
+    for key in MANIFEST_KEYS:
+        if not isinstance(m.get(key), str) or not m[key].strip():
+            problems.append(("manifest.json", 0, f"needs a {key}"))
+    for pic in m.get("previews") or []:
+        p = folder / str(pic)
+        if (
+            not isinstance(pic, str)
+            or LEAVES_RE.search(pic)
+            or pic.startswith("/")
+            or not p.is_file()
+        ):
+            problems.append(
+                ("manifest.json", 0, f"names a preview that isn't in the folder ({pic})")
+            )
+        elif p.suffix.lower() not in (".png", ".svg"):
+            problems.append(("manifest.json", 0, f"previews must be .png or .svg ({pic})"))
+    return m
+
+
+def looks_of(folder):
+    """The look -> file map Language.qml declares (its `looks` object), or None."""
+    try:
+        text = (folder / "Language.qml").read_text()
+    except (OSError, UnicodeDecodeError):
+        return None
+    m = re.search(r"\blooks\s*:\s*\(\s*\{(.*?)\}\s*\)", text, re.S)
+    return dict(re.findall(r'"?(\w+)"?\s*:\s*"([^"]+)"', m.group(1))) if m else {}
+
+
+def check(folder):
+    """Every problem with the language in `folder`, as (file, line, reason); empty = it passes."""
+    folder = Path(folder)
+    problems = []
+    if not folder.is_dir():
+        return [(str(folder), 0, "isn't a folder")]
+    check_files(folder, problems)
+    read_manifest(folder, problems)
+    looks = looks_of(folder)
+    if looks is None:
+        problems.append(("Language.qml", 0, "is missing"))
+    else:
+        if not looks:
+            problems.append(("Language.qml", 0, "declares no looks"))
+        for look, rel in looks.items():
+            if LEAVES_RE.search(rel) or rel.startswith("/") or not (folder / rel).is_file():
+                problems.append(
+                    ("Language.qml", 0, f"the {look} look's file {rel} isn't in the folder")
+                )
+    for p in sorted(folder.rglob("*")):
+        if p.suffix.lower() in CODE_EXTENSIONS and p.is_file() and not p.is_symlink():
+            try:
+                check_code(str(p.relative_to(folder)), p.read_text(), problems)
+            except UnicodeDecodeError:
+                problems.append((str(p.relative_to(folder)), 0, "isn't text"))
+    return problems
+
+
+def read_index(root):
+    try:
+        data = json.loads((Path(root) / "index.json").read_text())
+        langs = data.get("languages", {})
+        return langs if isinstance(langs, dict) else {}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def write_index(root, langs):
+    root = Path(root)
+    tmp = root / ".index.json.tmp"
+    tmp.write_text(json.dumps({"version": 1, "languages": langs}, indent=2, sort_keys=True) + "\n")
+    os.replace(tmp, root / "index.json")
+
+
+def install(folder, root, replace=False):
+    """Check and install the language in `folder` under `root`. Returns (ok, problems)."""
+    folder, root = Path(folder), Path(root)
+    name = folder.resolve().name
+    if name in BUILTIN:
+        return False, [(name, 0, f"{name} is a built-in language's name; rename the folder")]
+    if not NAME_RE.match(name):
+        return False, [(name, 0, "the folder name must be lowercase letters, digits and dashes")]
+    langs = read_index(root)
+    target = root / name
+    if (name in langs or target.exists()) and not replace:
+        return False, [(name, 0, f"{name} is already installed; replace it to update")]
+    root.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix=".install-", dir=root))
+    try:
+        # Check the copy, not the source, so nothing can change between the check and the install.
+        staged = work / name
+        shutil.copytree(folder, staged, symlinks=True)
+        problems = check(staged)
+        if problems:
+            return False, problems
+        manifest = json.loads((staged / "manifest.json").read_text())
+        if target.exists():
+            target.rename(work / "old")
+        staged.rename(target)
+        langs[name] = {
+            "manifest": manifest,
+            "looks": len(looks_of(target) or {}),
+            "checked_by": CHECKER_VERSION,
+            "installed": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+        write_index(root, langs)
+        return True, []
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def remove(name, root):
+    """Remove an installed language. Only names the index lists, never a built-in."""
+    root = Path(root)
+    langs = read_index(root)
+    if name in BUILTIN or name not in langs or not NAME_RE.match(name):
+        return False
+    del langs[name]
+    write_index(root, langs)  # unlisted first, so nothing loads it while it goes
+    shutil.rmtree(root / name, ignore_errors=True)
+    return True
+
+
+def preview(folder):
+    """Render previews/<look>-<state>.png for each look with the test renderer (a repo checkout)."""
+    folder = Path(folder).resolve()
+    renderer = Path(__file__).resolve().parent.parent / "tests" / "qml" / "render_looks.qml"
+    qml = shutil.which("qml6") or "/usr/lib/qt6/bin/qml"
+    if not renderer.is_file():
+        print("preview needs a re:dial checkout (tests/qml/render_looks.qml)", file=sys.stderr)
+        return 1
+    out = folder / "previews"
+    out.mkdir(exist_ok=True)
+    env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
+    for look in looks_of(folder) or {}:
+        subprocess.run(
+            [qml, str(renderer), "--", str(folder), look, "light", str(out)], env=env, timeout=60
+        )
+    print(f'previews in {out}; list the ones to show in manifest.json "previews"')
+    return 0
+
+
+def report(ok, problems, as_json, name=""):
+    if as_json:
+        rows = [{"file": f, "line": n, "reason": r} for f, n, r in problems]
+        print(json.dumps({"ok": ok, "name": name, "problems": rows}))
+    elif ok:
+        print("ok")
+    else:
+        for f, n, r in problems:
+            print(f"{f}:{n}: {r}" if n else f"{f}: {r}")
+    return 0 if ok else 1
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="redial-language", description=__doc__.split("\n\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for cmd in ("check", "install", "remove", "list", "preview"):
+        p = sub.add_parser(cmd)
+        p.add_argument("--json", action="store_true")
+        if cmd != "list":
+            p.add_argument("target")
+        if cmd == "install":
+            p.add_argument("--replace", action="store_true")
+    a = ap.parse_args(argv)
+    root = user_root()
+    if a.cmd == "check":
+        problems = check(a.target)
+        return report(not problems, problems, a.json, Path(a.target).resolve().name)
+    if a.cmd == "install":
+        ok, problems = install(a.target, root, a.replace)
+        return report(ok, problems, a.json, Path(a.target).resolve().name)
+    if a.cmd == "remove":
+        ok = remove(a.target, root)
+        return report(
+            ok, [] if ok else [(a.target, 0, "isn't an installed language")], a.json, a.target
+        )
+    if a.cmd == "preview":
+        return preview(a.target)
+    langs = read_index(root)
+    if a.json:
+        print(json.dumps([{"name": n, "builtin": False, **e} for n, e in sorted(langs.items())]))
+    else:
+        for n in (*BUILTIN, *sorted(langs)):
+            print(n)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

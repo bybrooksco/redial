@@ -37,7 +37,7 @@ Item {
   Loader {
     id: languageLoader
     property bool failed: false
-    readonly property string dir: "languages/" + (failed ? "classic" : cfg.language)
+    readonly property string dir: failed ? "languages/classic" : cfg.languageDir(cfg.language)
     source: dir + "/Language.qml"
     onStatusChanged: if (status === Loader.Error && !failed) failed = true
     Connections { target: cfg; function onLanguageChanged() { languageLoader.failed = false } }

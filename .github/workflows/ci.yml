@@ -14,22 +14,22 @@ jobs:
     # Omarchy is Arch-based, so test against Arch.
     container: archlinux:latest
     steps:
-      - run: pacman -Syu --noconfirm --needed git python python-coverage ruff shellcheck qt6-declarative
+      - run: pacman -Syu --noconfirm --needed git python python-coverage ruff shellcheck qt6-declarative qt6-svg
       - uses: actions/checkout@v4
       - name: Let git read the checkout (the container runs as a different user)
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Python lint
-        run: ruff check bin/redial-hypr bin/redial-overlay bin/redial-settings bin/redial-rise-widget scripts/add-menu-entry.py tests
+        run: ruff check redial bin/redial-hypr bin/redial-language bin/redial-overlay bin/redial-settings bin/redial-rise-widget scripts/add-menu-entry.py tests
       - name: Python format
-        run: ruff format --check bin/redial-hypr bin/redial-overlay bin/redial-settings bin/redial-rise-widget scripts/add-menu-entry.py tests
+        run: ruff format --check redial bin/redial-hypr bin/redial-language bin/redial-overlay bin/redial-settings bin/redial-rise-widget scripts/add-menu-entry.py tests
       - name: Shell lint
         run: shellcheck install.sh install-generic.sh uninstall.sh scripts/make-installer.sh scripts/installer-template.sh bin/redial-setup bin/redial-restart bin/redial-bar scripts/pair-dial.sh
       - name: Tests (with a coverage floor)
         run: |
-          coverage run --include=bin/redial-hypr tests/test_dial.py
+          coverage run --source=redial tests/test_dial.py
           coverage report --fail-under=75
       - name: Overlay tests
-        run: python3 tests/test_overlay.py && python3 tests/test_settings.py
+        run: python3 tests/test_overlay.py && python3 tests/test_settings.py && python3 tests/test_language.py
       - name: QML component tests
         run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/qml
       - name: QML lint (informational)

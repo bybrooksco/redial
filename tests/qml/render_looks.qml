@@ -4,8 +4,9 @@ import "lookkit"
 import "lookkit/kit.js" as Kit
 
 // Renders one language look in each state to PNGs for comparing against the mockups.
-// Run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qml tests/qml/render_looks.qml -- <language> <look> [dark]
-// Writes /tmp/redial-render/<language>-<look>-{ring,turn,hint,cant}.png
+// Run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qml tests/qml/render_looks.qml -- <language> <look> [dark] [out]
+// Writes /tmp/redial-render/<language>-<look>-{ring,turn,hint,cant}.png, or <out>/<look>-<state>.png.
+// <language> is a built-in's name or a language folder's absolute path (redial-language preview).
 Window {
   id: win
   visible: true
@@ -13,7 +14,8 @@ Window {
   readonly property var args: Qt.application.arguments.slice(Qt.application.arguments.indexOf("--") + 1)
   readonly property string lang: args[0] || "classic"
   readonly property string lookKey: args[1] || "classic"
-  readonly property string out: "/tmp/redial-render/" + lang + "-" + lookKey + "-"
+  readonly property string dir: lang.indexOf("/") >= 0 ? "file://" + lang : "../../plugin/redial/languages/" + lang
+  readonly property string out: args[3] ? args[3] + "/" + lookKey + "-" : "/tmp/redial-render/" + lang + "-" + lookKey + "-"
   readonly property var states: [
     { name: "ring", kind: "", note: {} },
     { name: "turn", kind: "turn", note: { name: "Volume", value: 42, valueText: "42%" } },
@@ -30,8 +32,8 @@ Window {
   }
   Loader {
     id: language
-    source: "../../plugin/redial/languages/" + win.lang + "/Language.qml"
-    onLoaded: look.setSource("../../plugin/redial/languages/" + win.lang + "/" + item.looks[win.lookKey], { cfg: cfg })
+    source: win.dir + "/Language.qml"
+    onLoaded: look.setSource(win.dir + "/" + item.looks[win.lookKey], { cfg: cfg })
   }
   Loader {
     id: look

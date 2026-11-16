@@ -1,0 +1,9 @@
+# re:dial: let the Surface Dial wake this computer from sleep (optional, asked for separately).
+#
+# BlueZ already allows the dial to wake the host (WakeAllowed=yes), but most Bluetooth
+# adapters ship with USB wakeup disabled, so the wake signal never reaches the computer.
+# This enables wakeup on every USB device of class e0 (wireless controller: Bluetooth adapters).
+#
+# Side effect: any paired Bluetooth device that is allowed to wake (a keyboard, a mouse) can
+# now wake the computer too, not only the dial. Remove this file to undo.
+ACTION=="add", SUBSYSTEM=="usb", ATTR{bDeviceClass}=="e0", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"

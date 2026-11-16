@@ -15,23 +15,29 @@ set -uo pipefail
 
 R="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="$HOME/.local/bin/redial-hypr"
+LIB="${XDG_DATA_HOME:-$HOME/.local/share}/redial/lib"   # the daemon package
 OVERLAY="$HOME/.local/bin/redial-overlay"
 UNIT="$HOME/.config/systemd/user/redial.service"
 OVERLAY_UNIT="$HOME/.config/systemd/user/redial-overlay.service"
 DESKTOP="$HOME/.local/share/applications/redial-settings.desktop"
-EXTRAS=(redial-settings redial-bar)
+EXTRAS=(redial-settings redial-bar redial-restart)
 UDEV=/etc/udev/rules.d/70-redial.rules
+WAKE=/etc/udev/rules.d/71-redial-wake.rules
 ok()   { printf '  [OK]   %s\n' "$1"; }
 warn() { printf '  [WARN] %s\n' "$1"; }
 confirm() { read -rp "  $1 [y/N] " ans; [[ "$ans" =~ ^[Yy] ]]; }
 
 if [[ "${1:-}" == "--uninstall" ]]; then
     systemctl --user disable --now redial.service redial-overlay.service 2>/dev/null && ok "daemon stopped"
+    rm -rf "$LIB"
     rm -f "$UNIT" "$OVERLAY_UNIT" "$BIN" "$OVERLAY" "$DESKTOP" "${EXTRAS[@]/#/$HOME/.local/bin/}" \
         && systemctl --user daemon-reload \
         && ok "daemon, overlay and services removed"
     if [[ -e "$UDEV" ]] && confirm "Remove the udev rule $UDEV (sudo)?"; then
         sudo rm "$UDEV" && sudo udevadm control --reload-rules && ok "udev rule removed"
+    fi
+    if [[ -e "$WAKE" ]] && confirm "Remove the wake-from-dial rule $WAKE (sudo)?"; then
+        sudo rm "$WAKE" && sudo udevadm control --reload-rules && ok "wake-from-dial rule removed"
     fi
     echo "Your settings in ~/.config/redial were kept. You are still in the 'input' group."
     exit 0
@@ -70,6 +76,9 @@ fi
 
 echo "-- 2. Daemon -> ~/.local/bin, started at login by systemd --"
 install -Dm755 "$R/bin/redial-hypr" "$BIN" && ok "redial-hypr installed"
+rm -rf "$LIB/redial.new" && mkdir -p "$LIB" && cp -r "$R/redial" "$LIB/redial.new" \
+    && find "$LIB/redial.new" -name __pycache__ -prune -exec rm -rf {} + \
+    && rm -rf "$LIB/redial" && mv "$LIB/redial.new" "$LIB/redial" && ok "daemon package installed ($LIB/redial)"
 mkdir -p "$(dirname "$UNIT")"
 grep -v '^#' "$R/systemd/redial.service" > "$UNIT" && ok "user service written"
 for f in "${EXTRAS[@]}"; do
@@ -104,6 +113,12 @@ if cmp -s "$R/udev/70-redial.rules" "$UDEV" 2>/dev/null; then
 elif confirm "Install the udev rule (sudo)?"; then
     sudo install -m 644 "$R/udev/70-redial.rules" "$UDEV" \
         && sudo udevadm control --reload-rules && sudo udevadm trigger && ok "udev rule installed"
+fi
+if cmp -s "$R/udev/71-redial-wake.rules" "$WAKE" 2>/dev/null; then
+    ok "wake-from-dial rule already installed"
+elif confirm "Let the dial wake this computer from sleep (sudo; any paired Bluetooth keyboard or mouse can then wake it too)?"; then
+    sudo install -m 644 "$R/udev/71-redial-wake.rules" "$WAKE" \
+        && sudo udevadm control --reload-rules && sudo udevadm trigger --action=add -s usb --attr-match=bDeviceClass=e0 && ok "wake-from-dial rule installed"
 fi
 NEED_RELOGIN=0
 if id -nG "$USER" | tr ' ' '\n' | grep -qx input; then

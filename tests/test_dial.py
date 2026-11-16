@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Regression tests for the re:dial daemon's logic -- no dial, no display needed.
 
-    python3 test_dial.py                      # tests ../bin/redial-hypr (the kit's copy)
-    DIAL_DAEMON=~/.local/bin/redial-hypr python3 test_dial.py   # the live install
+    python3 test_dial.py                      # tests ../redial (this checkout's package)
+    DIAL_LIB=~/.local/share/redial/lib python3 test_dial.py     # the live install
 
 Every side effect (keys, hyprctl, playerctl, brightnessctl, notifications, haptics) is
 replaced with a recorder, and the click gestures are driven through a real temporary
@@ -17,6 +17,7 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import shutil
 import re
 import struct
 import subprocess
@@ -32,17 +33,17 @@ os.environ["DIAL_CONFIG_DIR"] = tempfile.mkdtemp()
 os.environ["DIAL_LOG_PATH"] = os.path.join(tempfile.mkdtemp(), "daemon.log")  # likewise for its log
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DAEMON = os.environ.get("DIAL_DAEMON") or os.path.join(HERE, "..", "bin", "redial-hypr")
+# The folder that holds the `redial` package: this checkout, or DIAL_LIB for an installed copy.
+LIB = os.path.abspath(os.path.expanduser(os.environ.get("DIAL_LIB") or os.path.join(HERE, "..")))
+DAEMON = os.path.join(HERE, "..", "bin", "redial-hypr")  # the launcher
 
 
 def load_daemon():
-    loader = importlib.machinery.SourceFileLoader(
-        "dialmod", os.path.abspath(os.path.expanduser(DAEMON))
-    )
-    spec = importlib.util.spec_from_loader("dialmod", loader)
-    mod = importlib.util.module_from_spec(spec)
-    loader.exec_module(mod)
-    return mod
+    sys.path.insert(0, LIB)
+    import redial.daemon
+    from daemon_view import DaemonView
+
+    return DaemonView(redial.daemon)
 
 
 m = load_daemon()
@@ -54,8 +55,9 @@ PRISTINE = dict(vars(m))
 
 
 def restore_pristine():
+    now = vars(m)
     for name, value in PRISTINE.items():
-        if vars(m).get(name) is not value:
+        if now.get(name) is not value:
             setattr(m, name, value)
 
 
@@ -138,7 +140,7 @@ def install_stubs(cfg_path):
     m.dictation_toggle = lambda: EVENTS.append("DICTATION")
     m.notify = lambda *a, **k: None
     m.osd = lambda **k: OSDS.append(k)
-    m._show_level = lambda kind: SHOWN.append(kind)
+    m.show_level_now = lambda kind: SHOWN.append(kind)
     _level_reset()
     m.run = m.launch = lambda cmd: EVENTS.append("EXEC:" + " ".join(cmd[:2]))
     m.hypr = lambda lua: EVENTS.append("HYPR:" + lua)
@@ -604,7 +606,7 @@ class LiveToolReload(Base):
     def setUp(self):
         super().setUp()
         self.saved = list(m.TOOLS)
-        m._tools_state["mtime"] = None
+        m.TOOLS_STATE["mtime"] = None
         self.addCleanup(lambda: m.TOOLS.__setitem__(slice(None), self.saved))
 
     def write_active(self, names):
@@ -1511,6 +1513,8 @@ class Status(Base):
         self.assertEqual(doc["pid"], os.getpid())
         self.assertEqual(doc["updated"], 1234.6)
         self.assertEqual(doc["battery"], 80)
+        self.assertFalse(doc["keeping_awake"])
+        self.assertTrue(m.build_status(True, True, 80, keeping_awake=True)["keeping_awake"])
 
     def test_write_is_atomic_and_readable(self):
         old = m.STATUS_PATH
@@ -1803,6 +1807,85 @@ class Eraser(Base):
         self.ev(m.BTN_STYLUS, 0)
         self.assertEqual(EVENTS, ["KEY:Return"])
 
+    def barrel_hold_setup(self, **barrel):
+        """Pen config + a fake Timer and action worker: returns (timers, ran)."""
+        self.configure(barrel=barrel)
+        timers, ran = [], []
+
+        class FakeTimer:
+            def __init__(self, secs, fn, args=()):
+                self.secs, self.fn, self.args, self.cancelled = secs, fn, args, False
+                self.daemon = False
+                timers.append(self)
+
+            def start(self):
+                pass
+
+            def cancel(self):
+                self.cancelled = True
+
+        fx = Fixture(self)
+        fx.set(m.threading, "Timer", FakeTimer)
+        fx.set(m, "ACTIONS", types.SimpleNamespace(submit=lambda fn, *a: (ran.append(fn), fn(*a))))
+        return timers, ran
+
+    def test_pen_actions_go_to_the_action_worker_not_the_input_thread(self):
+        """A slow action (hyprctl, voxtype) must not freeze the pen's input, and an error in one
+        must not end the pen's thread: tap and barrel actions are handed to ACTIONS."""
+        queued = []
+        fx = Fixture(self)
+        fx.set(m, "ACTIONS", types.SimpleNamespace(submit=lambda fn, *a: queued.append(fn)))
+        self.down(0.0)
+        self.up(0.1)  # eraser tap: Escape
+        self.configure(barrel={"action": "enter"})
+        self.ev(m.BTN_STYLUS, 1)
+        self.ev(m.BTN_STYLUS, 0)
+        self.assertEqual(len(queued), 2)
+        self.assertEqual(EVENTS, [])  # nothing ran on the input thread
+
+    def test_barrel_hold_is_off_by_default_so_press_is_unchanged(self):
+        timers, _ = self.barrel_hold_setup(action="enter")
+        self.ev(m.BTN_STYLUS, 1)
+        self.assertEqual(EVENTS, ["KEY:Return"])  # still fires on press
+        self.ev(m.BTN_STYLUS, 0)
+        self.assertEqual(timers, [])
+
+    def test_barrel_hold_fires_after_the_hold_time_and_skips_the_press_action(self):
+        timers, ran = self.barrel_hold_setup(action="enter", hold="escape", hold_ms=600)
+        self.ev(m.BTN_STYLUS, 1)
+        self.assertEqual(EVENTS, [])  # the press action waits for release
+        self.assertAlmostEqual(timers[0].secs, 0.6)
+        timers[0].fn(*timers[0].args)  # held long enough
+        self.assertEqual(EVENTS, ["KEY:Escape"])
+        self.assertEqual(len(ran), 1)  # ran on the action worker, not the pen thread
+        self.ev(m.BTN_STYLUS, 0)
+        self.assertEqual(EVENTS, ["KEY:Escape"])  # no press action after a hold
+
+    def test_a_short_barrel_press_fires_the_press_action_on_release(self):
+        timers, _ = self.barrel_hold_setup(action="enter", hold="escape")
+        self.ev(m.BTN_STYLUS, 1)
+        self.ev(m.BTN_STYLUS, 0)
+        self.assertTrue(timers[0].cancelled)
+        self.assertEqual(EVENTS, ["KEY:Return"])
+        timers[0].fn(*timers[0].args)  # a stale timer that fires anyway does nothing
+        self.assertEqual(EVENTS, ["KEY:Return"])
+
+    def test_barrel_right_click_still_passes_through_with_a_hold_set(self):
+        timers, _ = self.barrel_hold_setup(action="right_click", hold="escape")
+        self.ev(m.BTN_STYLUS, 1)
+        timers[0].fn(*timers[0].args)
+        self.ev(m.BTN_STYLUS, 0)
+        self.assertEqual([d for _, d in self.ptr.clicks], [True, False])
+        self.assertEqual(EVENTS, ["KEY:Escape"])
+
+    def test_barrel_hold_time_is_clamped_and_bad_hold_falls_back_to_nothing(self):
+        timers, _ = self.barrel_hold_setup(hold="escape", hold_ms=5)
+        self.ev(m.BTN_STYLUS, 1)
+        self.assertAlmostEqual(timers[0].secs, 0.25)
+        self.ev(m.BTN_STYLUS, 0)
+        self.configure(barrel={"hold": "right_click"})  # mouse buttons can't be a hold
+        self.assertEqual(m.pen_barrel_hold(), ("none", 0.5))
+
     def test_disabled_barrel_does_nothing(self):
         time.sleep(0.005)
         with open(self.cfg, "w") as f:
@@ -2036,17 +2119,28 @@ class RestartScript(unittest.TestCase):
             f.write(f'#!/bin/sh\necho "{name} $*" >> "{self.log}"\n{body}\n')
         os.chmod(path, 0o755)
 
-    def run_script(self, daemon=True, running=True):
+    def run_script(self, daemon=True, running=True, hypr=True):
         if daemon:
             d = os.path.join(self.home, ".local", "bin", "redial-hypr")
             open(d, "w").write("#!/bin/sh\n")
             os.chmod(d, 0o755)
         self.stub("pgrep", "exit 0" if running else "exit 1")
         self.stub("pkill")
-        self.stub("hyprctl")
+        if hypr:
+            self.stub("hyprctl")
         self.stub("sleep")
-        env = {"HOME": self.home, "PATH": self.stubs + ":/usr/bin:/bin"}
-        r = subprocess.run(["bash", self.SCRIPT], env=env, capture_output=True, text=True)
+        if not os.path.exists(os.path.join(self.stubs, "systemctl")):
+            self.stub("systemctl", "exit 1")  # no user service: never ask the real one
+        # Only the stubs and bash's own tools: a real hyprctl in /usr/bin must not be found.
+        tools = os.path.join(self.stubs, "tools")
+        os.makedirs(tools, exist_ok=True)
+        for t in ("bash", "sh", "seq", "dirname", "cat"):
+            if not os.path.exists(os.path.join(tools, t)) and shutil.which(t):
+                os.symlink(shutil.which(t), os.path.join(tools, t))
+        env = {"HOME": self.home, "PATH": self.stubs + ":" + tools}
+        r = subprocess.run(
+            [shutil.which("bash"), self.SCRIPT], env=env, capture_output=True, text=True
+        )
         calls = open(self.log).read().splitlines() if os.path.exists(self.log) else []
         return r, calls
 
@@ -2068,11 +2162,32 @@ class RestartScript(unittest.TestCase):
         self.assertFalse(any(c.startswith("pkill") for c in calls), calls)
         self.assertTrue(any(c.startswith("hyprctl dispatch") for c in calls), calls)
 
+    def test_a_systemd_service_is_restarted_there(self):
+        self.stub("systemctl", 'case "$*" in *is-enabled*) exit 0;; esac')
+        r, calls = self.run_script()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("systemctl --user restart redial.service", calls)
+        self.assertFalse(any(c.startswith(("pkill", "hyprctl")) for c in calls), calls)
+
+    def test_without_hyprland_it_starts_the_daemon_detached_with_no_tmp_log(self):
+        self.stub("hyprctl")
+        os.remove(os.path.join(self.stubs, "hyprctl"))
+        self.stub("setsid")
+        r, calls = self.run_script(running=False, hypr=False)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        for _ in range(50):  # started in the background
+            calls = open(self.log).read().splitlines()
+            if any(c.startswith("setsid") for c in calls):
+                break
+            time.sleep(0.02)
+        self.assertTrue(any(c.startswith("setsid nohup python3") for c in calls), calls)
+        self.assertNotIn("/tmp", open(self.SCRIPT).read().split("set -u", 1)[1])
+
     def test_without_an_installed_daemon_it_says_so_and_fails(self):
         r, calls = self.run_script(daemon=False)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("install.sh", r.stderr)
-        self.assertEqual(calls, [])
+        self.assertEqual(calls, ["systemctl --user is-enabled redial.service"])
 
 
 def ev_bytes(etype, code, value):
@@ -2438,9 +2553,9 @@ class MainLoop(Base):
 
     def test_waiting_for_the_device_sets_nothing_attached(self):
         fx = Fixture(self)
-        m._status["attached"] = False
+        m.STATUS["attached"] = False
         self.run_main(fx, [None])
-        self.assertFalse(m._status["attached"])  # never claimed to be attached
+        self.assertFalse(m.STATUS["attached"])  # never claimed to be attached
 
     def test_an_absent_dial_is_waited_for_on_the_device_list_not_a_timer(self):
         fx = Fixture(self)
@@ -2478,15 +2593,15 @@ class MainLoop(Base):
         real_pump = m.pump
 
         def pump(fh, dial):
-            seen.append(m._status["attached"])
+            seen.append(m.STATUS["attached"])
             real_pump(fh, dial)
 
         fx.set(m, "pump", pump)
         fh = pipe_with()
-        m._status["attached"] = False
+        m.STATUS["attached"] = False
         self.run_main(fx, [(fh, "/dev/event7")])
         self.assertEqual(seen, [True])  # attached while pumping
-        self.assertFalse(m._status["attached"])  # and cleared after
+        self.assertFalse(m.STATUS["attached"])  # and cleared after
 
     def test_a_drop_mid_use_says_asleep_but_not_after_our_own_stall_reconnect(self):
         def notes(kicked):
@@ -2587,16 +2702,19 @@ class StatusLoop(Base):
         fx.set(m, "write_status", lambda doc: None)
         fx.set(m, "kick_dial", lambda *a: None)  # never touch the real Bluetooth link
 
-        def pokes(cfg, attached):
+        def pokes(cfg, attached, last_use=0.0, locked=False, until=60, docs=None):
             now, sent = [0.0], []
             fx.set(m.time, "monotonic", lambda: now[0])
             fx.set(m, "HAPTIC", types.SimpleNamespace(keep_awake=lambda: sent.append(now[0])))
             fx.set(m, "live_config", lambda: cfg)
-            fx.set(m, "_status", {"attached": attached})
+            fx.set(m, "screen_locked", lambda: locked)
+            fx.set(m, "STATUS", {"attached": attached, "last_use": last_use})
+            if docs is not None:
+                fx.set(m, "write_status", docs.append)
 
-            def sleep(secs):  # each pass is 30 s; stop after t=0, 30, 60
+            def sleep(secs):  # each pass is 30 s; stop after t=until
                 now[0] += 30
-                if now[0] > 60:
+                if now[0] > until:
                     raise StopLoop
 
             fx.set(m.time, "sleep", sleep)
@@ -2607,6 +2725,33 @@ class StatusLoop(Base):
         self.assertEqual(pokes({}, True), [])  # off by default
         self.assertEqual(pokes({"keep_awake": True}, False), [])  # asleep: nothing to keep up
         self.assertEqual(pokes({"keep_awake": True}, True), [0.0, 60.0])
+        # Locked screen: nobody is at the desk, let the dial sleep.
+        self.assertEqual(pokes({"keep_awake": True}, True, locked=True), [])
+        # Idle window: default 30 min after the last touch, then the dial may sleep.
+        self.assertEqual(pokes({"keep_awake": True}, True, last_use=-1800.0, until=0), [0.0])
+        self.assertEqual(pokes({"keep_awake": True}, True, last_use=-1801.0, until=0), [])
+        cfg = {"keep_awake": True, "keep_awake_minutes": 5}
+        self.assertEqual(pokes(cfg, True, last_use=-301.0, until=0), [])
+        self.assertEqual(pokes(cfg, True, last_use=-299.0, until=0), [0.0])
+        # status.json says whether pokes are actually being sent (battery study column).
+        docs = []
+        pokes({"keep_awake": True}, True, docs=docs, until=0)
+        self.assertTrue(docs[-1]["keeping_awake"])
+        docs = []
+        pokes({"keep_awake": True}, True, locked=True, docs=docs, until=0)
+        self.assertFalse(docs[-1]["keeping_awake"])
+
+    def test_screen_locked_sees_a_locker_process(self):
+        proc = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, proc)
+        for pid, comm in (("1", "systemd"), ("42", "hyprlock"), ("self", "x")):
+            os.makedirs(os.path.join(proc, pid))
+            with open(os.path.join(proc, pid, "comm"), "w") as f:
+                f.write(comm + "\n")
+        os.makedirs(os.path.join(proc, "77"))  # a process that exited mid-scan: no comm
+        self.assertTrue(m.screen_locked(proc))
+        os.remove(os.path.join(proc, "42", "comm"))
+        self.assertFalse(m.screen_locked(proc))
 
     def test_haptics_worker_turns_the_sentinel_into_a_silent_read(self):
         h = m.Haptics.__new__(m.Haptics)  # no worker thread
@@ -3245,6 +3390,8 @@ class UninstallScript(unittest.TestCase):
             ("omarchy-restart-shell", ""),
             ("omarchy-pkg-add", ""),
             ("omarchy-shell", 'case "$*" in *ping*) echo ok;; esac'),
+            ("systemctl", "exit 1"),  # never this machine's user services
+            ("udevadm", ""),
         ):
             path = os.path.join(self.stubs, name)
             with open(path, "w") as f:
@@ -3257,6 +3404,7 @@ class UninstallScript(unittest.TestCase):
             "HOME": self.home,
             "PATH": self.stubs + ":/usr/bin:/bin",
             "USER": "tester",
+            "DIAL_WAKE_RULE": os.path.join(self.home, "no-wake-rule"),  # never this machine's
         }
 
     def put(self, rel, text):
@@ -3291,6 +3439,15 @@ class UninstallScript(unittest.TestCase):
     def test_install_then_uninstall_leaves_your_files_as_they_were(self):
         self.install()
         self.assertTrue(self.exists(".local/bin/redial-hypr"))
+        self.assertTrue(self.exists(".local/share/redial/lib/redial/daemon.py"))
+        # The installed launcher finds the installed package (not this checkout) and runs.
+        r = subprocess.run(
+            [sys.executable, "-I", os.path.join(self.home, ".local/bin/redial-hypr"), "--version"],
+            env=self.env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(r.stdout.strip(), "redial-hypr " + m.__version__, r.stderr)
         self.assertTrue(self.exists(".config/omarchy/plugins/redial/DialMenu.qml"))
         self.assertIn("redial-hypr", self.read(".config/hypr/autostart.lua"))
         self.assertEqual(self.read(".config/hypr/hyprland.lua").count("^re:dial settings$"), 1)
@@ -3304,9 +3461,11 @@ class UninstallScript(unittest.TestCase):
             "redial-restart",
             "redial-bar",
             "redial-rise-widget",
+            "redial-language",
         ):
             self.assertFalse(self.exists(f".local/bin/{f}"), f)
         self.assertFalse(self.exists(".config/omarchy/plugins/redial"))
+        self.assertFalse(self.exists(".local/share/redial/lib"))
         self.assertEqual(self.read(".config/hypr/autostart.lua"), self.AUTOSTART)
         self.assertEqual(self.read(".config/hypr/hyprland.lua"), self.HYPRLAND)
         self.assertEqual(self.read(".config/omarchy/extensions/omarchy-menu.jsonc"), self.MENU)
@@ -3585,7 +3744,7 @@ class LevelOverlay(Base):
         self.cmds = []
         m.run = self.cmds.append
         m.shutil = types.SimpleNamespace(which=lambda name: f"/x/{name}")
-        self.real_show_level = PRISTINE["_show_level"]
+        self.real_show_level = PRISTINE["show_level_now"]
 
     def test_osd_builds_the_omarchy_command_for_a_level(self):
         PRISTINE["osd"](icon="volume", progress=40)
@@ -3611,7 +3770,7 @@ class LevelOverlay(Base):
     def test_a_burst_of_steps_queues_one_overlay_that_shows_the_latest_level(self):
         jobs = []
         m.ACTIONS = types.SimpleNamespace(submit=lambda fn, *a: jobs.append((fn, a)))
-        m._show_level = self.real_show_level
+        m.show_level_now = self.real_show_level
         level = {"v": (10, "10%")}
         m.MenuUI = types.SimpleNamespace(_volume=lambda: level["v"])
         for _ in range(5):
@@ -4448,6 +4607,22 @@ class OverlayNotes(Base):
             self.assertFalse(stream.note("turn", {"name": "Volume"}))
         self.assertEqual(len(tries), 1)
 
+    def test_half_a_line_closes_the_socket_instead_of_gluing_onto_the_next(self):
+        class Half:
+            closed = False
+
+            def send(self, data):
+                return len(data) // 2
+
+            def close(self):
+                Half.closed = True
+
+        stream = m.MenuStream()
+        stream.sock = Half()
+        self.assertFalse(stream.note("turn", {"name": "Volume"}))
+        self.assertIsNone(stream.sock)
+        self.assertTrue(Half.closed)
+
     def test_level_readouts_are_held_to_about_ten_a_second(self):
         stream, server = self.listen()
         self.assertEqual(stream.turn_wait(), 0.0, "not connected: no wait")
@@ -4458,7 +4633,7 @@ class OverlayNotes(Base):
 
     def test_a_volume_step_shows_its_level_on_the_overlay(self):
         m.MenuUI = types.SimpleNamespace(_volume=lambda: (42, "42%"))
-        PRISTINE["_show_level"]("volume")
+        PRISTINE["show_level_now"]("volume")
         self.assertEqual(OSDS, [])
         kind, doc = self.notes.sent[0]
         self.assertEqual(kind, "turn")
@@ -4467,7 +4642,7 @@ class OverlayNotes(Base):
     def test_without_the_overlay_a_level_goes_to_omarchys_display(self):
         self.notes.listening = False
         m.MenuUI = types.SimpleNamespace(_volume=lambda: (42, "42%"))
-        PRISTINE["_show_level"]("volume")
+        PRISTINE["show_level_now"]("volume")
         self.assertEqual(OSDS, [{"icon": "volume", "progress": 42}])
 
     def test_a_turned_tool_without_a_level_is_named(self):
@@ -4510,12 +4685,21 @@ class OverlayNotes(Base):
 
 class LaunchDoesNotWait(unittest.TestCase):
     def test_a_long_running_program_is_started_and_left_alone(self):
+        started = []
+        real = subprocess.Popen
+
+        def popen(*a, **k):  # remember our own child, so only it is stopped afterwards
+            started.append(real(*a, **k))
+            return started[-1]
+
+        fx = Fixture(self)
+        fx.set(m.subprocess, "Popen", popen)
         t0 = time.monotonic()
         m.launch(["sleep", "30"])
         self.assertLess(time.monotonic() - t0, 1.0)
-        pids = subprocess.run(["pgrep", "-xf", "sleep 30"], capture_output=True, text=True)
-        self.assertTrue(pids.stdout.split(), "the program must still be running")
-        subprocess.run(["pkill", "-xf", "sleep 30"])
+        self.assertEqual(len(started), 1)
+        self.addCleanup(started[0].kill)
+        self.assertIsNone(started[0].poll(), "the program must still be running")
 
     def test_a_missing_program_is_logged_not_raised(self):
         m.launch(["/nonexistent/program"])
@@ -4927,6 +5111,8 @@ class SelfInstaller(unittest.TestCase):
             ("omarchy-restart-shell", ""),
             ("omarchy-pkg-add", ""),
             ("omarchy-shell", 'case "$*" in *ping*) echo ok;; esac'),
+            ("systemctl", "exit 1"),  # never this machine's user services
+            ("udevadm", ""),
         ):
             path = os.path.join(self.stubs, name)
             with open(path, "w") as f:
@@ -5340,8 +5526,13 @@ class SettingsSchema(unittest.TestCase):
     def setUp(self):
         with open(os.path.join(self.ROOT, "plugin/redial/schema.json")) as f:
             self.rows = {i["key"]: i for g in json.load(f)["groups"] for i in g["items"]}
-        with open(os.path.join(self.ROOT, "bin/redial-hypr")) as f:
-            self.src = f.read()
+        pkg = os.path.join(self.ROOT, "redial")
+        self.src = "".join(  # every module of the daemon package
+            open(os.path.join(d, f)).read()
+            for d, _, files in os.walk(pkg)
+            for f in sorted(files)
+            if f.endswith(".py")
+        )
 
     def test_every_documented_key_has_a_row(self):
         with open(os.path.join(self.ROOT, "plugin/redial/config.example.json")) as f:
@@ -5384,7 +5575,9 @@ class SettingsSchema(unittest.TestCase):
             if row["type"] == "choice" and row["default"] != "":
                 self.assertIn(row["default"], [o["key"] for o in row["options"]], key)
             if row["type"] == "click":
-                self.assertIn(row["group"], ("dial", "pentail", "barrel", "eraser"), key)
+                self.assertIn(
+                    row["group"], ("dial", "pentail", "barrel", "barrelhold", "eraser"), key
+                )
 
     def test_style_presets_start_from_the_defaults(self):
         # An untouched config must read as Normal, Medium and 96% on the Look page's Style block.
@@ -5401,6 +5594,79 @@ class SettingsSchema(unittest.TestCase):
 
 def tool_index_all(name):
     return [t["name"] for t in m.TOOLS].index(name)
+
+
+class SingleInstance(unittest.TestCase):
+    def test_a_second_daemon_cannot_take_the_lock(self):
+        path = os.path.join(tempfile.mkdtemp(), "redial.lock")
+        script = (
+            "import fcntl, os, sys, time\n"
+            "fd = os.open(sys.argv[1], os.O_RDWR | os.O_CREAT)\n"
+            "fcntl.flock(fd, fcntl.LOCK_EX)\n"
+            "print('held', flush=True)\n"
+            "time.sleep(30)\n"
+        )
+        other = subprocess.Popen(
+            [sys.executable, "-c", script, path], stdout=subprocess.PIPE, text=True
+        )
+        self.addCleanup(other.kill)
+        self.assertEqual(other.stdout.readline().strip(), "held")
+        self.assertFalse(m.single_instance(path))
+        other.kill()
+        other.wait()
+        self.assertTrue(m.single_instance(path))  # the lock died with the process
+        os.close(m.single_instance.fd)
+        m.single_instance.fd = None
+
+
+class OneConfigFolder(unittest.TestCase):
+    """The daemon, the GTK overlay, the GTK settings window and the bar read the same folder,
+    XDG_CONFIG_HOME included (they once wrote different files on dotfile setups)."""
+
+    def folder(self, program, var):
+        code = (
+            "import importlib.machinery as M, importlib.util as U, os, sys\n"
+            "sys.dont_write_bytecode = True\n"
+            "L = M.SourceFileLoader('x', sys.argv[1])\n"
+            "mod = U.module_from_spec(U.spec_from_loader('x', L))\n"
+            "L.exec_module(mod); v = getattr(mod, sys.argv[2])\n"
+            "print(os.path.dirname(v) if v.endswith('.json') else v)\n"
+        )
+        env = {k: v for k, v in os.environ.items() if k != "DIAL_CONFIG_DIR"}
+        env["XDG_CONFIG_HOME"] = "/somewhere/cfg"
+        env["DIAL_LOG_PATH"] = os.path.join(tempfile.mkdtemp(), "d.log")
+        r = subprocess.run(
+            [sys.executable, "-c", code, os.path.join(HERE, "..", "bin", program), var],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout.strip()
+
+    def test_every_program_finds_the_same_config_folder(self):
+        want = "/somewhere/cfg/redial"
+        self.assertEqual(self.folder("redial-overlay", "CONFIG"), want)
+        self.assertEqual(self.folder("redial-settings", "CONFIG_DIR"), want)
+        bar = open(os.path.join(HERE, "..", "bin", "redial-bar")).read()
+        self.assertIn('CFG="${DIAL_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/redial}"', bar)
+        self.assertNotIn("$HOME/.config/redial/", bar)
+
+
+class DoctorUdevRule(unittest.TestCase):
+    """redial-setup carries its own copy of the udev rule (it runs from ~/.local/bin, away from the
+    release folder). That copy once drifted and lost the GROUP:= fix for the Vial haptics bug."""
+
+    def rules(self, text):
+        return [ln for ln in text.splitlines() if ln.startswith("KERNEL")]
+
+    def test_the_doctor_installs_the_same_rule_the_release_ships(self):
+        root = os.path.join(HERE, "..")
+        shipped = open(os.path.join(root, "udev", "70-redial.rules")).read()
+        doctor = open(os.path.join(root, "bin", "redial-setup")).read()
+        embedded = doctor.split("<<'EOF'", 1)[1].split("\nEOF\n", 1)[0]
+        self.assertEqual(self.rules(embedded), self.rules(shipped))
+        self.assertIn('GROUP:="input"', doctor.split("<<'EOF'", 1)[0])  # and checks for the fix
 
 
 class LanguageFiles(unittest.TestCase):

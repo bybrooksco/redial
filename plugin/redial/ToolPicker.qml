@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import Qt.labs.folderlistmodel
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -10,6 +9,7 @@ import "ConfigText.js" as ConfigText
 import "ActionGroups.js" as ActionGroups
 import "StylePresets.js" as StylePresets
 import "LookResolve.js" as LookResolve
+import "Languages.js" as Languages
 
 // Pick and reorder which of the daemon's tools are active, and where the overlay sits.
 //
@@ -100,22 +100,8 @@ Item {
   // Which page of the window is showing: "look" (position, size, appearance, tools) or "feel"
   // (sensitivity, timings, clicks), "all" or "help" -- the Dial's pages -- or "pen", the Surface Pen,
   // which has its own tab above the Dial's pages. Feel and Pen apply immediately.
-  // Installed design languages: one folder each under languages/ (see languages/README.md).
-  FolderListModel {
-    id: languageFolders
-    folder: Qt.resolvedUrl("languages")
-    showFiles: false
-    showDirs: true
-  }
-  readonly property var languageOptions: {
-    var out = []
-    for (var i = 0; i < languageFolders.count; i++) {
-      var n = String(languageFolders.get(i, "fileName"))
-      // re:dial's own languages carry the re:dial name ("basic" is a working name)
-      out.push({ key: n, label: (n === "classic" || n === "basic") ? "re:dial " + n : n.charAt(0).toUpperCase() + n.slice(1) })
-    }
-    return out.length ? out : [ { key: "classic", label: "re:dial classic" } ]
-  }
+  // Installed design languages: the built-ins and yours (Languages.js, languages/README.md).
+  readonly property var languageOptions: Languages.options(root.cfg.languageIndex)
   // ---- Every setting: rows from schema.json (one per key re:dial reads), so nothing is file-only.
   property var schemaGroups: []
   property string allFilter: ""
@@ -170,6 +156,7 @@ Item {
   }
   function clickChoices(item) {
     if (item.group === "barrel") return penBarrelActions
+    if (item.group === "barrelhold") return penBarrelHoldActions
     return clickOptions(item.group, item.key.split(".").pop())
   }
   function clickChoice(item) {
@@ -595,7 +582,7 @@ Item {
   // A language offers only its own looks; nothing is borrowed from another one.
   Loader {
     id: pickedLanguage
-    source: "languages/" + root.cfgValue("language", "classic") + "/Language.qml"
+    source: root.cfg.languageDir(root.cfgValue("language", "classic")) + "/Language.qml"
   }
   readonly property var appearanceOptions: LookResolve.offered(pickedLanguage.item).map(function (k) { return LookResolve.option(k, pickedLanguage.item) })
   readonly property string appearanceChoice: {
@@ -643,6 +630,7 @@ Item {
   property var penTailActions: []    // [{name, label, description}] -- pen tail button
   property var penTailDefaults: ({ "single": "space", "double": "enter", "hold": "menu" })
   property var penBarrelActions: []  // [{name, label, description}] -- pen barrel button
+  property var penBarrelHoldActions: []  // the same, for holding the barrel (no mouse buttons)
   property var penEraserActions: []  // [{name, label, description}] -- back of the pen: tap, hold
   property var penEraserDefaults: ({ "tap": "escape", "hold": "delete_word" })
   property string penBarrelDefault: "right_click"
@@ -669,6 +657,22 @@ Item {
     { group: "eraser", key: "tap", title: "Quick tap" },
     { group: "eraser", key: "hold", title: "Press & hold" }
   ]
+  // What the Pen page's drawing says each part of the pen does right now (PenDiagram.parts).
+  readonly property var penParts: {
+    var short = { single: "Click", double: "Double", hold: "Hold", tap: "Tap" }
+    function lines(kinds) {
+      return kinds.map(function (k) { return { key: short[k.key], value: clickAction(k.group, k.key).label } })
+    }
+    return [
+      { x: 31, y: 15, title: "Tail button", where: "away from the screen", lines: lines(tailKinds) },
+      { x: 31, y: 15, title: "Eraser", where: "the tail on the screen", lines: lines(eraserKinds) },
+      { x: 131, y: 410, title: "Barrel button", where: "while the pen hovers",
+        lines: [ { key: "Press", value: barrelEnabled ? barrelAction().label : "Off" },
+                 { key: "Hold", value: barrelEnabled ? barrelHold().label : "Off" } ] },
+      { x: 207, y: 580, title: "Tip", where: "on the screen",
+        lines: [ { key: "Touch", value: "Draws in your apps; re:dial never takes it" } ] }
+    ]
+  }
   function groupActions(group) {
     return group === "pentail" ? penTailActions : group === "eraser" ? penEraserActions : clickActions
   }
@@ -777,6 +781,22 @@ Item {
       var barrel = ({})
       if (pen.barrel) for (var b in pen.barrel) barrel[b] = pen.barrel[b]
       barrel.action = name
+      pen.barrel = barrel
+    })
+  }
+  // Holding the barrel: "none" (the default) leaves the barrel exactly as before.
+  function barrelHold() {
+    var chosen = (configDoc && configDoc.pen && configDoc.pen.barrel && configDoc.pen.barrel.hold)
+      ? String(configDoc.pen.barrel.hold) : "none"
+    for (var i = 0; i < penBarrelHoldActions.length; i++) if (penBarrelHoldActions[i].name === chosen) return penBarrelHoldActions[i]
+    for (var j = 0; j < penBarrelHoldActions.length; j++) if (penBarrelHoldActions[j].name === "none") return penBarrelHoldActions[j]
+    return ({ name: "none", label: "Nothing", description: "" })
+  }
+  function setBarrelHold(name) {
+    writePen(function (pen) {
+      var barrel = ({})
+      if (pen.barrel) for (var b in pen.barrel) barrel[b] = pen.barrel[b]
+      barrel.hold = name
       pen.barrel = barrel
     })
   }
@@ -1005,6 +1025,7 @@ Item {
         root.penEraserActions = (o.eraser && Array.isArray(o.eraser.actions)) ? o.eraser.actions : []
         if (o.eraser && o.eraser.defaults) root.penEraserDefaults = o.eraser.defaults
         root.penBarrelActions = (o.barrel && Array.isArray(o.barrel.actions)) ? o.barrel.actions : []
+        root.penBarrelHoldActions = (o.barrel && Array.isArray(o.barrel.hold_actions)) ? o.barrel.hold_actions : []
         if (o.barrel && o.barrel.default) root.penBarrelDefault = o.barrel.default
       } catch (e) { root.penTailActions = []; root.penBarrelActions = [] }
     }
@@ -1551,11 +1572,9 @@ Item {
               current: root.cfgValue("reference_lines", true)
               onPicked: key => root.setConfigKey("reference_lines", key)
             }
-            ChoiceRow {
+            LanguageLibrary {
               visible: root.page === "look"
               cfg: root.cfg
-              title: "Design language"
-              help: "How the overlay is drawn and moves. Languages others make appear here once they are in plugin/redial/languages/."
               options: root.languageOptions
               current: root.cfgValue("language", "classic")
               onPicked: key => root.setConfigKey("language", key)
@@ -2125,10 +2144,22 @@ Item {
               visible: root.page === "feel"
               cfg: root.cfg
               title: "Keep the dial awake"
-              help: "The dial sleeps after at most 5 minutes untouched, and only a press wakes it. On keeps it awake while this computer is on and the dial is connected, for an always-there feel. It stops when the computer sleeps or shuts down. Uses more battery."
+              help: "The dial sleeps after at most 5 minutes untouched, and only a press wakes it. On keeps it awake while you are using this computer, for an always-there feel: for a while after you last touched it, and never while the screen is locked. Uses more battery."
               options: [ { key: false, label: "Off" }, { key: true, label: "On" } ]
               current: root.cfgValue("keep_awake", false)
               onPicked: key => root.setConfigKey("keep_awake", key)
+            }
+            SliderRow {
+              visible: root.page === "feel" && root.cfgValue("keep_awake", false) === true
+              cfg: root.cfg
+              title: "Stay awake after last use"
+              help: "How long after you last touched the dial it is kept awake. After that it sleeps on its own, and a press wakes it."
+              from: 5
+              to: 240
+              stepSize: 5
+              current: root.cfgValue("keep_awake_minutes", 30)
+              format: v => v + " min"
+              onPicked: value => root.setConfigKey("keep_awake_minutes", value)
             }
 
             // What a single / double / triple click does with any tool (unless the tool has its own,
@@ -2246,6 +2277,20 @@ Item {
                 }
               }
 
+              PenDiagram {
+                width: parent.width
+                visible: root.penEnabled
+                penHeight: Style.space(240)
+                lineColor: root.cfg.lineColor
+                textColor: root.cfg.lineColor
+                softColor: root.cfg.soft(0.5)
+                accentColor: root.cfg.accentText
+                motion: root.cfg.motionBase
+                fontFamily: Style.font.family
+                fontSize: Style.font.caption
+                parts: root.penParts
+              }
+
               Column {
                 width: parent.width
                 spacing: Style.space(2)
@@ -2324,6 +2369,24 @@ Item {
                   options: root.penBarrelActions
                   current: root.barrelAction()
                   onPicked: name => root.setBarrelAction(name)
+                }
+                ActionPicker {
+                  cfg: root.cfg
+                  title: "Hold"
+                  label: "Pen barrel button, hold"
+                  enabled: root.barrelEnabled
+                  opacity: root.barrelEnabled ? 1 : 0.4
+                  options: root.penBarrelHoldActions
+                  current: root.barrelHold()
+                  onPicked: name => root.setBarrelHold(name)
+                }
+                Text {
+                  width: parent.width
+                  wrapMode: Text.WordWrap
+                  text: "Hold the barrel for half a second while the pen hovers. A quick press still does Press; the system's own right-click is never taken over."
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  color: root.cfg.soft(0.5)
                 }
               }
 

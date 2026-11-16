@@ -4,7 +4,7 @@
 #   scripts/make-installer.sh <git-ref> <output-file>
 #   e.g. scripts/make-installer.sh v0.8.4 redial-0.8.4-installer.sh
 #
-# The version is read from that ref's own bin/redial-hypr, so the installer can never
+# The version is read from that ref's own redial/__init__.py, so the installer can never
 # disagree with what is inside it. Also writes <output-file>.sha256.
 set -eu
 REF="${1:?usage: make-installer.sh <git-ref> <output-file>}"
@@ -12,7 +12,7 @@ OUT="${2:?usage: make-installer.sh <git-ref> <output-file>}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$HERE"
 
-VERSION="$(git show "$REF:bin/redial-hypr" | sed -n 's/^__version__ = "\(.*\)"$/\1/p')"
+VERSION="$(git show "$REF:redial/__init__.py" | sed -n 's/^__version__ = "\(.*\)"$/\1/p')"
 [[ -n "$VERSION" ]] || { echo "could not read the version at $REF" >&2; exit 1; }
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

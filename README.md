@@ -19,9 +19,10 @@ This is an independent implementation and shares no code with it.
 
 ## What's here
 
-- `bin/redial-hypr` — the daemon (Python): rotation, clicks, haptics,
+- `redial/` — the daemon (Python, standard library only, one module per job; map in CONTRIBUTING.md): rotation, clicks, haptics,
   the tool library, and the Surface Pen's tail button / barrel button /
-  eraser drag-scroll.
+  eraser drag-scroll. `bin/redial-hypr` starts it.
+- `bin/redial-language` — checks, installs and removes design languages.
 - `bin/redial-setup` — doctor/setup script: permissions, udev rule,
   Bluetooth pairing, autostart, plugin status. Safe to re-run any time.
 - `bin/redial-bar`, `bin/redial-rise-widget` — status line and
@@ -34,7 +35,7 @@ This is an independent implementation and shares no code with it.
 - `udev/70-redial.rules` — hidraw + uinput permissions.
 - `scripts/pair-dial.sh` — scan, pair, trust, and connect over Bluetooth.
 - `tests/test_dial.py` — daemon regression suite. `python3 tests/test_dial.py`
-  tests the copy in this repo; `DIAL_DAEMON=~/.local/bin/redial-hypr
+  tests the copy in this repo; `DIAL_LIB=~/.local/share/redial/lib
   python3 tests/test_dial.py` tests a live install.
 - `manifest.json` — makes this repo a plugin `omarchy plugin add` accepts.
 - `scripts/add-menu-entry.py` — adds Setup > re:dial to the Omarchy menu.

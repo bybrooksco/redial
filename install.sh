@@ -144,9 +144,9 @@ have jq "jq (bar button status line)" \
     "jq not found -- the bar button loses its click summary (everything else works)"
 
 echo
-echo "-- 2. Daemon + setup script -> ~/.local/bin --"
+echo "-- 2. Daemon (~/.local/share/redial/lib) + scripts -> ~/.local/bin --"
 mkdir -p "$HOME/.local/bin"
-for f in redial-hypr redial-setup redial-restart redial-bar redial-rise-widget; do
+for f in redial-hypr redial-setup redial-restart redial-bar redial-rise-widget redial-language; do
     if cmp -s "$R/bin/$f" "$HOME/.local/bin/$f"; then
         skip "$f already identical"
     else
@@ -155,6 +155,18 @@ for f in redial-hypr redial-setup redial-restart redial-bar redial-rise-widget; 
         [[ "$f" == redial-hypr ]] && CHANGED_DAEMON=1
     fi
 done
+# The daemon itself is the `redial` package; ~/.local/bin/redial-hypr only starts it. A new copy
+# goes in beside the old and is swapped in with one mv, so an update never leaves half a package.
+LIB="${XDG_DATA_HOME:-$HOME/.local/share}/redial/lib"
+if diff -rq -x __pycache__ "$R/redial" "$LIB/redial" >/dev/null 2>&1; then
+    skip "daemon package already identical"
+else
+    mkdir -p "$LIB" && rm -rf "$LIB/redial.new"
+    cp -r "$R/redial" "$LIB/redial.new" && find "$LIB/redial.new" -name __pycache__ -prune -exec rm -rf {} +
+    backup "$LIB/redial"
+    mv "$LIB/redial.new" "$LIB/redial" && ok "daemon package installed ($LIB/redial)"
+    CHANGED_DAEMON=1
+fi
 
 echo
 echo "-- 3. redial plugin -> ~/.config/omarchy/plugins --"
@@ -263,6 +275,13 @@ elif confirm "Install udev rule (sudo)?"; then
     sudo install -m 644 "$R/udev/70-redial.rules" "$UDEV" \
         && sudo udevadm control --reload-rules && sudo udevadm trigger && ok "udev rule installed"
 fi
+WAKE=/etc/udev/rules.d/71-redial-wake.rules
+if cmp -s "$R/udev/71-redial-wake.rules" "$WAKE" 2>/dev/null; then
+    skip "wake-from-dial rule already installed"
+elif confirm "Let the dial wake this computer from sleep (sudo; any paired Bluetooth keyboard or mouse can then wake it too)?"; then
+    sudo install -m 644 "$R/udev/71-redial-wake.rules" "$WAKE" \
+        && sudo udevadm control --reload-rules && sudo udevadm trigger --action=add -s usb --attr-match=bDeviceClass=e0 && ok "wake-from-dial rule installed"
+fi
 OLD_UDEV=/etc/udev/rules.d/70-surface-dial.rules
 if [[ -e "$OLD_UDEV" ]] && confirm "Remove the old udev rule $OLD_UDEV, now replaced (sudo)?"; then
     sudo rm "$OLD_UDEV" && sudo udevadm control --reload-rules && ok "old udev rule removed"
@@ -282,21 +301,10 @@ echo "-- 7b. Load the new version --"
 # and the shell ignores a changed DialMenu.qml until it restarts (its own "reloading" message
 # notwithstanding), so an update would otherwise look installed but still run the old code.
 DAEMON_RE='^python3 .*redial-hypr'
-start_daemon() {
-    # Start it the way Omarchy's autostart does (through Hyprland, with the session's real
-    # environment), not from this shell.
-    if command -v hyprctl >/dev/null; then
-        hyprctl dispatch "hl.dsp.exec_cmd(\"uwsm-app -- $HOME/.local/bin/redial-hypr\")" >/dev/null
-    else
-        "$HOME/.local/bin/redial-bar" restart
-    fi
-}
 if pgrep -f "$DAEMON_RE" >/dev/null; then
     if (( CHANGED_DAEMON )); then
         if confirm "The daemon changed. Restart it now (the dial is unresponsive for a second or two)?"; then
-            pkill -TERM -f "$DAEMON_RE"
-            for _ in $(seq 1 15); do pgrep -f "$DAEMON_RE" >/dev/null || break; sleep 0.2; done
-            start_daemon && ok "daemon restarted on the new version"
+            "$HOME/.local/bin/redial-restart" >/dev/null && ok "daemon restarted on the new version"
         else
             warn "daemon not restarted -- it is still running the old version until you do"
         fi
@@ -304,7 +312,7 @@ if pgrep -f "$DAEMON_RE" >/dev/null; then
         skip "daemon already on this version"
     fi
 elif confirm "The daemon is not running. Start it now (it also starts at login)?"; then
-    start_daemon && ok "daemon started"
+    "$HOME/.local/bin/redial-restart" >/dev/null && ok "daemon started"
 fi
 # No ping check here: right after the plugin files change the shell may be mid-reload and not answer,
 # which is exactly when the restart is needed (an earlier version skipped it silently then).

@@ -13,23 +13,15 @@
 set -uo pipefail
 
 ICON=$''   # Font Awesome "dot-circle-o": reads as a dial/knob
-DAEMON="$HOME/.local/bin/redial-hypr"
-LOG=/tmp/redial-hypr.log
 # Anchored on ^python3 so this script, the bar's `bash -lc` wrapper and a
 # user's `pgrep -f` never match themselves.
 DAEMON_RE='^python3 .*redial-hypr'
+# The same rule as the daemon: DIAL_CONFIG_DIR, then XDG_CONFIG_HOME.
+CFG="${DIAL_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/redial}"
 
 case "${1:-status}" in
 restart)
-    # install-generic.sh runs the daemon as a systemd user service; restart it there.
-    if systemctl --user is-enabled redial.service >/dev/null 2>&1; then
-        systemctl --user restart redial.service
-        notify-send -a "re:dial" "Dial daemon restarted" "Tool changes are now applied."
-        exit 0
-    fi
-    pkill -f "$DAEMON_RE"
-    for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -f "$DAEMON_RE" >/dev/null || break; sleep 0.2; done
-    setsid nohup python3 "$DAEMON" >>"$LOG" 2>&1 </dev/null &
+    "$HOME/.local/bin/redial-restart" >/dev/null || exit 1
     notify-send -a "re:dial" "Dial daemon restarted" "Tool changes are now applied."
     exit 0
     ;;
@@ -68,8 +60,8 @@ hint='Left-click: tool settings\nRight-click: restart dial daemon (applies tool 
 # rest are for bars that draw their own widget (the Quickshell Rise bar).
 # What single/double/triple click currently do, as labels (null if the daemon hasn't
 # published clicks.json yet -- restart it once).
-clicks=$(jq -c -n --slurpfile c "$HOME/.config/redial/config.json" \
-    --slurpfile m "$HOME/.config/redial/clicks.json" '
+clicks=$(jq -c -n --slurpfile c "$CFG/config.json" \
+    --slurpfile m "$CFG/clicks.json" '
     ($m[0].defaults // {}) as $d | ($c[0].clicks // {}) as $u | ($m[0].actions // []) as $a
     | ["single","double","triple"] | map(. as $k | ($u[$k] // $d[$k]) as $n
         | {($k): (($a | map(select(.name == $n)) | first | .label) // $n)}) | add' 2>/dev/null) || clicks=null

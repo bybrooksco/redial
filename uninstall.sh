@@ -43,20 +43,21 @@ stash() {
     mv "$t" "$BACKUP$t"
 }
 
-BINS=(redial-hypr redial-setup redial-restart redial-bar redial-rise-widget)
+BINS=(redial-hypr redial-setup redial-restart redial-bar redial-rise-widget redial-language)
 PLUGIN="$HOME/.config/omarchy/plugins/redial"
 AUTOSTART="$HOME/.config/hypr/autostart.lua"
 HYPR_MAIN="$HOME/.config/hypr/hyprland.lua"
 MENU_EXT="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 UNIT="$HOME/.config/systemd/user/redial.service"
 UDEV="${DIAL_UDEV_RULE:-/etc/udev/rules.d/70-redial.rules}"  # the override is for tests
+WAKE="${DIAL_WAKE_RULE:-/etc/udev/rules.d/71-redial-wake.rules}"
 
 echo "== re:dial uninstall ($(hostname), $STAMP) =="
 cat <<PLAN
 
 This will, for your user only (no sudo):
   * stop the daemon
-  * remove ${BINS[*]// /, } from ~/.local/bin
+  * remove ${BINS[*]// /, } from ~/.local/bin, and the daemon package (~/.local/share/redial/lib)
   * remove the plugin folder ~/.config/omarchy/plugins/redial
   * remove the start-at-login lines from ~/.config/hypr/autostart.lua
   * remove the settings window rule from ~/.config/hypr/hyprland.lua
@@ -98,6 +99,8 @@ fi
 for f in "${BINS[@]}"; do
     if stash "$HOME/.local/bin/$f"; then ok "$f removed"; else skip "$f not installed"; fi
 done
+LIB="${XDG_DATA_HOME:-$HOME/.local/share}/redial/lib"
+if stash "$LIB"; then ok "daemon package removed ($LIB)"; else skip "daemon package not installed"; fi
 
 echo
 echo "-- 3. Plugin --"
@@ -167,17 +170,17 @@ fi
 
 echo
 echo "-- 7. Permissions (sudo, system-wide) --"
-if [[ -f "$UDEV" ]]; then
-    if (( ASSUME_YES )); then
-        warn "udev rule left in place (-y never uses sudo). To remove it: sudo rm $UDEV && sudo udevadm control --reload-rules"
-    elif confirm "Remove the udev rule $UDEV (sudo)?"; then
-        sudo rm -f "$UDEV" && sudo udevadm control --reload-rules && ok "udev rule removed"
+for rule in "$UDEV" "$WAKE"; do
+    if [[ ! -f "$rule" ]]; then
+        skip "no $(basename "$rule")"
+    elif (( ASSUME_YES )); then
+        warn "udev rule left in place (-y never uses sudo). To remove it: sudo rm $rule && sudo udevadm control --reload-rules"
+    elif confirm "Remove the udev rule $rule (sudo)?"; then
+        sudo rm -f "$rule" && sudo udevadm control --reload-rules && ok "udev rule removed"
     else
         skip "udev rule kept"
     fi
-else
-    skip "no udev rule"
-fi
+done
 echo "         (Your membership of the 'input' group is not changed; other things may need it.)"
 
 echo
