@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-15
+
 ### Added
 - **Design language library** (Look page): a card per language with its preview pictures, author, licence and version; Use, Remove, and **Install from folder**. `redial-language` (new, `bin/`) checks a language before installing it: it refuses outside imports (only `QtQuick`, `QtQuick.Shapes`, `QtQuick.Effects` and the language's own files), the network, run-time code (`Loader`, `Qt.createQmlObject`, `eval`, ...), links and paths that leave the folder, and files that aren't drawing material, naming the file, line and reason. Your languages live in `~/.local/share/redial/languages/` (survives updates); only the ones its `index.json` lists load. Previews are pictures a language ships (`manifest.json` `previews`), never its code; `redial-language preview` renders them. The checker is not a sandbox, and the install screen says so. Spec: `docs/superpowers/specs/2026-11-15-language-library-design.md`.
 - **Barrel hold** (`pen.barrel.hold`, `hold_ms` 250-1500, default 500; Pen page): holding the barrel while the pen hovers runs one action, a power button for creative work. Off by default. The system's own right-click on press is never taken over; with a hold set, a key action on Press fires on release so a hold never fires both.
@@ -28,23 +30,6 @@ versions follow [Semantic Versioning](https://semver.org/).
 - **Waybar module** for desktops without Omarchy: `redial-bar` (status, battery and click summary; left-click opens settings, right-click restarts the daemon), with the block to paste in `config/waybar.snippet.jsonc`.
 - The default ring leaves out the tools that can't act on this desktop: on GNOME, KDE and COSMIC, the window tools (no window backend yet) and Settings when no settings window is installed. `tools.json` says which tools work here (`works_here`), and the settings window greys the rest.
 - Without Omarchy, holding the dial names each tool you pass in a notification, so the ring is never invisible.
-
-### Changed
-- **A language offers only the looks it ships.** Settings lists the language's own looks (plus Omarchy's OSD layout); a look the config names but the language lacks draws the language's default look instead of borrowing another language's.
-- **Every look draws turning, hints and can't act itself**, including Deck, Carousel and Toast, so those no longer go to Omarchy's OSD; only the `omarchy` layout keeps the OSD.
-- Deck, Carousel and Toast are language looks now, not inline layouts. `capsuleFillet`, `capsuleSpan` and `deck.cardWidth`/`cardHeight`/`gap` are gone (an old config's values are ignored); each look sizes its own plate.
-- The self-installer's size guard is 800 KB (the bundled faces add about 200 KB).
-
-### Fixed
-- Dictation no longer reports success when it failed. The "voxtype toggled" notice used to appear even when voxtype was not running (for example, its GPU driver failed to load after a kernel update). `run()` now returns whether the command worked, and a failed toggle shows "Dictation unavailable". Tested in `tests/test_dial.py` (`DictationNotice`).
-- The haptics were silently off on machines where another package's udev rule claims every hidraw device (Vial's `99-vial.rules` does): the dial's rule now uses `:=`, so it can't be overridden.
-- Notifications through `notify-send` (any desktop without Omarchy) now replace each other instead of stacking.
-- Eraser scroll started late. A drag now locks its axis after about 2 mm instead of 5 mm, and the travel before the lock is replayed, so the page moves from the first millimetre. A touch that never locks an axis is still a tap.
-- The first eraser scroll after the daemon started was slow: the virtual pointer is now created at startup, not on first use.
-
-## [0.9.0] - 2026-10-23
-
-### Added
 - **re:dial classic**, the standard design language, and the layer structure behind it: a language is a folder in `plugin/redial/languages/` (`Language.qml` plus one file per look), selected with `language`; unknown or broken languages fall back to `classic`. The contract for adding a language or a look is in `plugin/redial/languages/README.md`.
 - `color_scheme`: `light` (the new default, ink on vellum), `dark`, or `theme` (match the desktop theme, read from Omarchy's `colors.toml`). It fills four colour roles (ground, line, accent, alert) in `ColourScheme.js`; a theme colour that does not reach 3:1 on the background falls back to a readable one. `colors.accent` still overrides the accent. Tested in `tests/qml/tst_colourscheme.qml`.
 - `reference_lines` (default `true`): one switch for the construction lines, crosshair and registration marks.
@@ -59,6 +44,11 @@ versions follow [Semantic Versioning](https://semver.org/).
 - Windows names the window you land on, and Media shows the playing position and title, on the overlay (or the OSD).
 
 ### Changed
+- **The daemon is a package, `redial/`**, split into 21 modules in layers (map in `CONTRIBUTING.md`); `bin/redial-hypr` only finds it and starts it. No behaviour change. The installers put it in `~/.local/share/redial/lib/redial`.
+- **A language offers only the looks it ships.** Settings lists the language's own looks (plus Omarchy's OSD layout); a look the config names but the language lacks draws the language's default look instead of borrowing another language's.
+- **Every look draws turning, hints and can't act itself**, including Deck, Carousel and Toast, so those no longer go to Omarchy's OSD; only the `omarchy` layout keeps the OSD.
+- Deck, Carousel and Toast are language looks now, not inline layouts. `capsuleFillet`, `capsuleSpan` and `deck.cardWidth`/`cardHeight`/`gap` are gone (an old config's values are ignored); each look sizes its own plate.
+- The self-installer's size guard is 800 KB (the bundled faces add about 200 KB).
 - The colour scheme now colours every face and layout (except `omarchy`) and the settings window, not only Classic; `colors.*` left at `"theme"` follow it.
 - The settings window is drawn in re:dial classic: square corners, hairline outlines, uppercase section labels, an underlined current page and a sheet title block.
 - The default ring (no `active_tools`) is Volume, Windows, Workspaces, Scroll, Undo, Zoom, Media, Settings, plus Brightness only where there is a backlight. Arrow Keys and Window Size moved to the library. Rings saved from the settings window are unchanged.
@@ -76,6 +66,12 @@ versions follow [Semantic Versioning](https://semver.org/).
 - Every look's position comes from one helper, `Placement.js` (it was pasted five times; audit finding 6). Tested in `tests/qml/tst_placement.qml`.
 
 ### Fixed
+- Dictation no longer reports success when it failed. The "voxtype toggled" notice used to appear even when voxtype was not running (for example, its GPU driver failed to load after a kernel update). `run()` now returns whether the command worked, and a failed toggle shows "Dictation unavailable". Tested in `tests/test_dial.py` (`DictationNotice`).
+- The haptics were silently off on machines where another package's udev rule claims every hidraw device (Vial's `99-vial.rules` does): the dial's rule now uses `:=`, so it can't be overridden.
+- Notifications through `notify-send` (any desktop without Omarchy) now replace each other instead of stacking.
+- Eraser scroll started late. A drag now locks its axis after about 2 mm instead of 5 mm, and the travel before the lock is replayed, so the page moves from the first millimetre. A touch that never locks an axis is still a tap.
+- The first eraser scroll after the daemon started was slow: the virtual pointer is now created at startup, not on first use.
+- The wake-from-dial rule now applies as soon as it is installed: the installers sent udev a `change` event, which the rule (`ACTION=="add"`) ignores, so it only took effect after a reboot. `install-generic.sh --uninstall` also offers to remove it now.
 - A dial that wakes with clicks working but turning dead now has a way out: the **Reconnect dial** click action (`reconnect_dial`, in the picker under The dial) drops its Bluetooth link, and the next press reconnects it. Seen once (2026-10-23): Bluetooth and the input device both looked fine, the dial just sent almost no turns; the self-heal, which covers a dial with no input device at all, could not see it. The log now records how many turns arrived before the first press after each reconnect, so it leaves evidence.
 - "cannot open ... Permission denied" is no longer logged on every reconnect: the daemon retries for about a second while udev sets the new device's permissions, and only a failure that outlasts that is logged.
 - `colors.accent`, `colors.line` and `colors.background` now recolour every look, Classic included; they were only read by some faces, and Classic took only a six-digit accent.
