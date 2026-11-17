@@ -48,8 +48,8 @@ LookBase {
     renderStrategy: Canvas.Cooperative
     onPaint: {
       var ctx = getContext("2d"), L = String(face.line), A = String(face.accent)
-      ctx.reset()
-      ctx.fillStyle = String(face.cfg.roles.ground); ctx.fillRect(0, 0, width, height)
+      ctx.reset(); ctx.__w = face.lineScale
+      ctx.fillStyle = face.plateFill; ctx.fillRect(0, 0, width, height)
       var cx = face.cx, cy = face.cy
       if (face.cfg.constructionLines) {
         Drafting.regMarks(ctx, width, height, face.u(10), face.u(14), L)
@@ -64,7 +64,7 @@ LookBase {
           ctx.save(); ctx.translate(p[0], p[1]); ctx.rotate((a + 90) * Math.PI / 180)
           Drafting.capsulePath(ctx, face.u(12), face.u(30), face.u(6))
           if (i < face.litCount) { ctx.fillStyle = Drafting.ink(A, 0.9); ctx.fill() }
-          else { ctx.strokeStyle = Drafting.ink(L, 0.35); ctx.lineWidth = 1; ctx.stroke() }
+          else { ctx.strokeStyle = Drafting.ink(L, 0.35); ctx.lineWidth = (1) * face.lineScale; ctx.stroke() }
           ctx.restore()
         }
       }
@@ -120,9 +120,9 @@ LookBase {
     renderStrategy: Canvas.Cooperative
     onPaint: {
       var ctx = getContext("2d")
-      ctx.reset()
+      ctx.reset(); ctx.__w = face.lineScale
       var p = face.leadFrom, q = face.leadTo
-      ctx.strokeStyle = Drafting.ink(String(face.accent), 0.65); ctx.lineWidth = 1
+      ctx.strokeStyle = Drafting.ink(String(face.accent), 0.65); ctx.lineWidth = (1) * face.lineScale
       ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.lineTo(q[0] + (face.leadRight ? 1 : -1) * face.u(14), q[1]); ctx.stroke()
     }
   }
@@ -174,7 +174,7 @@ LookBase {
       renderStrategy: Canvas.Cooperative
       onPaint: {
         var ctx = getContext("2d")
-        ctx.reset()
+        ctx.reset(); ctx.__w = face.lineScale
         Drafting.sign(ctx, face.noteKind, face.note, width, String(face.accent), String(face.alert))
       }
     }

@@ -25,7 +25,7 @@ LookBase {
   readonly property Item frontSign: sign
   readonly property Item meterBar: bar
 
-  Rectangle { z: -1; anchors.fill: parent; radius: look.plateRadius; color: look.tone.ground }
+  Rectangle { z: -1; anchors.fill: parent; radius: look.plateRadius; color: look.backed(look.tone.ground) }
 
   // The backs: fixed, fanned about a point below the plate.
   Repeater {
@@ -48,7 +48,7 @@ LookBase {
     id: front
     x: look.pivotX - width / 2; y: look.u(40)
     width: look.cardW; height: look.cardH; radius: look.u(12)
-    color: look.tone.card
+    color: look.backed(look.tone.card)
     Icon {
       host: look; i: look.chosen; on: true
       px: look.u(18)

@@ -59,7 +59,7 @@ LookBase {
   readonly property real turned: ((wheelDeg % 360) + 360) % 360
   readonly property int picked: live ? Math.round(((position % n) + n) % n) % n : chosen
 
-  Rectangle { z: -1; anchors.fill: parent; radius: look.plateRadius; color: look.tone.ground }
+  Rectangle { z: -1; anchors.fill: parent; radius: look.plateRadius; color: look.backed(look.tone.ground) }
 
   // A level fills the track from the top, clockwise; the wheel's holes hide meanwhile.
   Canvas {
@@ -161,6 +161,7 @@ LookBase {
   onWidthChanged: repaint()
   onHeightChanged: repaint()
   onToneChanged: repaint()
+  onTrackWChanged: repaint()
   onLevelChanged: fill.requestPaint()
   onLevelShownChanged: fill.requestPaint()
 }

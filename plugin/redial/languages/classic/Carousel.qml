@@ -51,8 +51,8 @@ LookBase {
     renderStrategy: Canvas.Cooperative
     onPaint: {
       var ctx = getContext("2d"), L = String(face.line), A = String(face.accent)
-      ctx.reset()
-      ctx.fillStyle = String(face.ground); ctx.fillRect(0, 0, width, height)
+      ctx.reset(); ctx.__w = face.lineScale
+      ctx.fillStyle = face.plateFill; ctx.fillRect(0, 0, width, height)
       var x0 = face.x0, end = face.ruleEnd, top = face.ruleTop, bot = face.ruleBot, bx = x0 - face.u(30), bw = end - x0 + face.u(60)
       if (face.cfg.constructionLines) {
         Drafting.regMarks(ctx, width, height, face.u(10), face.u(14), L)
@@ -60,7 +60,7 @@ LookBase {
         Drafting.node(ctx, width - face.u(10), face.mid, face.u(3), L, 0.35); Drafting.node(ctx, face.u(10), face.mid, face.u(3), L, 0.35)
       }
       if (face.noteKind === "cant") Drafting.hatch(ctx, function (c) { c.rect(bx, top, bw, bot - top) }, width, height, L, 0.22, face.u(7))
-      ctx.strokeStyle = Drafting.ink(L, 0.45); ctx.lineWidth = 1; ctx.strokeRect(bx, top, bw, bot - top)
+      ctx.strokeStyle = Drafting.ink(L, 0.45); ctx.lineWidth = (1) * face.lineScale; ctx.strokeRect(bx, top, bw, bot - top)
       var ticks = face.levelShown ? 100 : Math.max(1, (face.n - 1) * 8), every = face.levelShown ? 10 : 8
       for (var i = 0; i <= ticks; i++) {
         var x = x0 + i * (end - x0) / ticks, maj = i % every === 0
@@ -137,7 +137,7 @@ LookBase {
       renderStrategy: Canvas.Cooperative
       onPaint: {
         var ctx = getContext("2d")
-        ctx.reset()
+        ctx.reset(); ctx.__w = face.lineScale
         Drafting.sign(ctx, face.noteKind, face.note, width, String(face.accent), String(face.alert))
       }
     }

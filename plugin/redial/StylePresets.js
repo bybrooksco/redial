@@ -24,7 +24,7 @@ var WEIGHT = [
 var ELEMENTS = [
   { key: "labels", label: "Tool names", fallback: true }, { key: "glyphs", label: "Tool icons", fallback: true },
   { key: "callout", label: "Callout", fallback: true }, { key: "constructionLines", label: "Construction lines", fallback: true },
-  { key: "crosshair", label: "Crosshair", fallback: false }, { key: "registrationMarks", label: "Registration marks", fallback: true }
+  { key: "registrationMarks", label: "Registration marks", fallback: true }
 ]
 
 // The weight preset all five widths match, or "" when they were set one by one.
@@ -42,19 +42,18 @@ function weightOf(dial) {
   return ""
 }
 
-// Whether the chosen look draws a Style control; the window greys the others.
-// layout, face, plate: as Settings.qml resolves them.
-function drawn(what, layout, face, plate) {
-  var dial = layout === "dial"
-  // the drafted faces are laid out like Classic: a plate with a callout column
-  if (face === "sundial" || face === "tag" || face === "wheel") face = "classic"
-  if (what === "colors") return layout !== "omarchy"
-  if (what === "weight") return dial && face !== "pie"
-  if (what === "density" || what === "callout") return dial && (face === "classic" || face === "capsule")
-  if (what === "constructionLines") return dial && (face === "capsule" || (face === "classic" && plate === "rect"))
-  if (what === "crosshair") return dial && face === "capsule"
-  if (what === "registrationMarks") return dial && plate === "rect"
-  if (what === "labels" || what === "glyphs") return dial && face === "classic"
-  if (what === "backing") return dial && (plate !== "none" || face === "gauge")
+// The Style controls a language look can honour (languages/README.md, `controls`).
+var CONTROLS = ["backing", "weight", "density", "labels", "glyphs", "callout", "constructionLines", "registrationMarks"]
+
+// Whether the Look page shows a Style control for the chosen look: only what the look draws is
+// shown, never greyed. language: the loaded Language.qml; look: the picker key
+// (LookResolve.choice); plate: Settings' plate. A look its language does not list shows none.
+function shown(what, language, look, plate) {
+  if (what === "colors") return look !== "omarchy"
+  var own = language && language.controls ? language.controls[look] : undefined
+  if (!own || own.indexOf(what) < 0) return false
+  // The host draws the Classic look's plate and its corner marks: no plate, nothing to back or mark.
+  if (what === "backing") return look !== "classic" || plate !== "none"
+  if (what === "registrationMarks") return plate === "rect"
   return true
 }

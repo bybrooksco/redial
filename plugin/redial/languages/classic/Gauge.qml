@@ -19,7 +19,10 @@ LookBase {
   readonly property real a0: 135
   readonly property real span: 270
   function ang(i) { return a0 + i * span / Math.max(1, n - 1) }
-  readonly property int litCount: litOf(135)
+  // The scale: 9 majors, the marks between them set by the scale density (Medium: 135).
+  readonly property int majorStep: Math.max(2, Math.round(15 * density))
+  readonly property int marks: 9 * majorStep
+  readonly property int litCount: litOf(marks)
 
   // Where the needle is headed: the chosen tool (live: the hand's position), the level, or zero.
   readonly property real wrapped: ((position % n) + n) % n
@@ -61,26 +64,26 @@ LookBase {
     renderStrategy: Canvas.Cooperative
     onPaint: {
       var ctx = getContext("2d"), L = String(face.line), A = String(face.accent)
-      ctx.reset()
-      ctx.fillStyle = String(face.ground); ctx.fillRect(0, 0, width, height)
+      ctx.reset(); ctx.__w = face.lineScale
+      ctx.fillStyle = face.plateFill; ctx.fillRect(0, 0, width, height)
       var cx = face.cx, cy = face.cy
       if (face.cfg.constructionLines) {
         Drafting.regMarks(ctx, width, height, face.u(10), face.u(14), L)
         Drafting.line(ctx, 0, cy, width, cy, L, 0.13, 1); Drafting.line(ctx, cx, 0, cx, height, L, 0.13, 1)
         Drafting.node(ctx, width - face.u(10), cy, face.u(3), L, 0.35); Drafting.node(ctx, cx, face.u(10), face.u(2.5), L, 0.3)
       }
-      ctx.beginPath(); ctx.strokeStyle = Drafting.ink(L, 0.3); ctx.lineWidth = 1
+      ctx.beginPath(); ctx.strokeStyle = Drafting.ink(L, 0.3); ctx.lineWidth = (1) * face.lineScale
       ctx.arc(cx, cy, face.u(142), face.a0 * Math.PI / 180, (face.a0 + face.span) * Math.PI / 180); ctx.stroke()
       Drafting.ring(ctx, cx, cy, face.u(10), L, 0.5, 1)
-      Drafting.scaleBars(ctx, cx, cy, face.a0, face.a0 + face.span, 135, face.u(112), face.u(119), face.u(126), 15, L)
+      Drafting.scaleBars(ctx, cx, cy, face.a0, face.a0 + face.span, face.marks, face.u(112), face.u(119), face.u(126), face.majorStep, L)
       if (face.levelShown)
-        Drafting.litBars(ctx, cx, cy, face.a0, face.a0 + face.span, 135, face.u(112), face.u(133), face.litCount, A, 1.5)
+        Drafting.litBars(ctx, cx, cy, face.a0, face.a0 + face.span, face.marks, face.u(112), face.u(133), face.litCount, A, 1.5)
       // The readout box: a revision cloud on a hint, hatched when the dial can't act.
       if (face.noteKind === "hint") Drafting.cloudRect(ctx, face.bx, face.by, face.bw, face.bh, face.u(16), A)
       else {
         if (face.noteKind === "cant")
           Drafting.hatch(ctx, function (c) { c.rect(face.bx, face.by, face.bw, face.bh) }, width, height, L, 0.14, face.u(7))
-        ctx.strokeStyle = Drafting.ink(L, 0.45); ctx.lineWidth = 1; ctx.strokeRect(face.bx, face.by, face.bw, face.bh)
+        ctx.strokeStyle = Drafting.ink(L, 0.45); ctx.lineWidth = (1) * face.lineScale; ctx.strokeRect(face.bx, face.by, face.bw, face.bh)
       }
       Drafting.line(ctx, cx, face.by - face.u(12), cx, face.by, L, 0.3, 1)
       Drafting.node(ctx, cx, face.by - face.u(12), face.u(2), L, 0.5)
@@ -95,9 +98,9 @@ LookBase {
     renderStrategy: Canvas.Cooperative
     onPaint: {
       var ctx = getContext("2d"), A = String(face.accent)
-      ctx.reset()
-      var per = face.span / 135, half = face.span / Math.max(1, face.n - 1) / 2 * 0.86
-      for (var b = 0; b < 135; b++) {
+      ctx.reset(); ctx.__w = face.lineScale
+      var per = face.span / face.marks, half = face.span / Math.max(1, face.n - 1) / 2 * 0.86
+      for (var b = 0; b < face.marks; b++) {
         var a = face.a0 + b * per
         if (Math.abs(a - face.needleDeg) > half) continue
         var p = Drafting.polar(face.cx, face.cy, face.u(112), a), q = Drafting.polar(face.cx, face.cy, face.u(133), a)

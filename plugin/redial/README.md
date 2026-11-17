@@ -75,7 +75,7 @@ The overlay is drawn in layers, and each can be swapped without touching the oth
   colour roles a language uses: ground, line, accent, alert. `colors.accent`, when set to a hex
   colour or a theme slot, still overrides the accent.
 - `reference_lines`: `true` (default) or `false`. Off hides the drawing's background reference
-  lines: construction lines, crosshair and registration marks. The rings and the scale stay,
+  lines: construction lines and registration marks. The rings and the scale stay,
   because they carry information.
 
 The colour scheme recolours everything: every face and layout (except `omarchy`, which is the

@@ -16,6 +16,19 @@ QtObject {
   readonly property string defaultLook: "classic"
   // How many looks the language ships: the tag a language library lists. Derived, so it cannot drift.
   readonly property int lookCount: Object.keys(looks).length
+  // The Look page's Style controls each look draws (README.md); the page shows only these.
+  readonly property var controls: ({
+    "classic": ["backing", "weight", "density", "labels", "glyphs", "callout", "constructionLines", "registrationMarks"],
+    "capsule": ["backing", "weight", "glyphs", "constructionLines"],
+    "gauge": ["backing", "weight", "density", "glyphs", "constructionLines"],
+    "pie": ["backing", "weight", "glyphs", "constructionLines"],
+    "toast": ["backing", "weight", "constructionLines"],
+    "deck": ["backing", "weight", "glyphs"],
+    "carousel": ["backing", "weight", "glyphs", "constructionLines"],
+    "sundial": ["backing", "weight", "labels", "glyphs", "callout", "constructionLines"],
+    "tag": ["backing", "weight", "glyphs", "callout", "constructionLines"],
+    "wheel": ["backing", "weight", "density", "glyphs", "callout", "constructionLines"]
+  })
 
   // Motion character: crisp and mechanical. Strong ease-out for things arriving, ease-in-out for
   // things moving on screen (Emil Kowalski's curves); closing is always quicker than opening.

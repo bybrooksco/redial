@@ -20,7 +20,10 @@ LookBase {
   readonly property real cy: u(220)
   readonly property real stop: 40
   readonly property real step: 360 / n
-  readonly property int litCount: litOf(100)
+  // The level scale: 10 majors, the marks between them set by the scale density (Medium: 100).
+  readonly property int majorStep: Math.max(2, Math.round(10 * density))
+  readonly property int marks: 10 * majorStep
+  readonly property int litCount: litOf(marks)
   readonly property Item selection: wheel
 
   // The chosen hole, counted the short way round so the wheel never spins the long way.
@@ -63,8 +66,8 @@ LookBase {
     onPaint: {
       var ctx = getContext("2d"), L = String(face.line), A = String(face.accent)
       var cx = face.cx, cy = face.cy
-      ctx.reset()
-      ctx.fillStyle = String(face.ground); ctx.fillRect(0, 0, width, height)
+      ctx.reset(); ctx.__w = face.lineScale
+      ctx.fillStyle = face.plateFill; ctx.fillRect(0, 0, width, height)
       if (face.cfg.constructionLines) {
         Drafting.regMarks(ctx, width, height, face.u(10), face.u(14), L)
         Drafting.construction(ctx, width, height, cx, cy, face.u(70), face.u(168), face.u(18), L)
@@ -72,8 +75,8 @@ LookBase {
       Drafting.ring(ctx, cx, cy, face.u(168), L, 0.3, 1)
       Drafting.ring(ctx, cx, cy, face.u(160), L, 0.12, 1)
       if (face.levelShown) {
-        Drafting.scaleBars(ctx, cx, cy, -90, 270, 100, face.u(132), face.u(138), face.u(146), 10, L)
-        Drafting.litBars(ctx, cx, cy, -90, 270, 100, face.u(132), face.u(152), face.litCount, A, 1.5)
+        Drafting.scaleBars(ctx, cx, cy, -90, 270, face.marks, face.u(132), face.u(138), face.u(146), face.majorStep, L)
+        Drafting.litBars(ctx, cx, cy, -90, 270, face.marks, face.u(132), face.u(152), face.litCount, A, 1.5)
         Drafting.dimArc(ctx, cx, cy, face.u(82), -88, Math.max(-86, -92 + face.level * 3.6), A, face.u(7))
       } else {
         // The finger stop: a hatched hook outside the wheel, and the ring round the hole at it.
@@ -83,7 +86,7 @@ LookBase {
         ctx.save(); ctx.translate(hp[0], hp[1]); ctx.rotate((face.stop + 27 + 90) * Math.PI / 180)
         function hook(g) { g.moveTo(-7 * k, -24 * k); g.lineTo(7 * k, -24 * k); g.lineTo(7 * k, 6 * k); g.arc(0, 6 * k, 7 * k, 0, Math.PI, false); g.closePath() }
         Drafting.hatch(ctx, hook, face.u(40), face.u(40), A, 0.5, face.u(5))
-        ctx.beginPath(); hook(ctx); ctx.strokeStyle = Drafting.ink(A, 1); ctx.lineWidth = 1.4; ctx.stroke()
+        ctx.beginPath(); hook(ctx); ctx.strokeStyle = Drafting.ink(A, 1); ctx.lineWidth = (1.4) * face.lineScale; ctx.stroke()
         ctx.restore()
       }
       Drafting.ring(ctx, cx, cy, face.u(64), L, 0.6, 1.2)
@@ -107,7 +110,7 @@ LookBase {
       renderStrategy: Canvas.Cooperative
       onPaint: {
         var ctx = getContext("2d"), L = String(face.line), c = width / 2
-        ctx.reset()
+        ctx.reset(); ctx.__w = face.lineScale
         Drafting.ring(ctx, c, c, face.u(150), L, 0.5, 1.2)
         for (var i = 0; i < face.tools.length; i++) {
           var h = Drafting.polar(c, c, face.u(112), face.stop - i * face.step)
@@ -142,7 +145,7 @@ LookBase {
     renderStrategy: Canvas.Cooperative
     onPaint: {
       var ctx = getContext("2d")
-      ctx.reset()
+      ctx.reset(); ctx.__w = face.lineScale
       Drafting.hatch(ctx, function (c) { c.arc(face.cx, face.cy, face.u(150), 0, Math.PI * 2) }, width, height, String(face.line), 0.14, face.u(7))
     }
   }
@@ -155,9 +158,9 @@ LookBase {
     renderStrategy: Canvas.Cooperative
     onPaint: {
       var ctx = getContext("2d"), A = String(face.accent), R = face.u(78)
-      ctx.reset()
+      ctx.reset(); ctx.__w = face.lineScale
       var s = face.stop * Math.PI / 180, e = (face.stop - Math.max(0.1, face.turned)) * Math.PI / 180
-      ctx.beginPath(); ctx.strokeStyle = Drafting.ink(A, 0.8); ctx.lineWidth = 1
+      ctx.beginPath(); ctx.strokeStyle = Drafting.ink(A, 0.8); ctx.lineWidth = (1) * face.lineScale
       ctx.arc(face.cx, face.cy, R, s, e, true); ctx.stroke()
       var px = face.cx + Math.cos(e) * R, py = face.cy + Math.sin(e) * R, tx = Math.sin(e), ty = -Math.cos(e), k = face.u(7), w = k / 3
       ctx.fillStyle = Drafting.ink(A, 0.8); ctx.beginPath(); ctx.moveTo(px, py)
@@ -189,7 +192,7 @@ LookBase {
       renderStrategy: Canvas.Cooperative
       onPaint: {
         var ctx = getContext("2d")
-        ctx.reset()
+        ctx.reset(); ctx.__w = face.lineScale
         if (face.noteKind === "cant") { ctx.fillStyle = String(face.ground); ctx.beginPath(); ctx.arc(width / 2, height / 2, width / 2, 0, Math.PI * 2); ctx.fill() }
         Drafting.sign(ctx, face.noteKind, face.note, width, String(face.accent), String(face.alert))
       }
@@ -227,10 +230,10 @@ LookBase {
     renderStrategy: Canvas.Cooperative
     onPaint: {
       var ctx = getContext("2d"), A = String(face.accent)
-      ctx.reset()
+      ctx.reset(); ctx.__w = face.lineScale
       var p = face.leadFrom, kn = face.leadKnee, ey = face.leaderEndY, ex = face.leaderEndX
       var bent = Math.abs(ey - kn[1]) > 0.5, kx = bent ? Math.max(p[0], kn[0]) + face.u(18) : kn[0], ky = bent ? ey : kn[1]
-      ctx.strokeStyle = Drafting.ink(A, 0.65); ctx.lineWidth = 1
+      ctx.strokeStyle = Drafting.ink(A, 0.65); ctx.lineWidth = (1) * face.lineScale
       ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(kx, ky); ctx.lineTo(ex, ey); ctx.stroke()
       Drafting.node(ctx, p[0], p[1], face.u(3), A, 1)
       Drafting.node(ctx, ex, ey, face.u(2.2), A, 0.85)

@@ -35,6 +35,7 @@ QtObject {
   readonly property int lookCount: Object.keys(looks).length       // the library's "looks" tag
   readonly property var easeOut: [0.23, 1, 0.32, 1, 1, 1]          // things arriving
   readonly property var easeInOut: [0.77, 0, 0.175, 1, 1, 1]       // things moving on screen
+  readonly property var controls: ({ "classic": ["backing", "weight"] })   // Style controls per look
 }
 ```
 
@@ -48,6 +49,12 @@ but the language lacks draws its `defaultLook`. A look that fails to load draws 
 a failed default draws classic's Classic, so a half-finished language never blanks the overlay. An
 unknown or broken language falls back to `classic`. `lookCount` is how many looks a language ships;
 a language library lists it as a tag, so people know what they are getting.
+
+**`controls` says which Style controls each look draws.** The Look page shows only those for the
+chosen look and hides the rest, so nobody is offered a control that does nothing. The names are
+`backing`, `weight`, `density` (the look-wide style below) and the element switches `labels`,
+`glyphs`, `callout`, `constructionLines`, `registrationMarks`. A look the map leaves out, or a
+language without `controls`, shows none of them. Every look should honour `backing` and `weight`.
 
 ## Your languages: install, remove, check
 
@@ -85,6 +92,7 @@ A look is an `Item`. The host sets these on it:
 | Property | What it is |
 |---|---|
 | `cfg` (required) | the settings object: `cfg.roles` holds the four colours as `"#rrggbb"`; `cfg.motionBase`, `cfg.motionFast`, `cfg.motionFade` are durations already zeroed for reduced motion where they move things |
+| `cfg.plateOpacity`, `cfg.lineScale`, `cfg.density` | the look-wide style the Look page sets: backing strength (0-1, how solid the plate is; 1 by default), line weight (a multiplier, 1 is Normal: scale every line width by it) and scale density (a multiplier of the Medium mark count: a graduated scale draws that many times its marks). Both shipped languages' `LookBase` expose them as `backing`, `lineScale`, `density` |
 | `language` | the language's `QtObject` (curves, ink strengths) |
 | `unit`, `fontFamily`, `type` | the host's spacing unit, font and type sizes (`caption`, `subtitle`, `title`, `display`, `displayLarge`) |
 | `tools`, `index` | the tool list (`icon`, `name`, `hint`, optional `value`/`valueText`) and the chosen one |
@@ -132,7 +140,7 @@ desktop's OSD; see the plugin README, "States".
 A drafting plate. Information lives around the dial and is carried by lines: hairline rings,
 construction lines to the plate edge with nodes at their ends, a graduated scale whose lit region is
 the selection, a needle that is the hand, and an elbowed leader out to label and value notes.
-`reference_lines: false` hides the construction lines, crosshair and registration marks; the rings
+`reference_lines: false` hides the construction lines and registration marks; the rings
 and scale stay because they carry information.
 
 ## re:dial basic

@@ -20,4 +20,7 @@ QtObject {
   property bool showLabels: true
   property bool showGlyphs: true
   property bool showCallout: true
+  property real plateOpacity: 1
+  property real lineScale: 1
+  property real density: 1
 }
