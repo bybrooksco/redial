@@ -5,12 +5,18 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-18
+
 ### Changed
 - **Backing strength, Line weight and Scale density work on every look**, in both design languages, not just the Classic face. Backing sets how solid the look's plate is (now solid by default; a light plate is no longer forced solid), Line weight scales every line a look draws (in re:dial basic, the track's thickness), and Scale density sets how many marks a graduated scale has (Classic, Gauge, Finger wheel). Looks read them as `cfg.plateOpacity`, `cfg.lineScale` and `cfg.density` (`languages/README.md`).
 - **The Look page shows only the Style controls the chosen look draws**, instead of greying out the rest. Each language lists them per look in `controls`; a look it doesn't list shows none.
 
 ### Removed
 - The Crosshair switch (`dial.crosshair`): no look drew it.
+
+### Docs
+- README: a **Hardware** section (what each device needs, pen pairing, what is and is not tested) and the current version.
+- Beta guide points at the 0.9.1 installer.
 
 ## [0.9.0] - 2026-11-15
 

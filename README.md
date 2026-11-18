@@ -84,9 +84,29 @@ tool selection, click gestures (dial and pen), position/size, colors.
 the start-at-login lines and the menu entry, moving each to a backup folder first. It keeps your
 settings unless you pass `--purge`, and asks before its one `sudo` step (the udev rule).
 
+## Hardware
+
+| Device | What it needs | Status |
+|---|---|---|
+| **Surface Dial** | Bluetooth. Pair it once (below). | Works; used daily |
+| **Surface Pen: tail button** | Pair the pen over Bluetooth (below). | Works on the Surface Studio; should work on any machine the pen pairs with |
+| **Surface Pen: barrel button and eraser scroll** | The Surface Studio's built-in screen digitizer (`Surface Touch Device Stylus`) | Works on a Surface Studio 2+. **Not supported on Surface Laptop/Pro yet:** their pens appear under a different device name, which re:dial does not recognise. `STYLUS_DEVICE` does not get around this, because re:dial still checks the name. |
+| **Pen tip (drawing, hover, pressure)** | Nothing. It is the screen's own digitizer. | re:dial never takes it over |
+
+**Pairing the dial:** hold the small button on the underside until the white light flashes, then
+run `scripts/pair-dial.sh` (or pair it from your Bluetooth settings). `redial-setup` checks the
+result. If the dial was used with another computer, remove it there first.
+
+**Pairing the pen** (only needed for the tail button): hold the tail button for 5 to 7 seconds until
+the light flashes, then pair it from your Bluetooth settings, or with `bluetoothctl` (`scan on`,
+then `pair`, `trust` and `connect` the "Surface Pen" address). The pen tip works without pairing.
+
+Pen support is on by default and does nothing when no pen is found. To turn it off:
+`{ "pen": { "enabled": false } }` in `~/.config/redial/config.json`.
+
 ## Status
 
-**Beta (0.8.x), heading for 1.0.** Read `BETA.md` first: it says plainly what has and has not been
+**Beta (0.9.x), heading for 1.0.** Read `BETA.md` first: it says plainly what has and has not been
 tested, what the installer changes, and how to undo it. The plan to 1.0 is in `docs/ROADMAP.md`.
 It runs daily on a Surface Studio (Omarchy); a second machine (a Dell laptop, also Omarchy) has
 run an earlier version as a proof of concept for multi-device use. Config (`~/.config/redial/config.json`) is
