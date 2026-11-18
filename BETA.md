@@ -19,7 +19,7 @@ licensed.
 - A **Surface Dial**, paired over Bluetooth. The installer does not pair it for you; `redial-setup` tells you if none is paired and explains how, and `scripts/pair-dial.sh` does the pairing.
 - About ten minutes, and willingness to restart your shell once.
 
-It is not for other Linux desktops, and it is not a Windows or macOS program.
+This beta is for Omarchy. Other Linux desktops have a reduced install (`install-generic.sh`, see `docs/PLATFORMS.md`) that is less tested. It is not a Windows or macOS program.
 
 ## What has and has not been tested
 
