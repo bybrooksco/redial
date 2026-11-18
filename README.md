@@ -113,6 +113,10 @@ run an earlier version as a proof of concept for multi-device use. Config (`~/.c
 deliberately per-machine — `active_tools`, `pen`, `clicks`, `size` — and
 never something this repo or `install.sh` overwrites once it exists.
 
+## Credits
+
+Built by Brooks with [Claude](https://claude.com/claude-code) (Anthropic) as a coding partner; most commits are co-authored by Claude.
+
 ## License
 
 MIT — see `LICENSE`.
