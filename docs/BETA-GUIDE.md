@@ -6,7 +6,7 @@ What you need, hardware basics, what to try, and how to report back. Thank you f
 
 - **Linux with Omarchy.** Omarchy is a ready-made Arch Linux desktop (Hyprland). It is a separate project: get it at [omarchy.org](https://omarchy.org). Other Linux desktops, Windows and macOS are not supported in this beta.
 - **A Microsoft Surface Dial**, paired over Bluetooth.
-- **The beta installer**, `redial-0.9.1-installer.sh`, from the [release page](https://github.com/bybrooksco/redial/releases/tag/v0.9.1).
+- **The beta installer**, `redial-0.9.1.5-installer.sh`, from the [release page](https://github.com/bybrooksco/redial/releases/tag/v0.9.1.5).
 - **About ten minutes** to install, and a willingness to restart your shell once.
 - **A normal week of use.** Use it for the work you already do.
 
@@ -61,7 +61,7 @@ If something goes wrong, include:
 A feedback sheet, [FEEDBACK.md](../FEEDBACK.md), can be copied into an email if you would like a guide. You can stop at any time. To remove everything:
 
 ```
-bash ~/.local/share/redial-beta/redial-0.9.1/uninstall.sh
+bash ~/.local/share/redial-beta/redial-0.9.1.5/uninstall.sh
 ```
 
 ---

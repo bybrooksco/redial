@@ -1,2 +1,4 @@
 # Internal working notes (plans, specs): kept in the repo, left out of release tarballs and the installer.
 docs/superpowers export-ignore
+# README screenshots: for the GitHub page, not the install. Left out of tarballs and the installer.
+docs/images export-ignore
