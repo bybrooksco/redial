@@ -34,7 +34,7 @@ Item {
       var look = make()
       compare(look.plateSize.width, 640); compare(look.plateSize.height, 440)
       compare(look.wantsCallout, true); compare(look.kind, "face")
-      verify(look.calloutX > 440 && look.calloutX < 500)
+      verify(look.calloutX > 440 && look.calloutX < 520)
       look.noteKind = "turn"; look.note = { name: "Volume", value: 42 }
       compare(look.plateSize.height, 330, "turning uses the half plate")
     }

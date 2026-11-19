@@ -176,6 +176,7 @@ LookBase {
     textFormat: Text.PlainText
     font.family: face.fontFamily; font.pixelSize: face.u(11); font.letterSpacing: face.u(1.1)
     color: face.accent
+    style: Text.Outline; styleColor: face.ground
   }
 
   // The hub card.

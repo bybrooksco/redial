@@ -504,6 +504,10 @@ def write_tool_manifest():
                 "default": t in DEFAULT_TOOLS,
                 "works_here": works_here(t),
                 "clicks": t.get("clicks", {}),  # the tool's own click defaults
+                # What its own click does, for the picker ("" = nothing).
+                "click_label": str((t.get("click") or {}).get("label", "") or "")
+                if isinstance(t.get("click"), dict)
+                else "",
                 "replaces": sorted(k for k, v in TOOL_RENAMED.items() if v == t["name"]),
             }
             for t in TOOL_LIBRARY

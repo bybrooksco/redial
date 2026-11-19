@@ -76,6 +76,9 @@ class Check(Base):
     def test_a_plain_language_passes(self):
         self.assertEqual(L.check(self.make()), [])
 
+    def test_a_qmldir_of_its_own_files_passes(self):
+        self.assertEqual(L.check(self.make(files={"qmldir": "Capsule 1.0 Capsule.qml\n"})), [])
+
     def test_each_rule_refuses_with_its_reason(self):
         cases = {
             "an outside import": (
@@ -105,6 +108,8 @@ class Check(Base):
             "a script file": ({"run.sh": "echo hi\n"}, "run.sh"),
             "a hidden file": ({".env": "x\n"}, ".env"),
             "a missing look file": ({"Capsule.qml": None}, "Capsule.qml"),
+            "a qmldir that loads a plugin": ({"qmldir": "plugin evil\n"}, "qmldir"),
+            "a qmldir naming a missing file": ({"qmldir": "Gone 1.0 Gone.qml\n"}, "qmldir"),
         }
         for what, (files, word) in cases.items():
             with self.subTest(what):
@@ -205,6 +210,24 @@ class InstallRemove(Base):
         self.assertEqual(code, 1)
         self.assertFalse(report["ok"])
         self.assertEqual(report["problems"][0]["file"], "Tones.js")
+
+
+class BuiltinQmldir(unittest.TestCase):
+    """The shell loads plugin files over qs://, where a folder's sibling types resolve only through
+    its qmldir. A built-in language whose qmldir misses a file draws a blank overlay."""
+
+    def test_each_builtin_qmldir_lists_exactly_its_qml_files(self):
+        langs = Path(__file__).resolve().parent.parent / "plugin" / "redial" / "languages"
+        for lang in ("basic", "classic"):
+            with self.subTest(lang=lang):
+                folder = langs / lang
+                files = sorted(p.name for p in folder.glob("*.qml"))
+                lines = (folder / "qmldir").read_text().split("\n")
+                listed = sorted(ln.split()[2] for ln in lines if ln.strip())
+                self.assertEqual(listed, files)
+                for ln in filter(str.strip, lines):
+                    name, version, file = ln.split()
+                    self.assertEqual((name, version), (file[:-4], "1.0"))
 
 
 if __name__ == "__main__":

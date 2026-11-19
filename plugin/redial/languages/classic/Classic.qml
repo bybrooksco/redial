@@ -381,7 +381,13 @@ Item {
       x: lab.rightSide ? lab.px : lab.px - width
       y: lab.py - height / 2
 
-      Text { id: probe; visible: false; text: label.text; font: label.font }
+      Text {
+        id: probe; visible: false; text: label.text
+        font.family: face.fontFamily; font.pixelSize: face.type.caption; font.letterSpacing: 1.5
+      }
+      // A single word too long for its room (WORKSPACES) is set smaller, down to 75%, before it elides.
+      readonly property bool oneWord: label.text.indexOf(" ") < 0
+      readonly property real fit: lab.oneWord && probe.implicitWidth > lab.room ? Math.max(0.75, lab.room / probe.implicitWidth) : 1
       Text {
         id: label
         width: parent.width
@@ -392,8 +398,8 @@ Item {
         elide: Text.ElideRight
         horizontalAlignment: lab.rightSide ? Text.AlignLeft : Text.AlignRight
         font.family: face.fontFamily
-        font.pixelSize: face.type.caption
-        font.letterSpacing: 1.5
+        font.pixelSize: Math.floor(face.type.caption * lab.fit)
+        font.letterSpacing: 1.5 * lab.fit
         color: face.ink(face.language ? face.language.inkLabel : 0.58)
       }
     }

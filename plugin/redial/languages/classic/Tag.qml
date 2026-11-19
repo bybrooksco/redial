@@ -47,7 +47,7 @@ LookBase {
                                 : [marker.x + marker.width, marker.y + u(15)]
   readonly property var leadKnee: noteKind === "cant" ? [leadFrom[0] + u(16), leadFrom[1]]
                                 : levelShown ? [leadFrom[0] + u(16), holeY - u(30)]
-                                : [leadFrom[0] + u(14), leadFrom[1]]
+                                : [leadFrom[0] + u(14), leadFrom[1] + (col(chosen) === 0 ? rowPitch / 2 : 0)]
   readonly property real leaderY: leadKnee[1]
   readonly property real leaderEndY: landY >= 0 ? landY : leaderY
   readonly property real leaderEndX: tx + tw + u(44)
@@ -141,6 +141,7 @@ LookBase {
       }
       Text {
         width: Math.min(implicitWidth, face.fw / 2 - face.u(48)); elide: Text.ElideRight
+        fontSizeMode: Text.HorizontalFit; minimumPixelSize: Math.round(face.u(10))
         text: face.toolName(item.index); textFormat: Text.PlainText
         font.family: face.fontFamily; font.pixelSize: face.u(13); font.bold: item.on
         color: item.on ? face.accent : face.line

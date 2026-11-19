@@ -32,14 +32,26 @@ LookBase {
     id: backRep
     model: [-14, -7, 7, 14]
     delegate: Item {
+      id: backItem
       required property var modelData
       x: look.pivotX; y: look.pivotY
       rotation: modelData
       opacity: 0.75 * look.trackInk
       Rectangle {
+        id: back
         x: -look.cardW / 2; y: -look.pivotY + look.u(40)
         width: look.cardW; height: look.cardH; radius: look.u(12)
         color: look.tone.track
+        // The tool this back stands for (one or two either side of the chosen one), in the outer
+        // top corner: the part the cards in front leave showing.
+        Icon {
+          host: look
+          i: look.tools.length > 0 ? (((look.chosen + Math.round(backItem.modelData / 7)) % look.tools.length) + look.tools.length) % look.tools.length : 0
+          px: look.u(13)
+          cx: backItem.modelData < 0 ? look.u(16) : back.width - look.u(16)
+          cy: look.u(18)
+          visible: look.tools.length > 1 && look.stateDrawn === "ring"
+        }
       }
     }
   }
