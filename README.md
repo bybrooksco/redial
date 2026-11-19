@@ -113,9 +113,18 @@ run an earlier version as a proof of concept for multi-device use. Config (`~/.c
 deliberately per-machine — `active_tools`, `pen`, `clicks`, `size` — and
 never something this repo or `install.sh` overwrites once it exists.
 
+## Support
+
+re:dial itself is free and always will be. Supporters can get new app profiles early, and every
+one goes open source after that. The story behind it, a tip jar and the art that pays for the
+work: [bybrooks.co/pages/redial](https://bybrooks.co/pages/redial).
+
 ## Credits
 
-Built by Brooks with [Claude](https://claude.com/claude-code) (Anthropic) as a coding partner; most commits are co-authored by Claude.
+Designed and directed by Brooks: UX, interactions, architecture and code review.
+[Claude Code](https://claude.com/claude-code) (Anthropic) was the build tool, writing code to that
+direction; most commits are co-authored by Claude. Using AI to write the code is the main reason
+re:dial is open source instead of a product for sale.
 
 ## License
 
