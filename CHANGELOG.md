@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.1.5] - 2026-11-19
+
 ### Fixed
 - **re:dial basic drew a blank overlay.** The shell loads plugins over `qs://`, where a folder's sibling QML types resolve only through a `qmldir`; each built-in language now ships one. `redial-language` accepts a `qmldir` only when every line names one of the folder's own QML files.
 - **Long tool names fit.** Sundial keeps its left-side names on the plate; the Classic dial sets a single long word (WORKSPACES) smaller instead of cutting it; Repair tag names shrink to fit and its leader no longer runs through the other column's text; the Finger wheel's turn figure reads over its arc.
