@@ -2,6 +2,8 @@
 
 Use a Microsoft Surface Dial (and Surface Pen) as a control for your Omarchy desktop.
 
+![A Surface Studio showing a landscape painting, with a split keyboard tented on either side and a Surface Dial and Surface Pen on the cork desk mat between them.](docs/images/hardware.jpg)
+
 A haptic knob for your Omarchy desktop. Turn it for volume, scroll, zoom, media
 scrubbing, brightness, window and workspace control; press and hold to pick a tool;
 click for whatever you set. An on-screen overlay shows what's armed, in a look that
@@ -16,6 +18,48 @@ Microsoft discontinued the Surface Dial.
 [daniel5151/surface-dial-linux](https://github.com/daniel5151/surface-dial-linux)
 is the existing Linux userspace daemon, in maintenance mode per its author.
 This is an independent implementation and shares no code with it.
+
+## What it looks like
+
+Hold the dial and the tool ring opens; turn to pick, let go to choose. The callout names the tool
+and what one click does with it armed.
+
+![re:dial's tool ring in the Classic look: a cream drafting-sheet panel with ten tools round a dial, Volume selected, and a callout reading "Volume, CLICK mute".](docs/images/ring-classic.jpg)
+
+It can follow your Omarchy theme's colours, or use a dark plate:
+
+![The same tool ring twice: on the left in the desktop theme's dark teal with gold accents, on the right on a near-black plate with red accents.](docs/images/ring-theme-dark.jpg)
+
+**Six faces**, each drawn as a technical drawing in the *re:dial classic* design language:
+
+![Six tool rings: capsule (pill-shaped tool chips), pie (wedge segments), gauge (a needle on a half scale), sundial (tools as hours round a gnomon), repair tag (a checklist on a luggage tag) and finger wheel (an old phone dial).](docs/images/faces-classic.jpg)
+
+**The same six in *re:dial basic***, a quieter flat style. Design languages are folders of QML;
+you can make your own (`plugin/redial/languages/README.md`).
+
+![The six faces again in the basic language: flat rounded panels, a thin track, and a grey card naming the tool.](docs/images/faces-basic.jpg)
+
+**Four other layouts**: a fanned deck of cards (the side cards show the tools either side), a
+carousel strip, a one-line toast, and a card in Omarchy's own on-screen-display style.
+
+![Four layouts: a deck of five fanned drawing sheets with Volume in front and Windows, Scroll, Workspaces and Arrow Keys either side; a horizontal carousel of tool icons; a slim toast reading "Volume, CLICK mute"; and a dark Omarchy-style card with a 1/10 position bar.](docs/images/layouts.jpg)
+
+### Settings
+
+Everything applies as you change it. **Look**: position, size, appearance and colour, and the
+tools on the ring (drag to reorder; the centre says what a click does).
+
+![The settings window's Look page: a position grid, size buttons, appearance and colour choices, and a ring of ten tool chips around a centre reading "Volume, CLICK, mute".](docs/images/settings-look.jpg)
+
+**Feel**: sensitivity, how long a tool stays armed, the on-screen display, learning hints, and a
+buzz when a tool returns to Volume. Every option is a large button with a sentence saying what
+it does.
+
+![The Feel page: rows of large buttons for sensitivity, return-to-volume time, on-screen display, hints and buzz, each with a one-line explanation.](docs/images/settings-feel.jpg)
+
+**Pen**: the Surface Pen's tail button, eraser and barrel button, each with its own actions.
+
+![The Pen page: a line drawing of the Surface Pen with its tail button, eraser, barrel button and tip labelled, and what each press does.](docs/images/settings-pen.jpg)
 
 ## What's here
 
