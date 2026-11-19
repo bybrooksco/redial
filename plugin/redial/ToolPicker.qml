@@ -858,6 +858,18 @@ Item {
     return true
   }
 
+  // What one click does while `tool` is armed: your choice for it, its own default, else the click
+  // for every tool (the daemon's gestures.click_choice order). "" when that is nothing.
+  function singleClickLabel(tool) {
+    if (!tool) return ""
+    var m = manifestByName(tool)
+    var mine = getPath("tool_clicks." + tool + ".single")
+    var name = mine ? String(mine) : (m && m.clicks && m.clicks.single ? String(m.clicks.single) : clickAction("dial", "single").name)
+    if (name === "tool") return m && m.click_label ? String(m.click_label) : ""
+    if (name === "none") return ""
+    var a = clickActions.find(function (x) { return x.name === name })
+    return a ? String(a.label) : ""
+  }
   function manifestByName(name) {
     for (var i = 0; i < manifest.length; i++)
       if (manifest[i].name === name) return manifest[i]
@@ -2482,12 +2494,35 @@ Item {
                 border.width: 1
                 border.color: Util.alpha(root.cfg.lineColor, 0.15)
               }
-              Text {
+              // The hub: the tool you are on (hovered or focused, else the resting tool) and what a
+              // single click does with it armed, the same line the overlay's callout shows.
+              Column {
+                id: hub
                 anchors.centerIn: parent
-                text: "click"
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                color: root.cfg.soft(0.55)
+                width: ring.radius * 1.3
+                spacing: Style.space(4)
+                readonly property string tool: root.tipItem && root.selected.indexOf(root.tipTitle) >= 0
+                                               ? root.tipTitle : (root.selected[0] || "")
+                readonly property string click: root.singleClickLabel(hub.tool)
+                visible: hub.tool !== ""
+                Text {
+                  width: parent.width; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
+                  text: hub.tool
+                  font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+                  color: root.cfg.lineColor
+                }
+                Text {
+                  width: parent.width; horizontalAlignment: Text.AlignHCenter
+                  text: "CLICK"
+                  font.family: Style.font.family; font.pixelSize: Style.font.caption; font.letterSpacing: 1.3
+                  color: root.cfg.soft(0.55)
+                }
+                Text {
+                  width: parent.width; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
+                  text: hub.click !== "" ? hub.click : "nothing set"
+                  font.family: Style.font.family; font.pixelSize: Style.font.caption
+                  color: hub.click !== "" ? root.cfg.lineColor : root.cfg.soft(0.55)
+                }
               }
 
               Repeater {

@@ -16,9 +16,11 @@ LookBase {
   readonly property size plateSize: half ? Qt.size(640, 330) : Qt.size(640, 440)
   readonly property bool wantsCallout: true
   readonly property string kind: "face"
-  readonly property real calloutX: 220 + 178 + 70
+  // The dial's centre, in plate units. 260 leaves the longest left-side name (WORKSPACES) on the plate.
+  readonly property real cxUnits: 260
+  readonly property real calloutX: cxUnits + 178 + 70
 
-  readonly property real cx: u(220)
+  readonly property real cx: u(cxUnits)
   readonly property real cy: half ? u(236) : u(220)
   readonly property real step: 360 / n
   readonly property int litCount: litOf(100)
@@ -78,7 +80,7 @@ LookBase {
   }
   readonly property real leaderY: leadKnee[1]
   readonly property real leaderEndY: landY >= 0 ? landY : leaderY
-  readonly property real leaderEndX: u(220 + 178 + 58)
+  readonly property real leaderEndX: u(cxUnits + 178 + 58)
 
   Canvas {
     id: back
@@ -156,7 +158,9 @@ LookBase {
         visible: face.cfg.showLabels && !(hour.index === face.index && face.cfg.showCallout)
         x: Math.abs(hour.c) < 0.2 ? hour.l[0] - width / 2 : hour.c > 0 ? hour.l[0] : hour.l[0] - width
         y: hour.l[1] - height / 2 + (Math.sin(hour.a * Math.PI / 180) > 0.9 ? face.u(6) : 0)
-        width: Math.min(implicitWidth, face.u(120)); elide: Text.ElideRight
+        // Left-side names stop at the plate edge; a long single word shrinks a little before it elides.
+        width: Math.min(implicitWidth, face.u(120), hour.c < -0.2 ? hour.l[0] - face.u(8) : face.u(120)); elide: Text.ElideRight
+        fontSizeMode: Text.HorizontalFit; minimumPixelSize: Math.round(face.u(9))
         text: face.toolName(hour.index).toUpperCase()
         textFormat: Text.PlainText
         font.family: face.fontFamily; font.pixelSize: face.u(11); font.letterSpacing: face.u(1.3)

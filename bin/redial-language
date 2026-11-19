@@ -137,6 +137,26 @@ def check_code(rel, text, problems):
             problems.append((rel, no, f'names a file outside the folder ("{value[:40]}")'))
 
 
+def check_qmldir(p, folder, problems):
+    """A qmldir may only name this folder's own QML files (`Name 1.0 Name.qml`): the shell needs
+    it to find sibling types, but `plugin`, `import` or `module` lines could load outside code."""
+    for no, line in enumerate(p.read_text(errors="replace").splitlines(), 1):
+        parts = line.split()
+        if not parts:
+            continue
+        ok = (
+            len(parts) == 3
+            and parts[1] == "1.0"
+            and parts[2] == parts[0] + ".qml"
+            and re.fullmatch(r"[A-Z][A-Za-z0-9_]*", parts[0])
+            and (folder / parts[2]).is_file()
+        )
+        if not ok:
+            problems.append(
+                ("qmldir", no, "may only list this folder's QML files, as `Name 1.0 Name.qml`")
+            )
+
+
 def check_files(folder, problems):
     total = 0
     for here, dirs, files in os.walk(folder):
@@ -156,7 +176,9 @@ def check_files(folder, problems):
                 problems.append((rel, 0, "isn't a plain file"))
             elif st.st_mode & 0o111:
                 problems.append((rel, 0, "is marked executable"))
-            if p.suffix.lower() not in EXTENSIONS and not name.startswith("LICENSE"):
+            if name == "qmldir" and here == str(folder):
+                check_qmldir(p, folder, problems)
+            elif p.suffix.lower() not in EXTENSIONS and not name.startswith("LICENSE"):
                 problems.append(
                     (rel, 0, f"{p.suffix or 'this kind of file'} isn't drawing material")
                 )

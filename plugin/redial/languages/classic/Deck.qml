@@ -91,6 +91,31 @@ LookBase {
       turn: 6; shrink: 0.07; spread: face.u(92)
       opacity: ad > 2.6 ? 0 : 1
       z: 100 - Math.round(ad * 10)
+      // A side sheet's tool, centred in the strip the front sheet leaves showing (about 90 units on
+      // its outer side), so the fan reads as the tools either side of the chosen one.
+      Column {
+        readonly property real side: card.d < 0 ? -1 : 1
+        width: face.u(76)
+        x: face.sheetW / 2 + side * face.u(42) - width / 2
+        y: face.u(70)
+        spacing: face.u(6)
+        visible: face.cfg.showGlyphs || face.cfg.showLabels
+        opacity: Math.min(1, Math.max(0, card.ad - 0.35) * 1.6) * Math.max(0, 1 - Math.max(0, card.ad - 1) * 0.55)
+        Text {
+          anchors.horizontalCenter: parent.horizontalCenter
+          visible: face.cfg.showGlyphs
+          text: face.toolIcon(card.index); textFormat: Text.PlainText
+          font.family: face.fontFamily; font.pixelSize: face.u(18)
+          color: face.ink(0.7)
+        }
+        Text {
+          width: parent.width; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
+          visible: face.cfg.showLabels
+          text: face.toolName(card.index).toUpperCase(); textFormat: Text.PlainText
+          font.family: face.fontFamily; font.pixelSize: face.u(9.5); font.letterSpacing: face.u(1.1)
+          color: face.ink(0.6)
+        }
+      }
       Item {
         id: body
         anchors.fill: parent

@@ -3656,6 +3656,8 @@ class ToolDescriptions(Base):
             self.assertEqual(entry["default"], tool in m.DEFAULT_TOOLS)
         self.assertFalse(next(e for e in manifest if e["name"] == "Pointer")["default"])
         self.assertTrue(next(e for e in manifest if e["name"] == "Volume")["default"])
+        self.assertEqual(next(e for e in manifest if e["name"] == "Volume")["click_label"], "mute")
+        self.assertEqual(next(e for e in manifest if e["name"] == "Undo")["click_label"], "")
 
 
 def _git_checkout_available():
